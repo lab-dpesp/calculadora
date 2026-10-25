@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Calculadora de Débitos Judiciais",
+  "short_name": "Débitos TJSP",
+  "version": "0.7.0",
+  "description": "Cálculo de pensão alimentícia, débitos cíveis e da Fazenda Pública, com índices atualizados pelo Banco Central, abatimentos e demonstrativo em PDF.",
+  "action": {
+    "default_title": "Abrir a calculadora de débitos",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.bcb.gov.br/*"
+  ]
+}

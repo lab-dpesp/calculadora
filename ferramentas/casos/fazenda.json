@@ -1,0 +1,35 @@
+{
+ "formato": "calcjur-copilot",
+ "versao": 1,
+ "tipo": "fazenda",
+ "juros": {
+  "termoInicial": "vencimento"
+ },
+ "fazenda": {
+  "posEC136": "selic"
+ },
+ "outrasParcelas": [
+  {
+   "vencimento": "2019-03-15",
+   "valor": 12000,
+   "origem": "teste"
+  },
+  {
+   "vencimento": "2022-06-10",
+   "valor": 5000,
+   "origem": "teste"
+  }
+ ],
+ "pagamentos": [
+  {
+   "data": "2023-02-01",
+   "valor": 3000,
+   "origem": "teste"
+  }
+ ],
+ "encargos": {
+  "multa523": false,
+  "honorariosPct": 10
+ },
+ "pendencias": []
+}

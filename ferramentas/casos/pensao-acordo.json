@@ -1,0 +1,8 @@
+{"formato":"calcjur-copilot","versao":1,"tipo":"pensao","processo":"0001425-54.2025.8.26.0271",
+"juros":{"regime":"tjsp","termoInicial":"vencimento","origem":"Título não fixa juros"},
+"periodos":[{"inicio":"2023-06","fim":"2024-03","diaVencimento":12,"base":"pct_rend","valor":33,"incide13":true,"origem":"Acordo homologado de 16/05/2023 (fls. 109-111)","rendimentos":[{"desde":"2023-06","valor":2450.00,"origem":"Holerite fls. 40, informado pelo usuário"}]},
+{"inicio":"2024-04","fim":null,"diaVencimento":12,"base":"pct_sm","valor":45,"incide13":false,"origem":"Acordo homologado de 16/05/2023; desemprego informado pelo usuário"}],
+"dataAjuizamento":{"data":"2025-03-10","origem":"Informado pelo usuário"},"outrasParcelas":[],"pagamentos":[],
+"encargos":{"multa523":false,"honorariosPct":null},
+"pendencias":["Sem informação sobre eventual recebimento de 13º salário em 2023.","Sem informação sobre férias, adicionais ou horas extras no período empregado, verbas sobre as quais o título determina incidência da pensão."],
+"observacoes":"Usuário informou que o executado nunca efetuou pagamentos."}

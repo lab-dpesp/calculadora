@@ -1,0 +1,48 @@
+# Publicação diária da versão web da calculadora (modelo para GitHub Pages).
+# Todo dia, às 06:30 de Brasília: busca os índices no Banco Central, confere com a Tabela Prática embutida,
+# confere os totais de referência e só então publica. Se algo divergir, a publicação para e o site continua
+# com a versão de ontem. Nada é gravado no repositório: o data.js atualizado vai direto para o site.
+#
+# Para usar em outro lugar (Azure Static Web Apps, servidor da Defensoria, pacote do SharePoint), mantenha os
+# três primeiros passos e troque os dois últimos pelo envio da pasta ao destino.
+name: Publicar versão web
+
+on:
+  schedule:
+    - cron: '30 9 * * *'   # 09:30 UTC = 06:30 em Brasília
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publicar-web
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Atualizar índices pelo Banco Central
+        run: node ferramentas/atualizar-indices.js
+      - name: Conferir totais de referência
+        run: node ferramentas/testar.js
+      - name: Montar o site
+        run: |
+          mkdir -p _site
+          cp calc.html index.html
+          cp -r index.html calc.html calc.css tema.js data.js indices.js engine.js copilot.js ui.js icons fonts _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

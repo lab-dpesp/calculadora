@@ -1,0 +1,3 @@
+{"formato":"calcjur-copilot","versao":1,"tipo":"pensao","processo":"0000001-11.2024.8.26.0271","juros":{"regime":"tjsp","termoInicial":"vencimento","origem":"teste"},
+"periodos":[{"inicio":"2024-01","fim":null,"diaVencimento":10,"base":"fixo","valor":1000,"incide13":false,"reajuste":"inpc","dataBase":"2024-01","origem":"Acordo fictício, cláusula 2"}],
+"outrasParcelas":[],"pagamentos":[],"encargos":{"multa523":false,"honorariosPct":null},"pendencias":[],"observacoes":""}

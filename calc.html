@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calculadora de Débitos</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="calc.css">
+  <script src="tema.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2zm7 11l1 2.9 2.9 1-2.9 1L19 21l-1-2.9-2.9-1 2.9-1L19 13z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
+    <symbol id="i-tema" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></symbol>
+    <symbol id="i-nova" viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+  </svg>
+
+  <div class="tela">
+  <header class="topo">
+    <div class="marca">
+      <img class="logo-topo" src="icons/logo-dpesp.png" alt="Defensoria Pública do Estado de São Paulo">
+      <div class="marca-texto">
+        <h1>Calculadora de Débitos Judiciais</h1>
+      </div>
+    </div>
+    <div class="topo-dir">
+      <span class="aviso-acao aviso-topo" id="avisoArquivo" role="status"></span>
+      <button type="button" class="status-indices" id="statusIndices" aria-controls="painelIndices">
+        <span class="badge badge-neutro" id="statusSelo">Índices</span>
+        <span class="sub" id="statusTexto">Carregando índices…</span>
+      </button>
+      <button type="button" class="q-btn-flat" id="abrirCalculo" title="Abrir um cálculo salvo (.calcjur): as prestações novas entram sozinhas e você só lança o que mudou"><svg class="ic"><use href="#i-folder"/></svg>Abrir</button>
+      <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo para guardar na pasta do caso"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
+      <button type="button" class="q-btn-flat" id="btnFontes" aria-pressed="true" hidden title="Mostrar ou esconder a fonte de cada dado importado"><svg class="ic"><use href="#i-spark"/></svg>Fontes</button>
+      <a class="q-btn-flat" id="novaAba" href="./" target="_blank" rel="noopener" hidden title="Abrir a calculadora numa aba própria, caso salvar, abrir ou gerar o PDF não funcione dentro desta página"><svg class="ic"><use href="#i-nova"/></svg>Nova aba</a>
+      <input type="file" id="arquivoCalculo" accept=".calcjur,.json,application/json" hidden>
+      <button type="button" class="q-btn-flat btn-tema" id="btnTema" title="Tema da tela: automático, claro ou escuro"><svg class="ic"><use href="#i-tema"/></svg><span id="rotuloTema">Automático</span></button>
+    </div>
+  </header>
+
+  <main class="pagina">
+    <details class="painel recolhivel painel-copilot" id="painelCopilot">
+      <summary>
+        <span class="painel-titulo sem-margem"><svg class="ic ic-titulo"><use href="#i-spark"/></svg>Importar do Copilot</span>
+        <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Cole a resposta do agente da calculadora no Copilot. Os campos se preenchem e você revisa.</span>
+      </summary>
+      <div class="com-topo">
+        <label class="q-campo">
+          <span class="q-rotulo">Resposta do Copilot</span>
+          <textarea id="textoCopilot" rows="6" placeholder="Cole aqui a resposta inteira do Copilot, incluindo o bloco de dados entre chaves { }."></textarea>
+        </label>
+        <div class="cartao-acoes">
+          <button type="button" class="q-btn" id="lerCopilot">Ler dados</button>
+          <button type="button" class="q-btn-flat" id="limparCopilot">Limpar</button>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Nada é enviado para fora do seu computador: a leitura acontece na própria extensão.</span>
+        </div>
+        <div class="previa-copilot" id="previaCopilot" hidden>
+          <div class="erro" id="errosCopilot" hidden></div>
+          <div class="avisos" id="avisosCopilot"></div>
+          <div class="rotulo-secao">O que será preenchido</div>
+          <div class="tabela-rolagem"><table class="q-tabela" id="tabCopilot"><thead><tr><th>Item</th><th>Dado</th><th>Origem informada pelo Copilot</th></tr></thead><tbody></tbody></table></div>
+          <div class="cartao-acoes com-topo">
+            <button type="button" class="q-btn" id="aplicarCopilot">Preencher a calculadora</button>
+            <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Substitui períodos, parcelas e pagamentos que estiverem na tela.</span>
+          </div>
+        </div>
+      </div>
+    </details>
+
+
+
+    <section class="painel revisao" id="revisao" hidden aria-live="polite">
+      <div class="cartao-cab">
+        <h2 class="painel-titulo sem-margem">Revise os dados importados do Copilot</h2>
+        <span class="sub" id="revisaoQuando"></span>
+      </div>
+      <p class="revisao-texto">Cada campo preenchido traz a fonte indicada pelo Copilot. Confira um a um com o documento antes de usar o resultado; o Copilot só extraiu os dados, a conta é feita pela calculadora.</p>
+      <ul class="revisao-lista" id="revisaoPendencias"></ul>
+      <div class="cartao-acoes">
+        <button type="button" class="q-btn" id="concluirRevisao"><svg class="ic"><use href="#i-check"/></svg>Concluí a revisão</button>
+        <span class="sub">Enquanto a revisão não for concluída, o resultado aparece como "a conferir".</span>
+      </div>
+    </section>
+
+    <div class="area-calculo">
+    <div class="area-entrada">
+    <form id="form" autocomplete="off" novalidate>
+      <section class="painel">
+        <h2 class="painel-titulo">1 · Débito e juros</h2>
+        <div class="abas" role="tablist" aria-label="Tipo de débito">
+          <button type="button" role="tab" class="aba" data-tipo="pensao" aria-selected="true">Pensão alimentícia</button>
+          <button type="button" role="tab" class="aba" data-tipo="particular" aria-selected="false">Débito cível</button>
+          <button type="button" role="tab" class="aba" data-tipo="fazenda" aria-selected="false">Fazenda Pública</button>
+        </div>
+        <p class="descricao-aba"><button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda" id="descricaoAba"></span></p>
+
+        <div class="linha-campos">
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Data do cálculo</span>
+            <input type="date" id="dataCalculo" required>
+          </label>
+          <label class="q-campo q-campo-largo" data-nao="fazenda">
+            <span class="q-rotulo">Juros de mora</span>
+            <select id="regime">
+              <option value="tjsp">1% a.m. até 29/08/2024, depois taxa legal</option>
+              <option value="taxalegal">Taxa legal em todo o período (Tema 1368/STJ)</option>
+              <option value="fixa">Taxa fixa mensal</option>
+              <option value="nenhum">Sem juros</option>
+            </select>
+          </label>
+          <label class="q-campo q-campo-curto" id="campoTaxaFixa" hidden>
+            <span class="q-rotulo">Taxa mensal (%)</span>
+            <input type="text" inputmode="decimal" id="taxaFixa" value="1">
+          </label>
+          <label class="q-campo q-campo-largo" data-so="fazenda" hidden>
+            <span class="q-rotulo">A partir de 10/09/2025 (EC 136/2025)</span>
+            <select id="posEC136">
+              <option value="selic">Manter a Selic da EC 113/2021</option>
+              <option value="ipca2">IPCA + 2% a.a., limitado à Selic</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="nota" data-so="fazenda" hidden>
+          Débito não tributário com vencimentos a partir de 07/2009. IPCA-E e juros da poupança até 08/12/2021 (Temas 810/STF e 905/STJ); Selic a partir de 09/12/2021 (EC 113/2021), ou do termo inicial dos juros, se posterior.
+          A regra para o período anterior à expedição do requisitório depois da EC 136/2025 ainda não está pacificada: escolha o critério acima.
+        </p>
+
+        <div class="linha-opcoes">
+          <fieldset class="grupo-opcoes" id="campoTermo">
+            <legend class="rotulo-secao">Juros contados a partir</legend>
+            <label class="opcao"><input type="radio" name="termo" value="vencimento" checked> do vencimento de cada parcela</label>
+            <label class="opcao"><input type="radio" name="termo" value="data"> da citação ou outra data</label>
+            <label class="q-campo q-campo-inline" id="campoDataJuros" hidden>
+              <span class="q-rotulo">Termo inicial</span>
+              <input type="date" id="dataJuros">
+            </label>
+          </fieldset>
+          <fieldset class="grupo-opcoes">
+            <legend class="rotulo-secao" id="legendaEncargos">Art. 523, § 1º, do CPC</legend>
+            <label class="opcao" id="opcaoMulta"><input type="checkbox" id="multa"> Multa de 10%</label>
+            <label class="opcao">
+              <input type="checkbox" id="honorarios"> Honorários de
+              <input type="text" inputmode="decimal" id="honorariosPct" value="10" class="mini" aria-label="Percentual de honorários"> %
+            </label>
+          </fieldset>
+        </div>
+      </section>
+
+      <section class="painel" id="painelPensao" data-so="pensao">
+        <div class="cartao-cab">
+          <h2 class="painel-titulo sem-margem">2 · Pensão fixada no título</h2>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Uma prestação por mês. Em salários mínimos, vale o salário mínimo da data de cada vencimento.</span>
+        </div>
+        <ol class="lista periodos" id="periodos"></ol>
+        <div class="cartao-acoes">
+          <button type="button" class="q-btn-flat" id="addPeriodo"><svg class="ic"><use href="#i-add"/></svg>Adicionar período</button>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Use um período para cada mudança na base ou no valor: acordo, revisão, maioridade de um filho, emprego e desemprego. Ex.: 30% dos rendimentos enquanto o devedor trabalha e 30% do salário mínimo quando desempregado.</span>
+        </div>
+        <p class="resumo-pensao" id="resumoPensao" hidden></p>
+
+        <div class="ajustes" id="blocoAjustes">
+          <div class="pe-rend-cab">
+            <span class="pe-rend-titulo">Ajustes em prestações</span>
+            <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Rendimento de um mês (13º, férias, mudança pontual de salário) ou valor de uma prestação, no lugar do apurado pela base. Também pelo lápis de cada linha da memória de cálculo.</span>
+          </div>
+          <ul class="lista-ajustes" id="listaAjustes"></ul>
+          <div class="cartao-acoes">
+            <button type="button" class="q-btn-flat" id="addAjuste"><svg class="ic"><use href="#i-edit"/></svg>Ajustar uma prestação</button>
+          </div>
+          <div class="colar editor-ajuste" id="editorAjuste" hidden>
+            <div class="linha-campos">
+              <label class="q-campo q-campo-mes"><span class="q-rotulo">Prestação de</span><input type="month" id="ajMes"></label>
+              <label class="opcao"><input type="checkbox" id="aj13"> 13º deste ano</label>
+              <fieldset class="grupo-opcoes aj-tipo">
+                <legend class="rotulo-secao">Informar</legend>
+                <label class="opcao"><input type="radio" name="ajTipo" value="rendimento" checked> Rendimento do mês</label>
+                <label class="opcao"><input type="radio" name="ajTipo" value="valor"> Valor da prestação</label>
+              </fieldset>
+              <label class="q-campo q-campo-qtd"><span class="q-rotulo" id="ajRotuloValor">Rendimento (R$)</span><input type="text" inputmode="decimal" id="ajValor" class="dir" placeholder="0,00"></label>
+              <label class="q-campo q-campo-largo"><span class="q-rotulo">Fonte (opcional)</span><input type="text" id="ajOrigem" placeholder="Ex.: holerite de férias, fls. 52"></label>
+            </div>
+            <label class="opcao" id="ajDaquiOpcao"><input type="checkbox" id="ajDaqui"> Mudança de salário: usar este rendimento deste mês em diante</label>
+            <p class="sub" id="ajInfo"></p>
+            <div class="cartao-acoes">
+              <button type="button" class="q-btn" id="ajAplicar">Aplicar</button>
+              <button type="button" class="q-btn-flat" id="ajCancelar">Cancelar</button>
+              <span class="sub" id="ajMsg" role="status"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="linha-campos rito-campos">
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Ajuizamento da execução (opcional)</span>
+            <input type="date" id="dataAjuizamento">
+          </label>
+          <span class="origem-item" id="origemAjuizamento" hidden></span>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><p class="sub rito-ajuda ajuda">Com a data, o débito é separado em rito da prisão (as três prestações anteriores ao ajuizamento e as vencidas no curso do processo, art. 528, § 7º, do CPC) e rito da penhora (as demais). Multa e honorários do art. 523 incidem só sobre o rito da penhora.</p>
+        </div>
+      </section>
+
+      <section class="painel">
+        <h2 class="painel-titulo"><span class="num-secao" data-pensao="3" data-outros="2"></span>Parcelas e pagamentos</h2>
+        <div class="duas-colunas">
+          <div class="cartao">
+            <div class="cartao-cab">
+              <h3 id="tituloParcelas">Parcelas</h3>
+              <span class="sub" id="subParcelas"></span>
+            </div>
+            <div class="lista-cab cols-parcela" aria-hidden="true"><span>Nº</span><span>Vencimento</span><span>Valor (R$)</span><span></span></div>
+            <ol class="lista" id="parcelas"></ol>
+            <div class="cartao-acoes">
+              <button type="button" class="q-btn-flat" id="addParcela"><svg class="ic"><use href="#i-add"/></svg>Adicionar parcela</button>
+              <button type="button" class="q-btn-flat" data-colar="parcelas"><svg class="ic"><use href="#i-paste"/></svg>Colar lista</button>
+              <button type="button" class="q-btn-flat" id="limparParcelas">Limpar parcelas</button>
+            </div>
+            <div class="colar" id="colarParcelas" hidden>
+              <label class="q-campo">
+                <span class="q-rotulo">Cole as linhas com data e valor</span>
+                <textarea rows="5" placeholder="10/03/2024  R$ 500,00&#10;10/04/2024  500,00"></textarea>
+              </label>
+              <div class="cartao-acoes">
+                <button type="button" class="q-btn" data-importar="parcelas">Incluir parcelas</button>
+                <button type="button" class="q-btn-flat" data-fechar="parcelas">Cancelar</button>
+                <span class="sub resultado-colar" role="status"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cartao">
+            <div class="cartao-cab">
+              <h3>Pagamentos e levantamentos</h3>
+              <span class="sub">Abatidos pelos arts. 352 a 355 do Código Civil</span>
+            </div>
+            <div class="lista-cab cols-pagamento" aria-hidden="true"><span>Nº</span><span>Data</span><span>Valor (R$)</span><span>Imputar em</span><span></span></div>
+            <ol class="lista" id="pagamentos"></ol>
+            <p class="vazio-lista" id="semPagamentos">Nenhum pagamento informado. Inclua também valores levantados de penhora ou depósito judicial.</p>
+            <div class="cartao-acoes">
+              <button type="button" class="q-btn-flat" id="addPagamento"><svg class="ic"><use href="#i-add"/></svg>Adicionar pagamento</button>
+              <button type="button" class="q-btn-flat" data-colar="pagamentos"><svg class="ic"><use href="#i-paste"/></svg>Colar lista</button>
+              <button type="button" class="q-btn-flat" id="abrirLote"><svg class="ic"><use href="#i-add"/></svg>Mensais em lote</button>
+            </div>
+            <div class="colar" id="lotePagamentos" hidden>
+              <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><p class="sub ajuda">Um pagamento por mês, sempre no mesmo dia: desconto em folha, depósito mensal, Pix fixo.</p>
+              <div class="linha-campos">
+                <label class="q-campo q-campo-qtd"><span class="q-rotulo">Valor por mês (R$)</span><input type="text" inputmode="decimal" id="loteValor" class="dir" placeholder="0,00"></label>
+                <label class="q-campo q-campo-medio"><span class="q-rotulo">Primeiro pagamento</span><input type="date" id="loteInicio"></label>
+                <label class="q-campo q-campo-medio"><span class="q-rotulo">Último pagamento</span><input type="date" id="loteFim"></label>
+                <label class="q-campo q-campo-largo"><span class="q-rotulo">Fonte (opcional)</span><input type="text" id="loteOrigem" placeholder="Ex.: desconto em folha, holerites fls. 40-52"></label>
+              </div>
+              <div class="cartao-acoes">
+                <button type="button" class="q-btn" id="loteIncluir">Incluir pagamentos</button>
+                <button type="button" class="q-btn-flat" id="loteCancelar">Cancelar</button>
+                <span class="sub" id="loteMsg" role="status"></span>
+              </div>
+            </div>
+            <div class="colar" id="colarPagamentos" hidden>
+              <label class="q-campo">
+                <span class="q-rotulo">Cole as linhas com data e valor (extrato, comprovantes, planilha)</span>
+                <textarea rows="5" placeholder="05/01/2025 Pix recebido R$ 300,00&#10;12/02/2025 depósito 450,00"></textarea>
+              </label>
+              <div class="cartao-acoes">
+                <button type="button" class="q-btn" data-importar="pagamentos">Incluir pagamentos</button>
+                <button type="button" class="q-btn-flat" data-fechar="pagamentos">Cancelar</button>
+                <span class="sub resultado-colar" role="status"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <details class="painel recolhivel" id="painelProcesso">
+        <summary><span class="painel-titulo sem-margem"><span class="num-secao" data-pensao="4" data-outros="3"></span>Dados para o demonstrativo</span><span class="sub">Opcional. Número do processo e partes não ficam salvos.</span></summary>
+        <div class="linha-campos com-topo">
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Processo nº</span><input type="text" id="procNumero" placeholder="0000000-00.0000.8.26.0000"></label>
+          <label class="q-campo q-campo-largo"><span class="q-rotulo">Exequente</span><input type="text" id="procExequente"></label>
+          <label class="q-campo q-campo-largo"><span class="q-rotulo">Executado</span><input type="text" id="procExecutado"></label>
+        </div>
+        <div class="linha-campos com-topo">
+          <label class="q-campo q-campo-largo"><span class="q-rotulo">Unidade (aparece no cabeçalho)</span><input type="text" id="procUnidade" placeholder="Ex.: Unidade Itapevi – 1ª Defensoria Pública"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Cidade (local e data)</span><input type="text" id="procCidade" placeholder="Ex.: Itapevi"></label>
+          <label class="q-campo q-campo-largo"><span class="q-rotulo">Elaborado por (assinatura)</span><input type="text" id="procAutor" placeholder="Nome e cargo"></label>
+        </div>
+      </details>
+    </form>
+    </div>
+    <div class="area-resultado">
+      <section class="painel atualizacao" id="atualizacao" hidden aria-live="polite">
+        <div class="cartao-cab">
+          <h2 class="painel-titulo sem-margem" id="atualizacaoTitulo">Atualização do cálculo anterior</h2>
+          <span class="sub" id="atualizacaoOrigem"></span>
+        </div>
+        <div class="metricas metricas-atualizacao" id="atualizacaoMetricas"></div>
+        <ul class="revisao-lista" id="atualizacaoItens"></ul>
+        <div class="cartao-acoes">
+          <button type="button" class="q-btn-outline" id="refazerAnterior">Refazer na data anterior</button>
+          <button type="button" class="q-btn-outline" id="voltarHoje" hidden>Voltar para a data de hoje</button>
+          <label class="opcao opcao-pequena"><input type="checkbox" id="pdfAtualizacao" checked> Resumo da atualização no PDF</label>
+          <button type="button" class="q-btn-flat" id="encerrarComparacao">Encerrar comparação</button>
+        </div>
+      </section>
+
+    <section class="painel" id="painelResultado" aria-live="polite">
+      <h2 class="painel-titulo">Resultado</h2>
+      <p class="vazio-lista" id="vazio"></p>
+      <div class="erro" id="erro" hidden></div>
+
+      <div id="resultado" hidden>
+        <div class="avisos" id="avisos"></div>
+
+
+        <div class="rotulo-secao">Resumo</div>
+        <div class="metricas" id="metricas"></div>
+        <div class="ritos" id="ritos" hidden></div>
+
+        <div class="acoes">
+          <button type="button" class="q-btn" id="pdf"><svg class="ic"><use href="#i-pdf"/></svg>Gerar demonstrativo em PDF</button>
+          <button type="button" class="q-btn-outline" id="copiar"><svg class="ic"><use href="#i-copy"/></svg>Copiar memória de cálculo</button>
+          <button type="button" class="q-btn-outline" id="csv"><svg class="ic"><use href="#i-download"/></svg>Baixar CSV</button>
+          <button type="button" class="q-btn-outline" id="salvarCalculo2"><svg class="ic"><use href="#i-save"/></svg>Salvar cálculo</button>
+          <label class="opcao opcao-pequena"><input type="checkbox" id="pdfDetalhado" checked> Memória detalhada no PDF</label>
+          <span class="aviso-acao" id="avisoAcao" role="status"></span>
+        </div>
+
+        <details class="conferencia recolhivel" id="conferencia" hidden>
+          <summary class="cartao-cab"><h3>Antes de protocolar, confira</h3><span class="sub" id="resumoConferencia"></span></summary>
+          <ul id="listaConferencia"></ul>
+        </details>
+
+        <div class="cartao-cab com-topo">
+          <div class="rotulo-secao sem-margem">Memória de cálculo por parcela</div>
+          <button type="button" class="q-btn-flat" id="alternarDetalhes" aria-pressed="true">Ocultar detalhes</button>
+        </div>
+        <div class="tabela-rolagem">
+          <table class="q-tabela" id="memoria">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+
+        <div id="blocoPagamentos" hidden>
+          <div class="rotulo-secao">Imputação dos pagamentos</div>
+          <div class="tabela-rolagem">
+            <table class="q-tabela" id="tabPagamentos">
+              <thead><tr><th>Pagamento</th><th>Data</th><th class="num">Valor</th><th>Parcela</th><th class="num">Juros</th><th class="num col-enc">Encargos</th><th class="num">Capital</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rotulo-secao">Critérios</div>
+        <ul class="criterios" id="criterios"></ul>
+      </div>
+    </section>
+
+    </div>
+    </div>
+
+    <details class="painel recolhivel" id="painelIndices">
+      <summary><span class="painel-titulo sem-margem">Índices e fontes</span><span class="sub" id="resumoIndices"></span></summary>
+      <div class="com-topo">
+        <p class="nota-indices" id="notaIndices"></p>
+        <div class="tabela-rolagem">
+          <table class="q-tabela" id="tabIndices">
+            <thead><tr><th>Tabela</th><th>Fonte</th><th>Disponível até</th><th class="num">Último valor</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="cartao-acoes com-topo">
+          <button type="button" class="q-btn" id="atualizarIndices"><svg class="ic"><use href="#i-refresh"/></svg>Atualizar agora</button>
+          <button type="button" class="q-btn-outline" id="exportarIndices"><svg class="ic"><use href="#i-download"/></svg>Exportar arquivo de índices</button>
+          <button type="button" class="q-btn-outline" id="importarIndices">Importar arquivo de índices</button>
+          <button type="button" class="q-btn-flat" id="voltarEmbutidos">Usar só a tabela embutida</button>
+          <input type="file" id="arquivoIndices" accept="application/json,.json" hidden>
+          <span class="aviso-acao" id="avisoIndices" role="status"></span>
+        </div>
+      </div>
+    </details>
+  </main>
+  </div>
+
+  <div id="impressao" class="impressao" aria-hidden="true"></div>
+
+  <template id="tplPeriodo">
+    <li class="item-periodo">
+      <span class="num-item"></span>
+      <label class="q-campo q-campo-mes"><span class="q-rotulo">Início</span><input type="month" class="pe-inicio"></label>
+      <label class="q-campo q-campo-mes"><span class="q-rotulo">Fim (vazio: até hoje)</span><input type="month" class="pe-fim"></label>
+      <label class="q-campo q-campo-dia"><span class="q-rotulo">Dia do venc.</span><input type="number" class="pe-dia" min="1" max="31" value="10"></label>
+      <label class="q-campo q-campo-base"><span class="q-rotulo">Base de cálculo</span>
+        <select class="pe-base">
+          <option value="pct_sm">% do salário mínimo</option>
+          <option value="qtd_sm">Salários mínimos</option>
+          <option value="pct_rend">% dos rendimentos</option>
+          <option value="fixo">Valor fixo (R$)</option>
+        </select>
+      </label>
+      <label class="q-campo q-campo-qtd"><span class="q-rotulo pe-rotulo-qtd">Percentual (%)</span><input type="text" inputmode="decimal" class="pe-qtd dir" placeholder="30"></label>
+      <label class="opcao opcao-13"><input type="checkbox" class="pe-13"> Incide no 13º</label>
+      <span class="sub pe-previa"></span>
+      <button type="button" class="q-btn-icone remover" aria-label="Remover período" title="Remover período"><svg class="ic"><use href="#i-close"/></svg></button>
+      <span class="origem-item" hidden></span>
+      <div class="pe-reaj" hidden>
+        <label class="q-campo q-campo-base"><span class="q-rotulo">Reajuste anual</span>
+          <select class="pe-reajuste">
+            <option value="">Sem reajuste</option>
+            <option value="inpc">INPC</option>
+            <option value="ipca">IPCA</option>
+            <option value="sm">Salário mínimo (proporção)</option>
+          </select>
+        </label>
+        <label class="q-campo q-campo-mes pe-database-campo" hidden><span class="q-rotulo">Data-base (mês da fixação)</span><input type="month" class="pe-database"></label>
+        <span class="sub pe-reaj-ajuda" hidden>A cada 12 meses da data-base, o valor sobe pela variação dos 12 meses anteriores (INPC ou IPCA) ou na proporção do salário mínimo. Vazio: o início do período.</span>
+      </div>
+      <div class="pe-rend" hidden>
+        <div class="pe-rend-cab">
+          <span class="pe-rend-titulo">Rendimentos do devedor</span>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda">Cada valor vale a partir do mês indicado, até a próxima mudança. Use o rendimento líquido ou bruto, conforme o título.</span>
+        </div>
+        <div class="re-lista"></div>
+        <div class="cartao-acoes">
+          <button type="button" class="q-btn-flat re-add"><svg class="ic"><use href="#i-add"/></svg>Mudança de rendimento</button>
+          <button type="button" class="q-btn-flat re-colar"><svg class="ic"><use href="#i-paste"/></svg>Colar lista</button>
+        </div>
+        <div class="colar re-colar-painel" hidden>
+          <label class="q-campo">
+            <span class="q-rotulo">Cole mês e rendimento (holerites, CNIS, planilha)</span>
+            <textarea rows="4" placeholder="01/2024  3.500,00&#10;jan/2025  R$ 3.820,00"></textarea>
+          </label>
+          <div class="cartao-acoes">
+            <button type="button" class="q-btn re-importar">Incluir rendimentos</button>
+            <button type="button" class="q-btn-flat re-cancelar">Cancelar</button>
+            <span class="sub re-resultado" role="status"></span>
+          </div>
+        </div>
+      </div>
+    </li>
+  </template>
+  <template id="tplRend">
+    <div class="re-item">
+      <label class="q-campo q-campo-mes"><span class="q-rotulo">A partir de</span><input type="month" class="re-desde"></label>
+      <label class="q-campo q-campo-qtd"><span class="q-rotulo">Rendimento (R$)</span><input type="text" inputmode="decimal" class="re-valor dir" placeholder="0,00"></label>
+      <span class="sub re-pensao"></span>
+      <button type="button" class="q-btn-icone re-remover" aria-label="Remover rendimento" title="Remover rendimento"><svg class="ic"><use href="#i-close"/></svg></button>
+      <span class="origem-item" hidden></span>
+    </div>
+  </template>
+  <template id="tplParcela">
+    <li class="item cols-parcela">
+      <span class="num-item"></span>
+      <label class="q-campo q-campo-sem-rotulo"><input type="date" class="p-venc" aria-label="Vencimento"></label>
+      <label class="q-campo q-campo-sem-rotulo"><input type="text" inputmode="decimal" class="p-valor dir" placeholder="0,00" aria-label="Valor"></label>
+      <button type="button" class="q-btn-icone remover" aria-label="Remover parcela" title="Remover parcela"><svg class="ic"><use href="#i-close"/></svg></button>
+      <span class="origem-item" hidden></span>
+    </li>
+  </template>
+  <template id="tplPagamento">
+    <li class="item cols-pagamento">
+      <span class="num-item"></span>
+      <label class="q-campo q-campo-sem-rotulo"><input type="date" class="g-data" aria-label="Data do pagamento"></label>
+      <label class="q-campo q-campo-sem-rotulo"><input type="text" inputmode="decimal" class="g-valor dir" placeholder="0,00" aria-label="Valor pago"></label>
+      <label class="q-campo q-campo-sem-rotulo"><select class="g-parcela" aria-label="Imputar em"><option value="">Automático</option></select></label>
+      <button type="button" class="q-btn-icone remover" aria-label="Remover pagamento" title="Remover pagamento"><svg class="ic"><use href="#i-close"/></svg></button>
+      <span class="origem-item" hidden></span>
+    </li>
+  </template>
+
+  <script src="data.js"></script>
+  <script src="indices.js"></script>
+  <script src="engine.js"></script>
+  <script src="copilot.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+{
+ "formato": "calcjur-copilot",
+ "versao": 1,
+ "tipo": "pensao",
+ "processo": "0000002-22.2025.8.26.0271",
+ "juros": {
+  "regime": "tjsp",
+  "termoInicial": "vencimento"
+ },
+ "periodos": [
+  {
+   "inicio": "2023-06",
+   "fim": "2024-03",
+   "diaVencimento": 12,
+   "base": "pct_rend",
+   "valor": 33,
+   "incide13": true,
+   "origem": "Acordo homologado de 16/05/2023 (fls. 109-111)",
+   "rendimentos": [
+    {
+     "desde": "2023-06",
+     "valor": 2450,
+     "origem": "Holerite fls. 40, informado pelo usuário"
+    }
+   ]
+  },
+  {
+   "inicio": "2024-04",
+   "fim": null,
+   "diaVencimento": 12,
+   "base": "pct_sm",
+   "valor": 45,
+   "incide13": false,
+   "origem": "Acordo homologado de 16/05/2023; desemprego informado pelo usuário"
+  }
+ ],
+ "ajustes": [
+  {
+   "mes": "2024-01",
+   "rendimento": 5716.67,
+   "origem": "Holerite de férias"
+  }
+ ],
+ "dataAjuizamento": {
+  "data": "2025-03-10",
+  "origem": "Informado pelo usuário"
+ },
+ "outrasParcelas": [],
+ "pagamentos": [
+  {
+   "data": "2025-01-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  },
+  {
+   "data": "2025-02-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  },
+  {
+   "data": "2025-03-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  },
+  {
+   "data": "2025-04-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  },
+  {
+   "data": "2025-05-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  },
+  {
+   "data": "2025-06-05",
+   "valor": 300,
+   "origem": "Desconto em folha"
+  }
+ ],
+ "encargos": {
+  "multa523": false,
+  "honorariosPct": null
+ },
+ "pendencias": [],
+ "observacoes": "Usuário informou que o executado nunca efetuou pagamentos.",
+ "revisado": true
+}

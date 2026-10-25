@@ -1,0 +1,6 @@
+{"formato":"calcjur-copilot","versao":1,"tipo":"pensao","processo":"0001425-54.2025.8.26.0271","juros":{"regime":"tjsp","termoInicial":"vencimento","origem":"Título não fixa juros"},
+"periodos":[{"inicio":"2023-06","fim":"2024-03","diaVencimento":12,"base":"pct_rend","valor":33,"incide13":true,"origem":"Acordo homologado de 16/05/2023","rendimentos":[{"desde":"2023-06","valor":2450.00,"origem":"Holerite fls. 40"}]},
+{"inicio":"2024-04","fim":null,"diaVencimento":12,"base":"pct_sm","valor":45,"incide13":false,"origem":"Acordo homologado; desemprego informado pelo usuário"}],
+"dataAjuizamento":{"data":"2025-03-10","origem":"Informado pelo usuário"},"outrasParcelas":[],
+"pagamentos":[{"data":"2024-08-15","valor":300.00,"origem":"Informado pelo usuário"},{"data":"2024-11-05","valor":500.00,"origem":"Pix informado pelo usuário"},{"data":"2024-12-20","valor":800.00,"origem":"Informado pelo usuário"}],
+"encargos":{"multa523":false,"honorariosPct":null},"pendencias":[],"observacoes":""}
