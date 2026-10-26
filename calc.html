@@ -41,7 +41,7 @@
         <span class="sub" id="statusTexto">Carregando índices…</span>
       </button>
       <button type="button" class="q-btn-flat" id="abrirCalculo" title="Abrir um cálculo salvo (.calcjur): as prestações novas entram sozinhas e você só lança o que mudou"><svg class="ic"><use href="#i-folder"/></svg>Abrir</button>
-      <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo para guardar na pasta do caso"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
+      <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo com o número do processo no nome, para guardar na pasta da unidade"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
       <button type="button" class="q-btn-flat" id="btnFontes" aria-pressed="true" hidden title="Mostrar ou esconder a fonte de cada dado importado"><svg class="ic"><use href="#i-spark"/></svg>Fontes</button>
       <a class="q-btn-flat" id="novaAba" href="./" target="_blank" rel="noopener" hidden title="Abrir a calculadora numa aba própria, caso salvar, abrir ou gerar o PDF não funcione dentro desta página"><svg class="ic"><use href="#i-nova"/></svg>Nova aba</a>
       <input type="file" id="arquivoCalculo" accept=".calcjur,.json,application/json" hidden>
@@ -282,7 +282,7 @@
       </section>
 
       <details class="painel recolhivel" id="painelProcesso">
-        <summary><span class="painel-titulo sem-margem"><span class="num-secao" data-pensao="4" data-outros="3"></span>Dados para o demonstrativo</span><span class="sub">Opcional. Número do processo e partes não ficam salvos.</span></summary>
+        <summary><span class="painel-titulo sem-margem"><span class="num-secao" data-pensao="4" data-outros="3"></span>Dados para o demonstrativo</span><span class="sub">O número do processo dá nome ao arquivo salvo. Processo e partes não ficam guardados no navegador.</span></summary>
         <div class="linha-campos com-topo">
           <label class="q-campo q-campo-medio"><span class="q-rotulo">Processo nº</span><input type="text" id="procNumero" placeholder="0000000-00.0000.8.26.0000"></label>
           <label class="q-campo q-campo-largo"><span class="q-rotulo">Exequente</span><input type="text" id="procExequente"></label>
@@ -330,6 +330,7 @@
           <button type="button" class="q-btn-outline" id="copiar"><svg class="ic"><use href="#i-copy"/></svg>Copiar memória de cálculo</button>
           <button type="button" class="q-btn-outline" id="csv"><svg class="ic"><use href="#i-download"/></svg>Baixar CSV</button>
           <button type="button" class="q-btn-outline" id="salvarCalculo2"><svg class="ic"><use href="#i-save"/></svg>Salvar cálculo</button>
+          <a class="link-guia" href="https://defensoriasp.sharepoint.com/sites/lab-ia/SitePages/Salvar-e-encontrar-c%C3%A1lculos.aspx" target="_blank" rel="noopener">Onde guardar o cálculo</a>
           <label class="opcao opcao-pequena"><input type="checkbox" id="pdfDetalhado" checked> Memória detalhada no PDF</label>
           <span class="aviso-acao" id="avisoAcao" role="status"></span>
         </div>

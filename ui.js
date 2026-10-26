@@ -1383,12 +1383,25 @@
       indices: res ? indicesUsados(e) : undefined
     });
   }
+  /* Número do processo no padrão CNJ (NNNNNNN-DD.AAAA.J.TR.OOOO) quando vier com os 20 dígitos; senão, como foi digitado. */
+  function processoPadrao(txt) {
+    var d = String(txt || '').replace(/\D/g, '');
+    if (d.length === 20) return d.slice(0, 7) + '-' + d.slice(7, 9) + '.' + d.slice(9, 13) + '.' + d.slice(13, 14) + '.' + d.slice(14, 16) + '.' + d.slice(16);
+    return String(txt || '').trim().replace(/[^\d.\-]/g, '');
+  }
+  /* Nome do arquivo começa pelo processo: na pasta da unidade, quem substituir acha o cálculo buscando pelo número. */
   function salvarArquivo() {
     var arq = montarArquivo(), e = coletar();
-    var proc = $('procNumero').value.trim().replace(/[^\d.\-]/g, '');
-    var nome = 'calculo ' + (proc || NOMES_TIPO[e.tipo].toLowerCase()) + ' ' + (e.dataCalculo || hoje()) + '.calcjur';
+    var proc = processoPadrao($('procNumero').value);
+    if (proc && proc !== $('procNumero').value.trim()) { $('procNumero').value = proc; arq.processo = proc; }
+    var nome = (proc || 'SEM PROCESSO') + ' - Cálculo ' + NOMES_TIPO[e.tipo].toLowerCase() + ' - ' + (e.dataCalculo || hoje()) + '.calcjur';
     baixar(nome, JSON.stringify(arq, null, 2), 'application/json');
-    avisoArquivo(ultimo ? 'Cálculo salvo. Guarde o arquivo na pasta do caso.' : 'Dados salvos, ainda sem resultado: o arquivo não traz total para comparação.');
+    if (!proc) {
+      avisoArquivo('Salvo sem número do processo. Preencha-o em "Dados para o demonstrativo" e salve de novo: é por ele que um colega encontra o cálculo.', true);
+      $('painelProcesso').open = true;
+      return;
+    }
+    avisoArquivo(ultimo ? 'Cálculo salvo. Guarde o arquivo na pasta da unidade no Teams ou no SharePoint: quem substituir encontra pelo número do processo.' : 'Dados salvos, ainda sem resultado: o arquivo não traz total para comparação.');
   }
   $('salvarCalculo').addEventListener('click', salvarArquivo);
   $('salvarCalculo2').addEventListener('click', salvarArquivo);
