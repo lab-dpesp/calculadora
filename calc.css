@@ -536,8 +536,3 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
 .conferencia[open] > summary { margin-bottom: 6px; }
 #btnFontes[aria-pressed="false"] { color: var(--texto-3); }
 .area-resultado .metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-/* Link para a orientação sobre onde guardar os cálculos (site do Laboratório de Inovação) */
-.link-guia { color: var(--primaria); font-size: 14px; font-weight: 600; align-self: center; padding: 4px 2px; }
-.link-guia:hover { color: var(--primaria-escura); }
-@media print { .link-guia { display: none; } }
