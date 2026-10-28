@@ -41,7 +41,9 @@ function hojeBrasilia() {
 async function buscarSerie(codigo) {
   const url = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.' + codigo + '/dados?formato=json&dataInicial=' + INICIO;
   let ultimoErro = null;
-  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+  // O SGS do Banco Central às vezes responde 502/503 por alguns minutos. Em vez de desistir logo,
+  // tenta até 6 vezes, esperando 20 s, 40 s, 60 s, 80 s e 100 s entre elas (cerca de 5 minutos no total).
+  for (let tentativa = 1; tentativa <= 6; tentativa++) {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(function () { ctrl.abort(); }, 30000);
@@ -53,7 +55,7 @@ async function buscarSerie(codigo) {
       return j;
     } catch (e) {
       ultimoErro = e;
-      await new Promise(function (ok) { setTimeout(ok, 5000 * tentativa); });
+      if (tentativa < 6) await new Promise(function (ok) { setTimeout(ok, 20000 * tentativa); });
     }
   }
   throw new Error('série ' + codigo + ': ' + (ultimoErro && ultimoErro.message));
