@@ -38,6 +38,7 @@ jobs:
         run: |
           node ferramentas/testar.js
           node ferramentas/testar-opcoes.js
+          node ferramentas/testar-aleatorio.js 1000
       - name: Montar o site
         run: |
           mkdir -p _site
