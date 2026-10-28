@@ -28,7 +28,7 @@ const path = require('path');
 
 const RAIZ = path.resolve(__dirname, '..');
 const ARQUIVO = path.join(RAIZ, 'data.js');
-const SERIES = { inpc: 188, ipca15: 7478, ipcae: 10764, ipca: 433, selic: 4390, taxaLegal: 29543, sm: 1619 };
+const SERIES = { inpc: 188, ipca15: 7478, ipcae: 10764, ipca: 433, selic: 4390, taxaLegal: 29543, sm: 1619, igpm: 189 };
 const INICIO = '01/01/2024';
 const args = process.argv.slice(2);
 const SO_CONFERIR = args.includes('--conferir');
@@ -68,11 +68,12 @@ const COMENTARIOS = {
   TAXA_LEGAL: 'Taxa legal mensal, % a.m. (art. 406 do CC; Res. CMN 5.171/2024). Antes de 09/2024, calculada pela mesma fórmula.',
   FATORES_IPCAE: 'IPCA-E acumulado (Tabela EC 113/2021 do TJSP), mesma convenção de defasagem da Tabela Prática.',
   JUROS_POUPANCA: 'Juros da poupança, % a.m. (art. 1º-F da Lei 9.494/97, red. Lei 11.960/2009), sem TR.',
-  SELIC: 'Selic mensal, % a.m. (SGS 4390). Só meses fechados.',
+  SELIC: 'Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2008: EC 113/2021 na Fazenda e Selic como juros no débito cível.',
   INPC: 'INPC mensal, % a.m. (SGS 188), usado no reajuste anual de pensão em valor fixo.',
-  IPCA: 'IPCA mensal, % a.m. (SGS 433): período da EC 136/2025 e reajuste anual de pensão em valor fixo.'
+  IPCA: 'IPCA mensal, % a.m. (SGS 433): período da EC 136/2025, reajuste anual de pensão em valor fixo e correção de débito cível pelo IPCA.',
+  IGPM: 'IGP-M mensal, % a.m. (SGS 189, FGV): correção de débito cível quando o título manda usar o IGP-M.'
 };
-const ORDEM_TABELAS = ['SALARIO_MINIMO', 'FATORES_TJSP', 'TAXA_LEGAL', 'FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'INPC', 'IPCA'];
+const ORDEM_TABELAS = ['SALARIO_MINIMO', 'FATORES_TJSP', 'TAXA_LEGAL', 'FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'INPC', 'IPCA', 'IGPM'];
 const ORDEM_CAMPOS = ['ultimoMes', 'ultimoMesSelic', 'indicesEmbutidosEm', 'vigenciaLei14905', 'inicioEC113', 'inicioEC136', 'inicioFazenda'];
 
 function tabela(nome, obj) {
@@ -138,7 +139,10 @@ async function main() {
   console.log('data.js gravado, conferido em ' + DADOS.indicesEmbutidosEm + '.');
 }
 
-main().catch(function (e) {
-  console.error('Falha: ' + e.message + '. O data.js não foi alterado.');
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(function (e) {
+    console.error('Falha: ' + e.message + '. O data.js não foi alterado.');
+    process.exit(1);
+  });
+}
+module.exports = { serializar: serializar };
