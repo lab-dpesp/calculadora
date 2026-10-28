@@ -35,7 +35,9 @@ jobs:
       - name: Atualizar índices pelo Banco Central
         run: node ferramentas/atualizar-indices.js
       - name: Conferir totais de referência
-        run: node ferramentas/testar.js
+        run: |
+          node ferramentas/testar.js
+          node ferramentas/testar-opcoes.js
       - name: Montar o site
         run: |
           mkdir -p _site
