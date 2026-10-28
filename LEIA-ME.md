@@ -68,6 +68,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
   - multa contratual ou moratória em % sobre o capital corrigido.
 - Honorários de sucumbência fixados no título (cível e Fazenda): % sobre a condenação; no cível, também % sobre o valor da causa ou valor fixo, corrigidos desde a data indicada. Entram no débito antes da multa e dos honorários do art. 523.
 - Termos próprios por parcela: o botão de calendário ao lado da parcela abre "Correção desde" e "Juros desde". Ex.: dano moral com correção do arbitramento (Súmula 362/STJ) e juros do evento (Súmula 54/STJ). Os juros anteriores ao início da correção incidem sobre o valor nominal.
+- `node ferramentas/testar-aleatorio.js [quantidade]` gera casos aleatórios de cível e Fazenda e os recalcula por uma implementação independente (algoritmos diferentes do motor), além de conferir que pagar o total zera o débito e que a imputação soma o valor pago.
 - `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
 
 ## Pagamentos e levantamentos
