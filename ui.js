@@ -33,7 +33,7 @@
   var tipo = 'pensao';
   var DESCRICOES = {
     pensao: 'Gera as prestações a partir do título (valor fixo ou salário mínimo), abate pagamentos e separa o rito da prisão e o da penhora.',
-    particular: 'Débitos entre particulares: correção pela Tabela Prática do TJSP e juros de mora, com abatimento de pagamentos.',
+    particular: 'Débitos entre particulares: correção pela Tabela Prática do TJSP e juros de mora, com abatimento de pagamentos. Outros índices, multa contratual e honorários de sucumbência ficam em "Opções avançadas".',
     fazenda: 'Débitos não tributários da Fazenda Pública: IPCA-E, juros da poupança e Selic, com abatimento de pagamentos.'
   };
   var abas = document.querySelectorAll('.aba');
@@ -198,13 +198,25 @@
   /* ---------- Parcelas e pagamentos ---------- */
   var listaP = $('parcelas'), listaG = $('pagamentos');
 
-  function novaParcela(venc, valor, focar) {
+  function novaParcela(venc, valor, focar, corDesde, jurDesde) {
     var li = $('tplParcela').content.firstElementChild.cloneNode(true);
     li.querySelector('.p-venc').value = venc || '';
     li.querySelector('.p-valor').value = valor || '';
+    li.querySelector('.p-cor').value = corDesde || '';
+    li.querySelector('.p-jur').value = jurDesde || '';
+    if (corDesde || jurDesde) mostrarTermos(li, true);
+    marcarTermos(li);
     listaP.appendChild(li);
     if (focar) li.querySelector('.p-venc').focus();
     return li;
+  }
+  function mostrarTermos(li, abrir) {
+    var box = li.querySelector('.p-termos-campos'), b = li.querySelector('.p-termos');
+    box.hidden = !abrir;
+    b.setAttribute('aria-expanded', String(!!abrir));
+  }
+  function marcarTermos(li) {
+    li.querySelector('.p-termos').classList.toggle('com-termos', !!(li.querySelector('.p-cor').value || li.querySelector('.p-jur').value));
   }
   function novoPagamento(data, valor, alvo, focar) {
     var li = $('tplPagamento').content.firstElementChild.cloneNode(true);
@@ -237,7 +249,17 @@
     agendar();
   }
   listaPe.addEventListener('click', function (ev) { remover(ev, listaPe, null, function () { return $('addPeriodo'); }); });
-  listaP.addEventListener('click', function (ev) { remover(ev, listaP, function () { novaParcela(); }, function () { return listaP.querySelector('input'); }); });
+  listaP.addEventListener('click', function (ev) {
+    var bt = ev.target.closest('.p-termos');
+    if (bt) {
+      var li = bt.closest('li'), abrir = li.querySelector('.p-termos-campos').hidden;
+      mostrarTermos(li, abrir);
+      if (abrir) li.querySelector('.p-cor').focus();
+      return;
+    }
+    remover(ev, listaP, function () { novaParcela(); }, function () { return listaP.querySelector('input'); });
+  });
+  listaP.addEventListener('change', function (ev) { var li = ev.target.closest('li'); if (li) marcarTermos(li); });
   listaG.addEventListener('click', function (ev) { remover(ev, listaG, null, function () { return $('addPagamento'); }); });
   listaG.addEventListener('change', function (ev) {
     if (ev.target.classList.contains('g-parcela')) ev.target.closest('li').dataset.alvo = ev.target.value;
@@ -442,6 +464,23 @@
     cada(document.querySelectorAll('[data-so]'), function (el) { el.hidden = el.getAttribute('data-so') !== tipo; });
     cada(document.querySelectorAll('[data-nao]'), function (el) { el.hidden = el.getAttribute('data-nao') === tipo; });
     $('campoTaxaFixa').hidden = faz || reg !== 'fixa';
+    $('campoDuas').hidden = faz || reg !== 'duas';
+    $('campoDuasTaxa2').hidden = $('duasDepois').value !== 'fixa';
+    var troca = $('trocaIndice').checked;
+    $('campoTrocaMes').hidden = !troca; $('campoTrocaIndice').hidden = !troca;
+    var compOk = reg === 'fixa' || reg === 'duas';
+    $('jurosCompostos').disabled = !compOk;
+    $('opcaoCompostos').classList.toggle('opcao-desativada', !compOk);
+    $('multaContratualPct').disabled = !$('multaContratual').checked;
+    cada($('sucBase').querySelectorAll('option[value=causa], option[value=fixo]'), function (o) { o.hidden = faz; o.disabled = faz; });
+    if (faz && ($('sucBase').value === 'causa' || $('sucBase').value === 'fixo')) $('sucBase').value = 'condenacao';
+    var sb = $('sucBase').value;
+    $('campoSucPct').hidden = !(sb === 'condenacao' || sb === 'causa');
+    $('campoSucValor').hidden = $('campoSucData').hidden = !(sb === 'causa' || sb === 'fixo');
+    $('rotuloSucValor').textContent = sb === 'causa' ? 'Valor da causa (R$)' : 'Valor dos honorários (R$)';
+    var emUso = avancadasEmUso();
+    $('seloAvancadas').hidden = !emUso.length;
+    $('seloAvancadas').textContent = emUso.length ? 'Em uso: ' + emUso.join(', ') : '';
     $('campoTermo').hidden = !faz && reg === 'nenhum';
     $('campoDataJuros').hidden = termo() !== 'data';
     $('multa').disabled = faz;
@@ -457,6 +496,20 @@
       ? 'Informe a data do cálculo e ao menos um período da pensão, com início e valor.'
       : 'Informe a data do cálculo e ao menos uma parcela com vencimento e valor.';
   }
+
+  /* Opções avançadas diferentes do padrão, para avisar na tela que estão ligadas. */
+  function avancadasEmUso() {
+    var u = [];
+    if (tipo === 'particular') {
+      if ($('indiceCorrecao').value !== 'tjsp') u.push(NOMES_INDICE[$('indiceCorrecao').value]);
+      if ($('trocaIndice').checked) u.push('troca de índice');
+      if ($('jurosCompostos').checked && !$('jurosCompostos').disabled) u.push('juros compostos');
+      if ($('multaContratual').checked) u.push('multa contratual');
+    }
+    if (tipo !== 'pensao' && $('sucBase').value) u.push('sucumbência');
+    return u;
+  }
+  var NOMES_INDICE = { tjsp: 'Tabela Prática do TJSP', ipca: 'IPCA', inpc: 'INPC', ipcae: 'IPCA-E', igpm: 'IGP-M', nenhum: 'sem correção' };
 
   function coletarPeriodos() {
     var out = [];
@@ -480,7 +533,8 @@
     cada(listaP.children, function (li) {
       var v = li.querySelector('.p-venc').value, val = li.querySelector('.p-valor').value;
       if (!v && !val) return;
-      parcelas.push({ vencimento: v, valor: lerNumero(val), valorTexto: val, origem: li.dataset.origem || '' });
+      parcelas.push({ vencimento: v, valor: lerNumero(val), valorTexto: val, origem: li.dataset.origem || '',
+        correcaoDesde: li.querySelector('.p-cor').value, jurosDesde: li.querySelector('.p-jur').value });
     });
     cada(listaG.children, function (li) {
       var d = li.querySelector('.g-data').value, val = li.querySelector('.g-valor').value;
@@ -501,9 +555,33 @@
       periodos: tipo === 'pensao' ? coletarPeriodos() : [],
       ajustes: tipo === 'pensao' ? ajustesMotor() : [],
       dataAjuizamento: tipo === 'pensao' ? $('dataAjuizamento').value : '',
+      jurosDuas: { taxa1: lerNumero($('duasTaxa1').value), ate: $('duasAte').value, depois: $('duasDepois').value, taxa2: lerNumero($('duasTaxa2').value) },
+      civel: tipo === 'particular' ? {
+        indice: $('indiceCorrecao').value,
+        indice2: $('trocaIndice').checked ? $('indice2').value : '',
+        indice2Desde: $('trocaIndice').checked ? $('indice2Desde').value : '',
+        jurosCompostos: $('jurosCompostos').checked && ($('regime').value === 'fixa' || $('regime').value === 'duas'),
+        multaContratualPct: $('multaContratual').checked ? lerNumero($('multaContratualPct').value) : 0
+      } : {},
+      sucumbencia: tipo !== 'pensao' && $('sucBase').value ? { base: $('sucBase').value, pct: lerNumero($('sucPct').value),
+        valor: lerNumero($('sucValor').value), data: $('sucData').value } : null,
       parcelas: parcelas,
       pagamentos: pagamentos
     };
+  }
+  /* Campos das opções avançadas e dos juros em duas taxas, como texto da tela (para guardar e restaurar). */
+  var CAMPOS_AVANCADOS = ['duasTaxa1', 'duasAte', 'duasDepois', 'duasTaxa2', 'indiceCorrecao', 'indice2', 'indice2Desde', 'multaContratualPct', 'sucBase', 'sucPct', 'sucValor', 'sucData'];
+  var MARCAS_AVANCADAS = ['trocaIndice', 'jurosCompostos', 'multaContratual'];
+  function avancadosBrutos() {
+    var o = {};
+    CAMPOS_AVANCADOS.forEach(function (id) { o[id] = $(id).value; });
+    MARCAS_AVANCADAS.forEach(function (id) { o[id] = $(id).checked; });
+    return o;
+  }
+  function restaurarAvancados(o) {
+    o = o || {};
+    CAMPOS_AVANCADOS.forEach(function (id) { if (o[id] != null) $(id).value = o[id]; });
+    MARCAS_AVANCADAS.forEach(function (id) { $(id).checked = !!o[id]; });
   }
 
   function salvar(e) {
@@ -514,7 +592,8 @@
         honorariosPct: $('honorariosPct').value, dataAjuizamento: $('dataAjuizamento').value, pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
         periodos: coletarPeriodosBrutos(),
-        parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem]; }),
+        parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde]; }),
+        avancados: avancadosBrutos(),
         pagamentos: e.pagamentos.map(function (p) { return [p.data, p.valorTexto, p.parcela, p.origem]; }),
         origemAjuizamento: $('origemAjuizamento').dataset.origem || '',
         importacao: importacao,
@@ -562,7 +641,8 @@
       if (s.pdfDetalhado === false) $('pdfDetalhado').checked = false;
       $('procUnidade').value = s.unidade || ''; $('procCidade').value = s.cidade || ''; $('procAutor').value = s.autor || '';
       (s.periodos || []).forEach(function (p) { novoPeriodo(p); });
-      (s.parcelas || []).forEach(function (p) { marcarOrigem(novaParcela(p[0], p[1]), p[2]); });
+      (s.parcelas || []).forEach(function (p) { marcarOrigem(novaParcela(p[0], p[1], false, p[3], p[4]), p[2]); });
+      restaurarAvancados(s.avancados);
       (s.pagamentos || []).forEach(function (p) { marcarOrigem(novoPagamento(p[0], p[1], p[2]), p[3]); });
       marcarOrigem($('origemAjuizamento'), s.origemAjuizamento);
       importacao = s.importacao || null;
@@ -697,7 +777,12 @@
     it.push([t.pagamentos ? 'Capital atualizado em aberto' : 'Capital atualizado', t.capital]);
     if (!faz || t.juros) it.push([faz ? 'Juros da poupança' : 'Juros de mora', t.juros]);
     if (faz) it.push([rotuloEncargos(e), t.encargos]);
-    if (t.multa || t.honorarios) it.push(['Subtotal', t.subtotal]);
+    if (t.multaContratual || t.sucumbencia) {
+      it.push(['Subtotal', t.subtotal]);
+      if (t.multaContratual) it.push(['Multa contratual de ' + num(t.multaContratualPct, t.multaContratualPct % 1 ? 2 : 0) + '%', t.multaContratual]);
+      if (t.sucumbencia) it.push(['Honorários de sucumbência', t.sucumbencia]);
+      if (t.multa || t.honorarios) it.push(['Débito antes do art. 523', t.debito]);
+    } else if (t.multa || t.honorarios) it.push(['Subtotal', t.subtotal]);
     var suf = res.rito ? ' (rito da penhora)' : '';
     if (t.multa) it.push(['Multa de 10%' + suf, t.multa]);
     if (e.honorarios) it.push(['Honorários de ' + num(t.honorariosPct, t.honorariosPct % 1 ? 2 : 0) + '%' + suf, t.honorarios]);
@@ -870,28 +955,55 @@
         if (e.periodos.some(function (p) { return p.decimo; })) c.push('13º: prestação extra com a mesma base, vencida em 20 de dezembro (Lei 4.749/65, art. 1º), nos períodos em que o título prevê incidência.');
         if (res && res.rito) c.push('Rito da prisão: as três prestações da pensão vencidas antes do ajuizamento (' + brIso(e.dataAjuizamento) + ') e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ). As demais parcelas, inclusive as avulsas, vão para o rito da penhora.');
       }
-      c.push('Correção pela Tabela Prática do TJSP para débitos judiciais (Lei 14.905/2024): INPC até agosto de 2024 e IPCA-15 a partir de setembro de 2024.');
+      c.push(textoCorrecao(e));
       if (e.regime === 'tjsp') c.push('Juros de 1% ao mês até 29/08/2024 e taxa legal (Selic deduzida do IPCA) a partir de 30/08/2024, vigência da Lei 14.905/2024.');
       if (e.regime === 'taxalegal') c.push('Taxa legal (Selic deduzida do IPCA, art. 406 do CC) em todo o período, conforme a leitura do Tema 1368/STJ para o período anterior à Lei 14.905/2024.');
       if (e.regime === 'fixa') c.push('Juros de ' + num(e.taxaFixa, 2) + '% ao mês.');
       if (e.regime === 'nenhum') c.push('Sem juros de mora.');
-      if (e.regime !== 'nenhum') c.push('Juros simples sobre o capital corrigido. Taxa fixa: meses completos de data a data, mais os dias restantes ÷ 30. Taxa legal: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).');
+      if (e.regime === 'duas') c.push('Juros de ' + num(e.jurosDuas.taxa1, 2) + '% ao mês até ' + brIso(e.jurosDuas.ate) + ' e, depois, ' +
+        (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% ao mês.' : 'taxa legal (Selic deduzida do IPCA, art. 406 do CC).'));
+      if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais, pro rata die, sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
+      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 29/08/2024 (art. 406 do CC, redação anterior); a partir de 30/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais, pro rata die, sobre o capital.');
+      var comp = e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas');
+      if (e.regime !== 'nenhum') c.push((comp ? 'Juros compostos, com capitalização mensal, nas taxas fixas: (1 + taxa)^(meses + dias ÷ 30) − 1; taxa legal e Selic sempre simples. ' : 'Juros simples sobre o capital corrigido. ') +
+        'Taxa fixa: meses completos de data a data, mais os dias restantes ÷ 30. Taxa legal: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).');
     }
     if (!(e.tipo !== 'fazenda' && e.regime === 'nenhum')) {
       c.push(e.termoJuros === 'data'
         ? 'Juros contados de ' + brIso(e.dataJuros) + ', ou do vencimento, se posterior.'
         : 'Juros contados do vencimento de cada parcela.');
     }
+    if (e.parcelas.some(function (p) { return p.correcaoDesde || p.jurosDesde; })) {
+      c.push('Parcelas com termos próprios (indicados na memória de cálculo): a correção corre da data indicada e os juros, da data indicada, ainda que anterior; os juros anteriores ao início da correção incidem sobre o valor nominal (ex.: Súmulas 54 e 362 do STJ).');
+    }
+    if (res && res.totais.multaContratual) c.push('Multa contratual de ' + num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido, conforme o título.');
+    if (res && res.totais.sucumbenciaTexto) c.push(res.totais.sucumbenciaTexto);
     if (e.pagamentos.length) {
       c.push('Pagamentos e levantamentos imputados na data em que foram feitos (CC, arts. 352 a 355): primeiro na parcela indicada, se houver; depois nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada parcela, primeiro nos juros e encargos, depois no capital (art. 354).');
     }
     if ((e.multa && e.tipo !== 'fazenda') || e.honorarios) {
-      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : 'o subtotal (capital mais juros e encargos).'));
+      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')));
     }
     var st = I.estado();
     c.push('Valores arredondados em centavos a cada atualização. Índices ' + (st.fonte === 'online' ? 'atualizados pelo Banco Central em ' + dataHoraBr(st.atualizadoEm) : 'da tabela embutida' + (D.indicesEmbutidosEm ? ', conferida com o Banco Central em ' + brIso(D.indicesEmbutidosEm) : '')) +
       ', disponíveis até ' + U.mesBr(D.ultimoMes) + (e.tipo === 'fazenda' ? ' (Selic e IPCA até ' + U.mesBr(D.ultimoMesSelic) + ')' : '') + '.');
     return c;
+  }
+
+  var TEXTO_INDICE = {
+    tjsp: 'Tabela Prática do TJSP para débitos judiciais (Lei 14.905/2024): INPC até agosto de 2024 e IPCA-15 a partir de setembro de 2024',
+    ipca: 'IPCA (IBGE), variações mensais acumuladas', inpc: 'INPC (IBGE), variações mensais acumuladas',
+    ipcae: 'IPCA-E (IBGE), fatores da Tabela EC 113/2021 do TJSP', igpm: 'IGP-M (FGV), variações mensais acumuladas'
+  };
+  function textoCorrecao(e) {
+    var cv = e.tipo === 'particular' ? (e.civel || {}) : {}, i1 = cv.indice || 'tjsp';
+    var art = function (i) { return i === 'tjsp' ? 'pela ' : 'pelo '; };
+    var t1 = i1 === 'nenhum' ? 'Sem correção monetária' : 'Correção ' + art(i1) + TEXTO_INDICE[i1];
+    if (cv.indice2 && cv.indice2Desde && cv.indice2 !== i1) {
+      t1 += ' até ' + U.mesBr(U.somaMes(cv.indice2Desde, -1)) + ' e, a partir de ' + U.mesBr(cv.indice2Desde) + ', ' +
+        (cv.indice2 === 'nenhum' ? 'sem correção' : art(cv.indice2) + TEXTO_INDICE[cv.indice2]);
+    }
+    return t1 + (i1 !== 'nenhum' || cv.indice2 ? '. Índice entre dois meses = fator do mês final ÷ fator do mês inicial (a variação de cada mês entra no fator do mês seguinte, como na Tabela Prática).' : '.');
   }
 
   /* ---------- Demonstrativo em PDF (identidade visual da DPESP) ---------- */
@@ -974,7 +1086,7 @@
         (autor ? '<div class="linha-assinatura"></div><p>' + esc(autor) + '</p>' : '') + '</div>';
     }
     h += dadosCalculoDoc(res);
-    h += '<p class="nota-final">Gerado pela Calculadora de Débitos Judiciais da Defensoria Pública do Estado de São Paulo (protótipo, versão 0.7). Índices: Tabela Prática do TJSP, IBGE e Banco Central do Brasil.</p>';
+    h += '<p class="nota-final">Gerado pela Calculadora de Débitos Judiciais da Defensoria Pública do Estado de São Paulo (protótipo, versão 0.8). Índices: Tabela Prática do TJSP, IBGE, FGV e Banco Central do Brasil.</p>';
     return h;
   }
 
@@ -1123,6 +1235,7 @@
       ['Selic (% a.m.)', fonte + ' · SGS 4390', ultimoDe('SELIC'), num(D.SELIC[ultimoDe('SELIC')], 2)],
       ['IPCA (% a.m.)', fonte + ' · SGS 433', ultimoDe('IPCA'), num(D.IPCA[ultimoDe('IPCA')], 2)],
       ['INPC (% a.m.)', fonte + ' · SGS 188', ultimoDe('INPC'), num(D.INPC[ultimoDe('INPC')], 2)],
+      ['IGP-M (% a.m.)', fonte + ' · SGS 189', D.IGPM ? ultimoDe('IGPM') : '–', D.IGPM ? num(D.IGPM[ultimoDe('IGPM')], 2) : '–'],
       ['Salário mínimo', fonte + ' · SGS 1619', 'desde ' + brIso(smKey), moeda(D.SALARIO_MINIMO[smKey])]
     ];
     $('tabIndices').tBodies[0].innerHTML = linhas.map(function (l) {
@@ -1186,7 +1299,8 @@
   var lidoCopilot = null;
   var NOMES_BASE = { pct_sm: '% do salário mínimo', qtd_sm: 'salários mínimos', pct_rend: '% dos rendimentos', fixo: 'valor fixo' };
   var NOMES_TIPO = { pensao: 'Pensão alimentícia', particular: 'Débito cível', fazenda: 'Fazenda Pública' };
-  var NOMES_REGIME = { tjsp: '1% a.m. até 29/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros' };
+  var NOMES_REGIME = { tjsp: '1% a.m. até 29/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros',
+    duas: 'uma taxa até certa data, depois outra', selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 29/08/2024, depois correção e taxa legal' };
 
   function linhasPrevia(d) {
     var L = [];
@@ -1238,11 +1352,28 @@
     if (d.juros) {
       if (d.juros.regime) $('regime').value = d.juros.regime;
       if (d.juros.regime === 'fixa') $('taxaFixa').value = num(d.juros.taxaMensal, 2);
+      if (d.juros.regime === 'duas' && d.juros.duas) {
+        $('duasTaxa1').value = num(d.juros.duas.taxa1, 2); $('duasAte').value = d.juros.duas.ate || '';
+        $('duasDepois').value = d.juros.duas.depois; if (d.juros.duas.taxa2 >= 0) $('duasTaxa2').value = num(d.juros.duas.taxa2, 2);
+      }
       var r = document.querySelector('input[name=termo][value="' + d.juros.termo + '"]');
       if (r) r.checked = true;
       $('dataJuros').value = d.juros.termo === 'data' ? d.juros.data : '';
     }
     if (d.posEC136) $('posEC136').value = d.posEC136;
+    var cv = d.civel || {};
+    $('indiceCorrecao').value = cv.indice || 'tjsp';
+    $('trocaIndice').checked = !!cv.indice2;
+    if (cv.indice2) { $('indice2').value = cv.indice2; $('indice2Desde').value = cv.indice2Desde || ''; }
+    $('jurosCompostos').checked = !!cv.jurosCompostos;
+    $('multaContratual').checked = cv.multaContratualPct > 0;
+    if (cv.multaContratualPct > 0) $('multaContratualPct').value = num(cv.multaContratualPct, cv.multaContratualPct % 1 ? 2 : 0);
+    var su = d.sucumbencia;
+    $('sucBase').value = su ? su.base : '';
+    if (su) {
+      if (su.pct > 0) $('sucPct').value = num(su.pct, su.pct % 1 ? 2 : 0);
+      $('sucValor').value = su.valor > 0 ? num(su.valor, 2) : ''; $('sucData').value = su.data || '';
+    }
     if (d.encargos) {
       $('multa').checked = d.encargos.multa;
       $('honorarios').checked = !!d.encargos.honorariosPct;
@@ -1258,7 +1389,7 @@
     $('dataAjuizamento').value = d.ajuizamento ? d.ajuizamento.data : '';
     marcarOrigem($('origemAjuizamento'), d.ajuizamento ? d.ajuizamento.origem : '');
     listaP.innerHTML = '';
-    d.parcelas.forEach(function (p) { marcarOrigem(novaParcela(p.vencimento, num(p.valor, 2)), p.origem + (p.descricao ? ' – ' + p.descricao : '')); });
+    d.parcelas.forEach(function (p) { marcarOrigem(novaParcela(p.vencimento, num(p.valor, 2), false, p.correcaoDesde, p.jurosDesde), p.origem + (p.descricao ? ' – ' + p.descricao : '')); });
     if (!listaP.children.length) novaParcela();
     listaG.innerHTML = '';
     d.pagamentos.forEach(function (p) { marcarOrigem(novoPagamento(p.data, num(p.valor, 2), p.parcela || ''), p.origem); });
@@ -1270,6 +1401,7 @@
     if (d.processo) { $('procNumero').value = d.processo; }
     if (d.partes) { $('procExequente').value = d.partes.exequente || ''; $('procExecutado').value = d.partes.executado || ''; }
     renumerar(); assinaturaOpcoes = ''; sincronizar();
+    if (avancadasEmUso().length) $('avancadas').open = true;
   }
 
   $('aplicarCopilot').addEventListener('click', function () {
@@ -1354,12 +1486,18 @@
     });
     var dataAnt = anterior && anterior.dataCalculo !== e.dataCalculo ? [{ dataCalculo: anterior.dataCalculo, total: anterior.total }] : [];
     return semVazio({
-      formato: 'calcjur-copilot', versao: 1, geradoPor: 'Calculadora de Débitos Judiciais 0.7', salvoEm: new Date().toISOString(),
+      formato: 'calcjur-copilot', versao: 1, geradoPor: 'Calculadora de Débitos Judiciais 0.8', salvoEm: new Date().toISOString(),
       tipo: e.tipo,
       processo: $('procNumero').value.trim(),
       partes: ($('procExequente').value.trim() || $('procExecutado').value.trim()) ? { exequente: $('procExequente').value.trim(), executado: $('procExecutado').value.trim() } : undefined,
       juros: semVazio({ regime: faz ? undefined : e.regime, taxaMensal: !faz && e.regime === 'fixa' ? e.taxaFixa : undefined,
-        termoInicial: e.termoJuros, data: e.termoJuros === 'data' ? e.dataJuros : undefined }),
+        termoInicial: e.termoJuros, data: e.termoJuros === 'data' ? e.dataJuros : undefined,
+        duasTaxas: !faz && e.regime === 'duas' ? semVazio({ taxa1: e.jurosDuas.taxa1, ate: e.jurosDuas.ate, depois: e.jurosDuas.depois,
+          taxa2: e.jurosDuas.depois === 'fixa' ? e.jurosDuas.taxa2 : undefined }) : undefined }),
+      civel: e.tipo === 'particular' ? semVazio({ indice: e.civel.indice, indice2: e.civel.indice2 || undefined, indice2Desde: e.civel.indice2 ? e.civel.indice2Desde : undefined,
+        jurosCompostos: e.civel.jurosCompostos || undefined, multaContratualPct: e.civel.multaContratualPct > 0 ? e.civel.multaContratualPct : undefined }) : undefined,
+      sucumbencia: e.sucumbencia ? semVazio({ base: e.sucumbencia.base, pct: e.sucumbencia.base !== 'fixo' ? e.sucumbencia.pct : undefined,
+        valor: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.valor : undefined, data: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.data : undefined }) : undefined,
       fazenda: faz ? { posEC136: e.posEC136 } : undefined,
       periodos: e.tipo === 'pensao' ? periodos : [],
       ajustes: e.tipo === 'pensao' && ajustes.length ? ajustes.map(function (a) {
@@ -1369,7 +1507,7 @@
       }) : undefined,
       dataAjuizamento: e.tipo === 'pensao' && e.dataAjuizamento ? semVazio({ data: e.dataAjuizamento, origem: $('origemAjuizamento').dataset.origem || undefined }) : undefined,
       outrasParcelas: e.parcelas.filter(function (p) { return p.vencimento && p.valor > 0; })
-        .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined }); }),
+        .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined }); }),
       pagamentos: e.pagamentos.filter(function (p) { return p.data && p.valor > 0; })
         .map(function (p) { return semVazio({ data: p.data, valor: p.valor, parcela: p.parcela || undefined, origem: p.origem || undefined }); }),
       encargos: { multa523: !faz && e.multa, honorariosPct: e.honorarios ? e.honorariosPct : null },
@@ -1502,7 +1640,7 @@
   /* Índices usados num cálculo, gravados no arquivo .calcjur para conferir, ao reabrir, se algum mudou. */
   var indicesSalvos = null;
   var NOMES_TAB = { FATORES_TJSP: 'Tabela Prática', TAXA_LEGAL: 'taxa legal', FATORES_IPCAE: 'IPCA-E', JUROS_POUPANCA: 'juros da poupança',
-    SELIC: 'Selic', IPCA: 'IPCA', INPC: 'INPC', SALARIO_MINIMO: 'salário mínimo' };
+    SELIC: 'Selic', IPCA: 'IPCA', INPC: 'INPC', IGPM: 'IGP-M', SALARIO_MINIMO: 'salário mínimo' };
   function indicesUsados(e) {
     var meses = [];
     (e.periodos || []).forEach(function (p) {
@@ -1510,9 +1648,15 @@
     });
     (e.parcelas || []).forEach(function (p) { if (p.vencimento) meses.push(p.vencimento.slice(0, 7)); });
     (e.pagamentos || []).forEach(function (p) { if (p.data) meses.push(p.data.slice(0, 7)); });
+    (e.parcelas || []).forEach(function (p) { [p.correcaoDesde, p.jurosDesde].forEach(function (d) { if (d) meses.push(d.slice(0, 7)); }); });
+    if (e.sucumbencia && e.sucumbencia.data) meses.push(e.sucumbencia.data.slice(0, 7));
     if (!meses.length || !e.dataCalculo) return undefined;
     var de = meses.sort()[0], ate = e.dataCalculo.slice(0, 7), faz = e.tipo === 'fazenda';
-    var tabs = faz ? ['FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'IPCA'] : ['FATORES_TJSP'].concat(e.regime === 'tjsp' || e.regime === 'taxalegal' ? ['TAXA_LEGAL'] : []);
+    var TAB_INDICE = { tjsp: 'FATORES_TJSP', ipca: 'IPCA', inpc: 'INPC', ipcae: 'FATORES_IPCAE', igpm: 'IGPM' };
+    var cv = e.tipo === 'particular' ? (e.civel || {}) : {};
+    var tabs = faz ? ['FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'IPCA'] : [TAB_INDICE[cv.indice || 'tjsp']].concat(cv.indice2 ? [TAB_INDICE[cv.indice2]] : [])
+      .concat(e.regime === 'tjsp' || e.regime === 'taxalegal' || e.regime === 'selic_tl' || (e.regime === 'duas' && e.jurosDuas.depois !== 'fixa') ? ['TAXA_LEGAL'] : [])
+      .concat(e.regime === 'selic' || e.regime === 'selic_tl' ? ['SELIC'] : []).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
     if (!faz && (e.periodos || []).some(function (p) { return p.reajuste === 'inpc'; })) tabs.push('INPC');
     if (!faz && (e.periodos || []).some(function (p) { return p.reajuste === 'ipca'; })) tabs.push('IPCA');
     var tabelas = {};
@@ -1566,7 +1710,14 @@
     var e = res.entrada, faz = e.tipo === 'fazenda', pen = e.tipo === 'pensao', h = '<div class="dados-calculo"><h2>Anexo: dados do cálculo</h2>';
     h += '<p>Dados de entrada deste cálculo, para conferência e para refazê-lo ou atualizá-lo depois.</p>';
     var gerais = [['Tipo de débito', NOMES_TIPO[e.tipo]], ['Data do cálculo', brIso(e.dataCalculo)]];
-    if (!faz) gerais.push(['Juros', NOMES_REGIME[e.regime] + (e.regime === 'fixa' ? ' de ' + num(e.taxaFixa, 2) + '% a.m.' : '')]);
+    if (e.tipo === 'particular') gerais.push(['Correção monetária', textoCorrecao(e).replace(/\. Índice entre.*$/, '')]);
+    if (!faz) gerais.push(['Juros', NOMES_REGIME[e.regime] + (e.regime === 'fixa' ? ' de ' + num(e.taxaFixa, 2) + '% a.m.' : '') +
+      (e.regime === 'duas' ? ': ' + num(e.jurosDuas.taxa1, 2) + '% a.m. até ' + brIso(e.jurosDuas.ate) + ', depois ' + (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% a.m.' : 'taxa legal') : '') +
+      (e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas') ? ', compostos' : '')]);
+    if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido']);
+    if (e.sucumbencia && e.sucumbencia.base) gerais.push(['Honorários de sucumbência', ({ condenacao: num(e.sucumbencia.pct, 2) + '% sobre a condenação',
+      causa: num(e.sucumbencia.pct, 2) + '% sobre o valor da causa de ' + moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
+      fixo: moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : '') })[e.sucumbencia.base]]);
     else gerais.push(['Critério após 10/09/2025', e.posEC136 === 'ipca2' ? 'IPCA + 2% a.a., limitado à Selic' : 'Selic']);
     if (faz || e.regime !== 'nenhum') gerais.push(['Termo inicial dos juros', e.termoJuros === 'data' ? brIso(e.dataJuros) : 'vencimento de cada parcela']);
     if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) : 'não informado']);
@@ -1603,8 +1754,13 @@
     }
     var parc = e.parcelas.filter(function (p) { return p.vencimento && p.valor > 0; });
     if (parc.length) {
-      h += '<h3>' + (pen ? 'Outras parcelas' : 'Parcelas') + ' (valores originais)</h3><table class="dados"><thead><tr><th>Nº</th><th>Vencimento</th><th class="num">Valor original</th></tr></thead><tbody>' +
-        parc.map(function (p, i) { return '<tr><td>' + (i + 1) + '</td><td>' + brIso(p.vencimento) + '</td><td class="num">' + moeda(p.valor) + '</td></tr>'; }).join('') + '</tbody></table>';
+      var termos = parc.some(function (p) { return p.correcaoDesde || p.jurosDesde; });
+      h += '<h3>' + (pen ? 'Outras parcelas' : 'Parcelas') + ' (valores originais)</h3><table class="dados"><thead><tr><th>Nº</th><th>Vencimento</th><th class="num">Valor original</th>' +
+        (termos ? '<th>Correção desde</th><th>Juros desde</th>' : '') + '</tr></thead><tbody>' +
+        parc.map(function (p, i) {
+          return '<tr><td>' + (i + 1) + '</td><td>' + brIso(p.vencimento) + '</td><td class="num">' + moeda(p.valor) + '</td>' +
+            (termos ? '<td>' + (p.correcaoDesde ? brIso(p.correcaoDesde) : 'vencimento') + '</td><td>' + (p.jurosDesde ? brIso(p.jurosDesde) : 'termo geral') + '</td>' : '') + '</tr>';
+        }).join('') + '</tbody></table>';
     }
     var pags = e.pagamentos.filter(function (p) { return p.data && p.valor > 0; });
     h += '<h3>Pagamentos e levantamentos</h3>' + (pags.length
@@ -1614,9 +1770,22 @@
     return h + '</div>';
   }
 
+  /* ---------- Novo cálculo ---------- */
+  /* Zera tudo o que é do caso (datas, períodos, parcelas, pagamentos, opções, processo e partes, importação e
+   * comparação) e recomeça na aba atual. Ficam só os dados de quem assina o demonstrativo (unidade, cidade e autor). */
+  $('novoCalculo').addEventListener('click', function () {
+    if (temDados() && !confirm('Começar um cálculo novo? Tudo o que está na tela será apagado. Se quiser guardar este cálculo, clique em Cancelar e use "Salvar" antes.')) return;
+    try {
+      localStorage.setItem(CHAVE, JSON.stringify({ tipo: tipo, unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
+        pdfDetalhado: $('pdfDetalhado').checked, dataCalculo: dataPadrao() }));
+    } catch (_) {}
+    location.reload();
+  });
+
   /* ---------- Início ---------- */
   restaurar();
   sincronizar();
+  if (avancadasEmUso().length) $('avancadas').open = true;
   mostrarRevisao();
   renderIndices();
   recalcular();

@@ -9,8 +9,14 @@
  *   "formato": "calcjur-copilot", "versao": 1,
  *   "tipo": "pensao" | "particular" | "fazenda",
  *   "processo": "0000000-00.0000.8.26.0000",                       (opcional)
- *   "juros": { "regime": "tjsp" | "taxalegal" | "fixa" | "nenhum", "taxaMensal": 1,
- *              "termoInicial": "vencimento" | "data", "data": "AAAA-MM-DD", "origem": "..." },   (opcional)
+ *   "juros": { "regime": "tjsp" | "taxalegal" | "fixa" | "nenhum" | "duas" | "selic" | "selic_tl", "taxaMensal": 1,
+ *              "termoInicial": "vencimento" | "data", "data": "AAAA-MM-DD", "origem": "...",
+ *              "duasTaxas": { "taxa1": 1, "ate": "AAAA-MM-DD", "depois": "taxalegal" | "fixa", "taxa2": 0.5 } },   (opcional)
+ *       duas      taxa1 até a data "ate" (inclusive) e, depois, taxa legal ou taxa2;
+ *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 29/08/2024, depois índice + taxa legal.
+ *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
+ *              "jurosCompostos": false, "multaContratualPct": 2 },  (débito cível, opcional: opções avançadas)
+ *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo", "pct": 10, "valor": 0, "data": "AAAA-MM-DD" },   (opcional)
  *   "periodos": [ { "inicio": "AAAA-MM", "fim": "AAAA-MM" | null, "diaVencimento": 10,
  *                   "base": "pct_sm" | "qtd_sm" | "pct_rend" | "fixo", "valor": 30, "incide13": false,
  *                   "rendimentos": [ { "desde": "AAAA-MM", "valor": 3500.00, "origem": "..." } ],
@@ -20,7 +26,8 @@
  *                                                                     (pensão, opcional: rendimento do mês ou valor
  *                                                                      de uma prestação no lugar do apurado pela base)
  *   "dataAjuizamento": { "data": "AAAA-MM-DD", "origem": "..." },    (pensão, opcional)
- *   "outrasParcelas": [ { "vencimento": "AAAA-MM-DD", "valor": 0, "descricao": "...", "origem": "..." } ],
+ *   "outrasParcelas": [ { "vencimento": "AAAA-MM-DD", "valor": 0, "descricao": "...", "origem": "...",
+ *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD" } ],   (termos próprios, opcionais)
  *   "pagamentos": [ { "data": "AAAA-MM-DD", "valor": 0, "origem": "..." } ],
  *   "fazenda": { "posEC136": "selic" | "ipca2" },                     (opcional)
  *   "encargos": { "multa523": false, "honorariosPct": null },        (opcional)
@@ -51,7 +58,8 @@
     'percentual dos rendimentos': 'pct_rend', '% dos rendimentos': 'pct_rend', 'rendimentos': 'pct_rend',
     'valor fixo': 'fixo', 'fixo': 'fixo'
   };
-  var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1 };
+  var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1, duas: 1, selic: 1, selic_tl: 1 };
+  var INDICES = { tjsp: 1, ipca: 1, inpc: 1, ipcae: 1, igpm: 1, nenhum: 1 };
 
   function semAcento(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
   function texto(v) { return v == null ? '' : String(v).trim(); }
@@ -147,6 +155,12 @@
         jr.taxaMensal = numero(j.taxaMensal);
         if (!(jr.taxaMensal > 0)) erros.push('Juros fixos sem taxa mensal válida.');
       }
+      if (jr.regime === 'duas') {
+        var dt2 = j.duasTaxas || {};
+        jr.duas = { taxa1: numero(dt2.taxa1), ate: data(dt2.ate), depois: dt2.depois === 'fixa' ? 'fixa' : 'taxalegal', taxa2: numero(dt2.taxa2) };
+        if (!(jr.duas.taxa1 >= 0) || !jr.duas.ate) erros.push('Juros em duas taxas sem a primeira taxa ou sem a data da troca.');
+        if (jr.duas.depois === 'fixa' && !(jr.duas.taxa2 >= 0)) erros.push('Juros em duas taxas sem a segunda taxa.');
+      }
       if (j.termoInicial === 'data') {
         jr.termo = 'data'; jr.data = data(j.data);
         if (!jr.data) erros.push('Termo inicial dos juros por data, mas a data é inválida: "' + texto(j.data) + '".');
@@ -154,6 +168,24 @@
       d.juros = jr;
     }
     if (o.fazenda && (o.fazenda.posEC136 === 'selic' || o.fazenda.posEC136 === 'ipca2')) d.posEC136 = o.fazenda.posEC136;
+    if (o.civel && typeof o.civel === 'object') {
+      var cv = o.civel, c = {};
+      if (cv.indice != null && cv.indice !== '') { if (INDICES[cv.indice]) c.indice = cv.indice; else erros.push('Índice de correção desconhecido: "' + texto(cv.indice) + '".'); }
+      if (cv.indice2 != null && cv.indice2 !== '') {
+        if (!INDICES[cv.indice2]) erros.push('Segundo índice de correção desconhecido: "' + texto(cv.indice2) + '".');
+        else if (!mes(cv.indice2Desde)) erros.push('Segundo índice de correção sem o mês de início.');
+        else { c.indice2 = cv.indice2; c.indice2Desde = mes(cv.indice2Desde); }
+      }
+      if (cv.jurosCompostos === true) c.jurosCompostos = true;
+      var mcp = numero(cv.multaContratualPct);
+      if (mcp > 0) c.multaContratualPct = mcp;
+      d.civel = c;
+    }
+    if (o.sucumbencia && typeof o.sucumbencia === 'object' && o.sucumbencia.base) {
+      var su = o.sucumbencia, sb = { condenacao: 1, causa: 1, fixo: 1 }[su.base] ? su.base : null;
+      if (!sb) erros.push('Base dos honorários de sucumbência desconhecida: "' + texto(su.base) + '".');
+      else d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '' };
+    }
 
     (Array.isArray(o.periodos) ? o.periodos : []).forEach(function (p, i) {
       var r = 'Período ' + (i + 1), per = { origem: texto(p && p.origem), rendimentos: [] };
@@ -219,7 +251,9 @@
     (Array.isArray(o.outrasParcelas) ? o.outrasParcelas : (Array.isArray(o.parcelas) ? o.parcelas : [])).forEach(function (p, i) {
       var v = data(p && p.vencimento), val = numero(p && p.valor);
       if (!v || !(val > 0)) { erros.push('Parcela ' + (i + 1) + ': vencimento ou valor inválido.'); return; }
-      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem) });
+      var cd = p.correcaoDesde ? data(p.correcaoDesde) : '', jd = p.jurosDesde ? data(p.jurosDesde) : '';
+      if (cd === null || jd === null) { erros.push('Parcela ' + (i + 1) + ': data de início da correção ou dos juros inválida.'); return; }
+      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem), correcaoDesde: cd || '', jurosDesde: jd || '' });
     });
     var vistos = {};
     (Array.isArray(o.pagamentos) ? o.pagamentos : []).forEach(function (p, i) {

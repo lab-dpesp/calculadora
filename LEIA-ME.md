@@ -1,4 +1,4 @@
-# Calculadora de Débitos Judiciais 0.7 (extensão para Chrome e Edge e versão web)
+# Calculadora de Débitos Judiciais 0.8 (extensão para Chrome e Edge e versão web)
 
 Protótipo de calculadora para a carreira: pensão alimentícia, débitos cíveis e débitos da Fazenda Pública, com índices atualizados pelo Banco Central, abatimento de pagamentos e demonstrativo em PDF para protocolo.
 
@@ -52,10 +52,23 @@ Há um segundo agente, para atualizar cálculos anteriores (`agente-copilot-atua
 
 Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado para fora do computador na importação: o texto colado é lido pela própria extensão. O formato do bloco de dados ("calcjur-copilot", versão 1) está descrito em `copilot.js` e é o mesmo que a futura API do DOL novo receberia.
 
+## Novo cálculo
+
+- O botão "Novo cálculo", no topo, apaga tudo o que é do caso (datas, períodos, parcelas, pagamentos, opções, processo e partes) e recomeça na aba atual. Ficam só a unidade, a cidade e o autor do demonstrativo. Se quiser guardar o cálculo da tela, use "Salvar" antes.
+
 ## Débito cível e Fazenda Pública
 
 - Cível: correção pela Tabela Prática do TJSP; juros de 1% a.m. até 29/08/2024 e taxa legal depois (ou taxa legal em todo o período, taxa fixa, sem juros).
 - Fazenda (não tributário, vencimentos a partir de 07/2009): IPCA-E e juros da poupança até 08/12/2021; Selic depois (EC 113/2021); a partir de 10/09/2025, Selic ou IPCA + 2% a.a. limitado à Selic (EC 136/2025), à escolha.
+- O padrão da tela é o caso mais comum. Só mexa nas opções abaixo quando o título mandar outro critério; quando alguma estiver ligada, o selo "Em uso" aparece ao lado de "Opções avançadas".
+- Juros, em "Outros critérios" (cível e pensão): uma taxa até certa data e outra depois (fixa ou taxa legal); Selic como juros e correção em todo o período; Selic até 29/08/2024 e, depois, correção e taxa legal. A Selic entra em soma simples das taxas mensais, pro rata die, sobre o capital, e substitui a correção no mesmo período.
+- Opções avançadas do cível:
+  - índice de correção: Tabela Prática (padrão), IPCA, INPC, IPCA-E, IGP-M ou sem correção, com troca de índice a partir de um mês (ex.: IGP-M do contrato até 08/2024 e IPCA depois);
+  - juros compostos, com capitalização mensal, nas taxas fixas (contratos que preveem capitalização);
+  - multa contratual ou moratória em % sobre o capital corrigido.
+- Honorários de sucumbência fixados no título (cível e Fazenda): % sobre a condenação; no cível, também % sobre o valor da causa ou valor fixo, corrigidos desde a data indicada. Entram no débito antes da multa e dos honorários do art. 523.
+- Termos próprios por parcela: o botão de calendário ao lado da parcela abre "Correção desde" e "Juros desde". Ex.: dano moral com correção do arbitramento (Súmula 362/STJ) e juros do evento (Súmula 54/STJ). Os juros anteriores ao início da correção incidem sobre o valor nominal.
+- `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
 
 ## Pagamentos e levantamentos
 

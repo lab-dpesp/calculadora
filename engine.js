@@ -1,4 +1,4 @@
-/* Motor de cálculo da Calculadora de Débitos Judiciais (versão 0.7).
+/* Motor de cálculo da Calculadora de Débitos Judiciais (versão 0.8).
  * Funções puras, sem DOM, testáveis no Node.
  *
  * TIPOS DE DÉBITO
@@ -109,6 +109,73 @@
   }
   function fatorTJSP(m) { return valorTab('FATORES_TJSP', m, 'o fator da Tabela Prática'); }
   function fatorIPCAE(m) { return valorTab('FATORES_IPCAE', m, 'o fator do IPCA-E'); }
+
+  /* ---------- Índices de correção do débito cível (opções avançadas) ----------
+   * tipo 'fator': tabela de fatores acumulados, em que o fator do mês m já incorpora o índice de m-1 (TJSP).
+   * tipo 'mensal': variações mensais (% a.m.); o fator do mês m é o produto das variações dos meses anteriores,
+   *                na mesma convenção da Tabela Prática. Correção entre os meses a e b = F(b) ÷ F(a), que acumula
+   *                as variações de a até b-1. */
+  var INDICES = {
+    tjsp: { nome: 'Tabela Prática do TJSP', curto: 'Tabela Prática', tab: 'FATORES_TJSP', tipo: 'fator', artigo: 'pela' },
+    ipca: { nome: 'IPCA (IBGE)', curto: 'IPCA', tab: 'IPCA', tipo: 'mensal', artigo: 'pelo' },
+    inpc: { nome: 'INPC (IBGE)', curto: 'INPC', tab: 'INPC', tipo: 'mensal', artigo: 'pelo' },
+    ipcae: { nome: 'IPCA-E (IBGE)', curto: 'IPCA-E', tab: 'FATORES_IPCAE', tipo: 'fator', artigo: 'pelo' },
+    igpm: { nome: 'IGP-M (FGV)', curto: 'IGP-M', tab: 'IGPM', tipo: 'mensal', artigo: 'pelo' },
+    nenhum: { nome: 'sem correção monetária', curto: 'sem correção', tipo: 'nenhum' }
+  };
+  var cacheFatores = {};
+  function fatoresMensais(tab) {
+    var obj = DADOS[tab] || {}, c = cacheFatores[tab];
+    if (c && c.obj === obj) return c;
+    var ks = Object.keys(obj).sort(), F = {};
+    if (ks.length) {
+      F[ks[0]] = 1;
+      for (var i = 0; i < ks.length; i++) {
+        if (i > 0 && proxMes(ks[i - 1]) !== ks[i]) break;
+        F[proxMes(ks[i])] = F[ks[i]] * (1 + obj[ks[i]] / 100);
+      }
+    }
+    c = { obj: obj, F: F, ks: Object.keys(F).sort() };
+    cacheFatores[tab] = c;
+    return c;
+  }
+  function fatorIndice(ind, m) {
+    var x = INDICES[ind];
+    if (!x) throw erro('Índice de correção desconhecido.');
+    if (x.tipo === 'nenhum') return 1;
+    if (x.tipo === 'fator') return x.tab === 'FATORES_TJSP' ? fatorTJSP(m) : fatorIPCAE(m);
+    var c = fatoresMensais(x.tab), v = c.F[m];
+    if (v == null) {
+      if (!c.ks.length) throw erro('A tabela de índices não tem o ' + x.curto + '.');
+      throw erro('A tabela de índices não tem o ' + x.curto + ' de ' + mesBr(m < c.ks[0] ? m : prevMes(m)) + '. Ela cobre de ' + mesBr(c.ks[0]) + ' a ' + mesBr(prevMes(c.ks[c.ks.length - 1])) + '.');
+    }
+    return v;
+  }
+  /* Correção entre os meses mi e mf pela configuração { indice, indice2, desde } (troca de índice a partir de um mês). */
+  function correcao(cfg, mi, mf) {
+    var trechos = [];
+    if (cfg.indice2 && cfg.desde && cfg.desde > mi && cfg.desde < mf) trechos.push([cfg.indice, mi, cfg.desde], [cfg.indice2, cfg.desde, mf]);
+    else trechos.push([cfg.indice2 && cfg.desde && mi >= cfg.desde ? cfg.indice2 : cfg.indice, mi, mf]);
+    var f = 1, textos = [];
+    trechos.forEach(function (tr) {
+      var x = INDICES[tr[0]];
+      if (x.tipo === 'nenhum') return;
+      var fa = fatorIndice(tr[0], tr[1]), fb = fatorIndice(tr[0], tr[2]), g = fb / fa;
+      f *= g;
+      if (x.tipo === 'fator') {
+        textos.push('Correção ' + x.artigo + ' ' + x.curto + ', ' + mesBr(tr[1]) + ' (' + pctFmt(fa, 6) + ') a ' + mesBr(tr[2]) + ' (' + pctFmt(fb, 6) + '): índice ' + pctFmt(g, 6) + '.');
+      } else {
+        textos.push('Correção ' + x.artigo + ' ' + x.curto + ', variações de ' + mesBr(tr[1]) + ' a ' + mesBr(prevMes(tr[2])) + ' acumuladas: índice ' + pctFmt(g, 6) + '.');
+      }
+    });
+    return { f: f, textos: textos };
+  }
+  var COR_PADRAO = { indice: 'tjsp' };
+  function checarIndice(cfg, m) {
+    var ind = cfg.indice2 && cfg.desde && m >= cfg.desde ? cfg.indice2 : cfg.indice;
+    if (INDICES[ind].tipo !== 'nenhum') fatorIndice(ind, m);
+  }
+  var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1, duas: 1, selic: 1, selic_tl: 1 };
   function salarioMinimo(t) {
     var d = iso(t), ks = chaves('SALARIO_MINIMO'), v = null;
     for (var i = 0; i < ks.length && ks[i] <= d; i++) v = DADOS.SALARIO_MINIMO[ks[i]];
@@ -131,32 +198,45 @@
   }
 
   /* ---------- Juros entre particulares ---------- */
-  function trechoFixo(a, b, taxa, rotulo) {
+  /* Juros a taxa fixa: meses completos de data a data, mais os dias restantes ÷ 30. Compostos (opção avançada):
+   * (1 + taxa)^(meses + dias ÷ 30) − 1, capitalização mensal. */
+  function trechoFixo(a, b, taxa, rotulo, composto) {
     var meses = 0;
     while (somaMeses(a, meses + 1) <= b) meses++;
     var dias = Math.round((b - somaMeses(a, meses)) / DIA);
-    var pct = taxa * (meses + dias / 30);
+    var pct = composto ? (Math.pow(1 + taxa / 100, meses + dias / 30) - 1) * 100 : taxa * (meses + dias / 30);
     return {
       pct: pct,
       texto: rotulo + ', ' + periodo(a, b) + ': ' + meses + (meses === 1 ? ' mês' : ' meses') + ' e ' +
-        dias + (dias === 1 ? ' dia' : ' dias') + ' = ' + pctFmt(pct) + '%'
+        dias + (dias === 1 ? ' dia' : ' dias') + ' = ' + pctFmt(pct) + '%' + (composto ? ' (juros compostos)' : '')
     };
   }
   function trechoTaxaLegal(a, b) {
     var s = somaProRata(a, b, function (m) { return valorTab('TAXA_LEGAL', m, 'a taxa legal'); });
     return { pct: s.pct, texto: 'Taxa legal, ' + periodo(a, b) + ': ' + pctFmt(s.pct) + '%' };
   }
-  function jurosParticular(a, b, regime, taxaFixa) {
+  /* opc (opcional): { composto, taxa1, ate (data, exclusive), depois: 'taxalegal' | 'fixa', taxa2 } para o regime 'duas'. */
+  function jurosParticular(a, b, regime, taxaFixa, opc) {
     if (regime === 'nenhum' || a >= b) return { pct: 0, trechos: [] };
-    var tr = [];
-    if (regime === 'fixa') tr.push(trechoFixo(a, b, taxaFixa, 'Juros de ' + pctFmt(taxaFixa, 2) + '% a.m.'));
+    opc = opc || {};
+    var tr = [], comp = !!opc.composto;
+    if (regime === 'fixa') tr.push(trechoFixo(a, b, taxaFixa, 'Juros de ' + pctFmt(taxaFixa, 2) + '% a.m.', comp));
     else if (regime === 'taxalegal') tr.push(trechoTaxaLegal(a, b));
     else if (regime === 'tjsp') {
       var vig = parse(DADOS.vigenciaLei14905);
       if (a < vig) tr.push(trechoFixo(a, Math.min(b, vig), 1, 'Juros de 1% a.m.'));
       if (b > vig) tr.push(trechoTaxaLegal(Math.max(a, vig), b));
+    } else if (regime === 'duas') {
+      if (a < opc.ate) tr.push(trechoFixo(a, Math.min(b, opc.ate), opc.taxa1, 'Juros de ' + pctFmt(opc.taxa1, 2) + '% a.m.', comp));
+      if (b > opc.ate) {
+        var a2 = Math.max(a, opc.ate);
+        tr.push(opc.depois === 'fixa' ? trechoFixo(a2, b, opc.taxa2, 'Juros de ' + pctFmt(opc.taxa2, 2) + '% a.m.', comp) : trechoTaxaLegal(a2, b));
+      }
     } else throw erro('Regime de juros desconhecido.');
-    return { pct: tr.reduce(function (s, x) { return s + x.pct; }, 0), trechos: tr };
+    var pct = comp && tr.length > 1
+      ? (tr.reduce(function (s, x) { return s * (1 + x.pct / 100); }, 1) - 1) * 100
+      : tr.reduce(function (s, x) { return s + x.pct; }, 0);
+    return { pct: pct, trechos: tr };
   }
   /* Compatibilidade com a versão 0.1 (testes). */
   function juros(inicioIso, fimIso, regime, taxaFixa) {
@@ -339,7 +419,8 @@
     if (e.tipo === 'pensao') lista = gerarPensao(e.periodos, e.dataCalculo, e.ajustes);
     var avisosGer = lista.avisos || [];
     (e.parcelas || []).forEach(function (p, i) {
-      lista.push({ chave: 'a:' + (i + 1), vencimento: p.vencimento, valor: p.valor, origem: 'avulsa', descricao: p.descricao || '', numAvulsa: i + 1 });
+      lista.push({ chave: 'a:' + (i + 1), vencimento: p.vencimento, valor: p.valor, origem: 'avulsa', descricao: p.descricao || '', numAvulsa: i + 1,
+        correcaoDesde: p.correcaoDesde || '', jurosDesde: p.jurosDesde || '' });
     });
     lista.forEach(function (p, i) { p.n = i + 1; });
     lista.avisos = avisosGer;
@@ -353,29 +434,94 @@
   function atualizar(par, t, ctx) {
     if (t <= par.b) return;
     if (ctx.fazenda) atualizarFazenda(par, t, ctx); else atualizarParticular(par, t, ctx);
-    par.b = t;
+    par.b = t; par.pre = false;
+  }
+
+  function corrigirParcela(par, mi, mf, ctx) {
+    if (mi === mf || !(par.P > 0 || par.J > 0)) return;
+    var c = correcao(ctx.cor, mi, mf);
+    if (!c.textos.length) return;
+    par.P = r2(par.P * c.f); par.J = r2(par.J * c.f); par.indice *= c.f;
+    c.textos.forEach(function (x) { log(par, x); });
+  }
+  function jurosTrecho(par, a, b, ctx, regime) {
+    var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros);
+    var v = r2(par.P * j.pct / 100);
+    par.J = r2(par.J + v);
+    j.trechos.forEach(function (x) { log(par, x.texto + '.'); });
+    log(par, 'Juros sobre ' + moedaFmt(par.P) + ': ' + moedaFmt(v) + '.');
+  }
+  /* Selic como juros e correção (débito cível, opção avançada): soma simples das taxas mensais, pro rata die,
+   * sobre o capital; nesse trecho não corre outra correção monetária. */
+  function trechoSelic(par, a, b, ctx) {
+    var s = somaProRata(a, b, taxaSelic);
+    if (s.ate < b) ctx.selicLimitada = true;
+    if (s.ate <= a || !(par.P > 0)) return;
+    var v = r2(par.P * s.pct / 100);
+    par.J = r2(par.J + v);
+    log(par, 'Selic (juros e correção), ' + periodo(a, s.ate) + ': ' + pctFmt(s.pct) + '% sobre ' + moedaFmt(par.P) + ' = ' + moedaFmt(v) + '.');
+  }
+  function taxaSelic(m) {
+    var ks = chaves('SELIC');
+    if (m < ks[0]) throw erro('A tabela de índices não tem a Selic de ' + mesBr(m) + '. Ela cobre de ' + mesBr(ks[0]) + ' a ' + mesBr(ks[ks.length - 1]) + '.');
+    return DADOS.SELIC[m] == null ? null : DADOS.SELIC[m];
   }
 
   function atualizarParticular(par, t, ctx) {
-    var mi = mes(par.b), mf = mes(t);
-    if (mi !== mf && (par.P > 0 || par.J > 0)) {
-      var f = fatorTJSP(mf) / fatorTJSP(mi);
-      par.P = r2(par.P * f); par.J = r2(par.J * f); par.indice *= f;
-      log(par, 'Correção pela Tabela Prática, ' + mesBr(mi) + ' (' + pctFmt(fatorTJSP(mi), 6) + ') a ' +
-        mesBr(mf) + ' (' + pctFmt(fatorTJSP(mf), 6) + '): índice ' + pctFmt(f, 6) + '.');
+    var selic = ctx.regime === 'selic' || ctx.regime === 'selic_tl';
+    var vig = parse(DADOS.vigenciaLei14905);
+    // Juros anteriores ao início da correção (termo próprio da parcela, ex.: Súmula 54/STJ): sobre o valor nominal.
+    if (par.pre && par.jurosDe < par.b && ctx.regime !== 'nenhum' && par.P > 0) {
+      if (!selic) jurosTrecho(par, par.jurosDe, par.b, ctx);
+      else {
+        var cortePre = ctx.regime === 'selic_tl' ? Math.min(Math.max(vig, par.jurosDe), par.b) : par.b;
+        if (par.jurosDe < cortePre) trechoSelic(par, par.jurosDe, cortePre, ctx);
+        if (cortePre < par.b) jurosTrecho(par, cortePre, par.b, ctx, 'taxalegal');
+      }
+      par.jurosDe = par.b;
     }
-    var a = Math.max(par.jurosDe, par.b);
-    if (ctx.regime !== 'nenhum' && a < t && par.P > 0) {
-      var j = jurosParticular(a, t, ctx.regime, ctx.taxaFixa);
-      var v = r2(par.P * j.pct / 100);
-      par.J = r2(par.J + v);
-      j.trechos.forEach(function (x) { log(par, x.texto + '.'); });
-      log(par, 'Juros sobre ' + moedaFmt(par.P) + ': ' + moedaFmt(v) + '.');
+    if (!selic) {
+      corrigirParcela(par, mes(par.b), mes(t), ctx);
+      var a = Math.max(par.jurosDe, par.b);
+      if (ctx.regime !== 'nenhum' && a < t && par.P > 0) jurosTrecho(par, a, t, ctx);
+    } else {
+      // Trechos: antes dos juros (só correção), Selic (juros e correção) e, no regime selic_tl, a partir da
+      // Lei 14.905/2024, correção pelo índice e taxa legal.
+      var cortes = [par.b, t];
+      if (par.jurosDe > par.b && par.jurosDe < t) cortes.push(par.jurosDe);
+      if (ctx.regime === 'selic_tl' && vig > par.b && vig < t) cortes.push(vig);
+      cortes.sort(function (x, y) { return x - y; });
+      for (var i = 0; i + 1 < cortes.length; i++) {
+        var x = cortes[i], y = cortes[i + 1];
+        if (x === y) continue;
+        var comJuros = x >= par.jurosDe;
+        if (comJuros && (ctx.regime === 'selic' || x < vig)) { trechoSelic(par, x, y, ctx); continue; }
+        corrigirParcela(par, mes(x), mes(y), ctx);
+        if (comJuros && par.P > 0) jurosTrecho(par, x, y, ctx, 'taxalegal');
+      }
     }
     if (par.jurosDe < t) par.jurosDe = t;
   }
 
   function atualizarFazenda(par, t, ctx) {
+    // Juros anteriores ao início da correção (termo próprio da parcela): sobre o valor nominal.
+    if (par.pre && par.jurosDe < par.b && par.P > 0) {
+      var p0 = par.jurosDe, p1 = Math.min(par.b, ctx.M1);
+      if (p0 < p1) {
+        var sp = somaProRata(p0, p1, function (m) { return valorTab('JUROS_POUPANCA', m, 'os juros da poupança'); });
+        var vp = r2(par.P * sp.pct / 100);
+        par.J = r2(par.J + vp);
+        log(par, 'Juros da poupança, ' + periodo(p0, p1) + ': ' + pctFmt(sp.pct) + '% sobre ' + moedaFmt(par.P) + ' = ' + moedaFmt(vp) + '.');
+      }
+      var p2 = Math.max(p0, ctx.M1);
+      if (p2 < par.b) {
+        var ss = somaProRata(p2, par.b, function (m) { return DADOS.SELIC[m] == null ? null : DADOS.SELIC[m]; });
+        var base0 = r2(par.P + par.J), vs = r2(base0 * ss.pct / 100);
+        par.E = r2(par.E + vs);
+        log(par, 'Selic (EC 113/2021), ' + periodo(p2, ss.ate) + ': ' + pctFmt(ss.pct) + '% sobre ' + moedaFmt(base0) + ' = ' + moedaFmt(vs) + '.');
+      }
+      par.jurosDe = par.b;
+    }
     var x = par.b;
     // Segmento 1: antes do início da Selic. Correção IPCA-E; juros da poupança até 08/12/2021.
     if (x < par.selicDe) {
@@ -499,12 +645,33 @@
   function calcular(e) {
     var fazenda = e.tipo === 'fazenda', pensao = e.tipo === 'pensao';
     var calc = parse(e.dataCalculo);
+    var civel = e.tipo === 'particular' ? (e.civel || {}) : {};
+    var cor = COR_PADRAO;
+    if (e.tipo === 'particular' && civel.indice && (civel.indice !== 'tjsp' || civel.indice2)) {
+      if (!INDICES[civel.indice]) throw erro('Escolha o índice de correção.');
+      cor = { indice: civel.indice };
+      if (civel.indice2) {
+        if (!INDICES[civel.indice2]) throw erro('Escolha o segundo índice de correção.');
+        if (!/^\d{4}-\d{2}$/.test(civel.indice2Desde || '')) throw erro('Informe o mês a partir do qual vale o segundo índice de correção.');
+        if (civel.indice2 !== civel.indice) { cor.indice2 = civel.indice2; cor.desde = civel.indice2Desde; }
+      }
+    }
     var ctx = {
-      fazenda: fazenda, regime: e.regime, taxaFixa: e.taxaFixa, posEC136: e.posEC136 || 'selic',
-      M1: parse(DADOS.inicioEC113), M2: parse(DADOS.inicioEC136), selicLimitada: false
+      fazenda: fazenda, regime: e.regime, taxaFixa: e.taxaFixa, posEC136: e.posEC136 || 'selic', cor: cor,
+      M1: parse(DADOS.inicioEC113), M2: parse(DADOS.inicioEC136), selicLimitada: false, opcJuros: null
     };
-    if (fazenda) fatorIPCAE(mes(calc)); else fatorTJSP(mes(calc));
+    if (!fazenda && !REGIMES[e.regime]) throw erro('Regime de juros desconhecido.');
+    if (fazenda) fatorIPCAE(mes(calc)); else checarIndice(cor, mes(calc));
     if (!fazenda && e.regime === 'fixa' && !(e.taxaFixa > 0)) throw erro('Informe a taxa de juros mensal.');
+    if (!fazenda && (e.regime === 'fixa' || e.regime === 'duas')) ctx.opcJuros = { composto: !!civel.jurosCompostos && e.tipo === 'particular' };
+    if (!fazenda && e.regime === 'duas') {
+      var dj = e.jurosDuas || {};
+      if (!(dj.taxa1 >= 0) || dj.taxa1 === '' || dj.taxa1 == null) throw erro('Informe a primeira taxa de juros (% a.m.).');
+      var ateT = parse(dj.ate);
+      if (dj.depois === 'fixa' && !(dj.taxa2 >= 0)) throw erro('Informe a segunda taxa de juros (% a.m.).');
+      ctx.opcJuros.taxa1 = Number(dj.taxa1); ctx.opcJuros.ate = ateT + DIA;
+      ctx.opcJuros.depois = dj.depois === 'fixa' ? 'fixa' : 'taxalegal'; ctx.opcJuros.taxa2 = Number(dj.taxa2) || 0;
+    }
     var semJuros = !fazenda && e.regime === 'nenhum';
     var dataJuros = null;
     if (!semJuros && e.termoJuros === 'data') {
@@ -530,13 +697,27 @@
       if (fazenda && venc < minFaz) {
         throw erro(rot + ': contra a Fazenda Pública, a calculadora só trata vencimentos a partir de 01/07/2009 (Lei 11.960/2009). Antes disso as regras do Tema 905/STJ variam conforme a natureza da condenação.');
       }
-      if (!fazenda) fatorTJSP(mes(venc)); else fatorIPCAE(mes(venc));
-      var ij = dataJuros ? Math.max(venc, dataJuros) : venc;
+      // Termos próprios da parcela (opcionais): início da correção e início dos juros.
+      var b0 = venc, ij = dataJuros ? Math.max(venc, dataJuros) : venc;
+      if (p.correcaoDesde) {
+        b0 = parse(p.correcaoDesde);
+        if (b0 > calc) throw erro(rot + ': o início da correção (' + br(b0) + ') é posterior à data do cálculo.');
+        if (fazenda && b0 < minFaz) throw erro(rot + ': contra a Fazenda Pública, a correção só é tratada a partir de 01/07/2009.');
+      }
+      if (p.jurosDesde) {
+        ij = parse(p.jurosDesde);
+        if (fazenda && ij < minFaz) throw erro(rot + ': contra a Fazenda Pública, os juros só são tratados a partir de 01/07/2009.');
+      }
+      if (!fazenda) checarIndice(ctx.cor, mes(b0)); else fatorIPCAE(mes(b0));
+      if (!fazenda && (e.regime === 'selic' || e.regime === 'selic_tl')) taxaSelic(mes(Math.min(ij, b0, calc)));
       var par = {
         n: p.n, chave: p.chave, origem: p.origem, descricao: p.descricao, vencimento: venc, valor: r2(p.valor), inicioJuros: ij,
-        b: venc, P: r2(p.valor), J: 0, E: 0, jurosDe: ij, indice: 1, eventos: (p.detalhes || []).slice(), imputacoes: []
+        inicioCorrecao: b0, b: b0, pre: ij < b0, P: r2(p.valor), J: 0, E: 0, jurosDe: ij, indice: 1, eventos: (p.detalhes || []).slice(), imputacoes: []
       };
-      if (fazenda) par.selicDe = Math.max(ctx.M1, ij, venc);
+      if (p.correcaoDesde || p.jurosDesde) {
+        par.eventos.push('Termos próprios desta parcela: correção desde ' + br(b0) + (semJuros ? '' : '; juros desde ' + br(ij)) + '.');
+      }
+      if (fazenda) par.selicDe = Math.max(ctx.M1, ij, b0);
       porChave[p.chave] = par;
       return par;
     });
@@ -577,7 +758,7 @@
       return {
         n: par.n, chave: par.chave, origem: par.origem, descricao: par.descricao, rito: par.rito || null,
         vencimento: iso(par.vencimento), valor: par.valor, indice: par.indice,
-        inicioJuros: iso(par.inicioJuros), capital: r2(par.P), juros: r2(par.J), encargos: r2(par.E),
+        inicioJuros: iso(par.inicioJuros), inicioCorrecao: iso(par.inicioCorrecao), capital: r2(par.P), juros: r2(par.J), encargos: r2(par.E),
         total: saldo(par), quitada: saldo(par) === 0 && par.imputacoes.length > 0,
         pago: r2(par.imputacoes.reduce(function (s, a) { return s + a.juros + a.encargos + a.capital; }, 0)),
         eventos: par.eventos.slice()
@@ -594,16 +775,44 @@
       t.prisao = soma('total', function (l) { return l.rito === 'prisao'; });
       t.penhora = soma('total', function (l) { return l.rito === 'penhora'; });
     }
-    var baseEncargos = ritoAtivo ? t.penhora : t.subtotal;
+    // Multa contratual ou moratória do título (opção avançada do débito cível): sobre o capital corrigido.
+    t.multaContratualPct = !pensao && !fazenda && civel.multaContratualPct > 0 ? Number(civel.multaContratualPct) : 0;
+    t.multaContratual = t.multaContratualPct ? r2(t.capital * t.multaContratualPct / 100) : 0;
+    // Honorários de sucumbência fixados no título (opção avançada).
+    t.sucumbencia = 0; t.sucumbenciaTexto = '';
+    var sc = !pensao && e.sucumbencia && e.sucumbencia.base ? e.sucumbencia : null;
+    if (sc) {
+      if (sc.base === 'condenacao') {
+        if (!(sc.pct > 0)) throw erro('Informe o percentual dos honorários de sucumbência.');
+        var bc = r2(t.subtotal + t.multaContratual);
+        t.sucumbencia = r2(bc * sc.pct / 100);
+        t.sucumbenciaTexto = 'Honorários de sucumbência: ' + pctFmt(Number(sc.pct), 2) + '% sobre a condenação (' + moedaFmt(bc) + ') = ' + moedaFmt(t.sucumbencia) + '.';
+      } else if (sc.base === 'causa' || sc.base === 'fixo') {
+        if (fazenda) throw erro('Contra a Fazenda Pública, informe os honorários de sucumbência em percentual sobre a condenação.');
+        if (!(sc.valor > 0)) throw erro(sc.base === 'causa' ? 'Informe o valor da causa.' : 'Informe o valor dos honorários de sucumbência.');
+        if (sc.base === 'causa' && !(sc.pct > 0)) throw erro('Informe o percentual dos honorários sobre o valor da causa.');
+        var db = parse(sc.data);
+        if (db > calc) throw erro('A data-base dos honorários de sucumbência é posterior à data do cálculo.');
+        checarIndice(cor, mes(db));
+        var cs = correcao(cor, mes(db), mes(calc)), vc = r2(r2(sc.valor) * cs.f);
+        t.sucumbencia = sc.base === 'causa' ? r2(vc * sc.pct / 100) : vc;
+        t.sucumbenciaTexto = 'Honorários de sucumbência: ' + (sc.base === 'causa'
+          ? pctFmt(Number(sc.pct), 2) + '% sobre o valor da causa de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido para ' + moedaFmt(vc)
+          : 'valor fixado de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido') +
+          ' (índice ' + pctFmt(cs.f, 6) + ') = ' + moedaFmt(t.sucumbencia) + '. ' + (cs.textos.join(' ') || 'Sem correção.');
+      } else throw erro('Base dos honorários de sucumbência desconhecida.');
+    }
+    t.debito = r2(t.subtotal + t.multaContratual + t.sucumbencia);
+    var baseEncargos = ritoAtivo ? t.penhora : t.debito;
     t.multa = (!fazenda && e.multa) ? r2(baseEncargos * 0.10) : 0;
     t.honorariosPct = e.honorarios ? Number(e.honorariosPct) || 0 : 0;
     t.honorarios = e.honorarios ? r2(baseEncargos * t.honorariosPct / 100) : 0;
-    t.total = r2(t.subtotal + t.multa + t.honorarios);
+    t.total = r2(t.debito + t.multa + t.honorarios);
     if (ritoAtivo) t.totalPenhora = r2(t.penhora + t.multa + t.honorarios);
 
     var avisos = (lista.avisos || []).slice();
     if (fazenda && e.multa) avisos.push('A multa do art. 523, § 1º, não se aplica ao cumprimento de sentença contra a Fazenda Pública (art. 534, § 2º, do CPC) e foi desconsiderada.');
-    if (ctx.selicLimitada) avisos.push('A Selic e o IPCA foram aplicados até ' + br(fimDoMesExcl(ultimoMesTab('SELIC')) - DIA) + ', último mês fechado disponível.');
+    if (ctx.selicLimitada) avisos.push((fazenda ? 'A Selic e o IPCA foram aplicados até ' : 'A Selic foi aplicada até ') + br(fimDoMesExcl(ultimoMesTab('SELIC')) - DIA) + ', último mês fechado disponível.');
     if (sobra > 0) avisos.push('Os pagamentos superam o débito em ' + moedaFmt(sobra) + ' (valores da data de cada pagamento, sem atualização).');
     if (ritoAtivo && !pars.some(function (p) { return p.rito === 'prisao'; })) avisos.push('Nenhuma prestação da pensão entrou no rito da prisão. Confira a data do ajuizamento e os períodos.');
 
@@ -618,6 +827,7 @@
     calcular: calcular, juros: juros, gerarPensao: gerarPensao, listarParcelas: listarParcelas, salarioMinimo: function (isoData) { return salarioMinimo(parse(isoData)); },
     descreverBase: descreverBase,
     valorFixoNoMes: function (per, m) { return fixoReajustado(Object.assign({}, per, { _reaj: null, n: per.n || 1 }), m, []); },
+    indices: INDICES, correcao: function (cfg, mi, mf) { return correcao(cfg, mi, mf); },
     util: { parse: parse, iso: iso, br: br, mes: mes, mesBr: mesBr, r2: r2, somaMeses: somaMeses, primeiroMes: primeiroMes, ultimoMesTab: ultimoMesTab, moedaFmt: moedaFmt, pctFmt: pctFmt, proxMes: proxMes, somaMes: somaMes },
     dados: DADOS
   };

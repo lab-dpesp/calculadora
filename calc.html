@@ -23,6 +23,7 @@
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
     <symbol id="i-tema" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></symbol>
     <symbol id="i-nova" viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zM7 12h5v5H7z"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
   </svg>
 
@@ -40,6 +41,7 @@
         <span class="badge badge-neutro" id="statusSelo">Índices</span>
         <span class="sub" id="statusTexto">Carregando índices…</span>
       </button>
+      <button type="button" class="q-btn-flat" id="novoCalculo" title="Começar um cálculo do zero: apaga os dados da tela (salve antes, se quiser guardar)"><svg class="ic"><use href="#i-add"/></svg>Novo cálculo</button>
       <button type="button" class="q-btn-flat" id="abrirCalculo" title="Abrir um cálculo salvo (.calcjur): as prestações novas entram sozinhas e você só lança o que mudou"><svg class="ic"><use href="#i-folder"/></svg>Abrir</button>
       <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo para guardar na pasta do caso"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
       <button type="button" class="q-btn-flat" id="btnFontes" aria-pressed="true" hidden title="Mostrar ou esconder a fonte de cada dado importado"><svg class="ic"><use href="#i-spark"/></svg>Fontes</button>
@@ -117,11 +119,37 @@
               <option value="taxalegal">Taxa legal em todo o período (Tema 1368/STJ)</option>
               <option value="fixa">Taxa fixa mensal</option>
               <option value="nenhum">Sem juros</option>
+              <optgroup label="Outros critérios">
+                <option value="duas">Uma taxa até certa data, depois outra</option>
+                <option value="selic">Selic (juros e correção) em todo o período</option>
+                <option value="selic_tl">Selic até 29/08/2024, depois correção + taxa legal</option>
+              </optgroup>
             </select>
           </label>
           <label class="q-campo q-campo-curto" id="campoTaxaFixa" hidden>
             <span class="q-rotulo">Taxa mensal (%)</span>
             <input type="text" inputmode="decimal" id="taxaFixa" value="1">
+          </label>
+        </div>
+        <div class="linha-campos" id="campoDuas" hidden>
+          <label class="q-campo q-campo-curto">
+            <span class="q-rotulo">Taxa (% a.m.)</span>
+            <input type="text" inputmode="decimal" id="duasTaxa1" value="1">
+          </label>
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">até (inclusive)</span>
+            <input type="date" id="duasAte" value="2024-08-29">
+          </label>
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Depois</span>
+            <select id="duasDepois">
+              <option value="taxalegal">taxa legal</option>
+              <option value="fixa">outra taxa fixa</option>
+            </select>
+          </label>
+          <label class="q-campo q-campo-curto" id="campoDuasTaxa2" hidden>
+            <span class="q-rotulo">Taxa (% a.m.)</span>
+            <input type="text" inputmode="decimal" id="duasTaxa2" value="0,5">
           </label>
           <label class="q-campo q-campo-largo" data-so="fazenda" hidden>
             <span class="q-rotulo">A partir de 10/09/2025 (EC 136/2025)</span>
@@ -156,6 +184,77 @@
             </label>
           </fieldset>
         </div>
+
+        <details class="recolhivel avancadas" id="avancadas" data-nao="pensao">
+          <summary>
+            <span class="rotulo-secao sem-margem">Opções avançadas</span>
+            <span class="badge badge-alerta" id="seloAvancadas" hidden>Em uso</span>
+            <span class="sub" id="resumoAvancadas">Só se o título mandar outro critério: índice de correção, juros compostos, multa contratual e honorários de sucumbência.</span>
+          </summary>
+          <div class="avancadas-corpo">
+            <div class="linha-campos" data-so="particular">
+              <label class="q-campo q-campo-largo">
+                <span class="q-rotulo">Índice de correção</span>
+                <select id="indiceCorrecao">
+                  <option value="tjsp">Tabela Prática do TJSP (padrão)</option>
+                  <option value="ipca">IPCA (IBGE)</option>
+                  <option value="inpc">INPC (IBGE)</option>
+                  <option value="ipcae">IPCA-E (IBGE)</option>
+                  <option value="igpm">IGP-M (FGV)</option>
+                  <option value="nenhum">Sem correção monetária</option>
+                </select>
+              </label>
+              <label class="opcao"><input type="checkbox" id="trocaIndice"> Trocar de índice a partir de</label>
+              <label class="q-campo q-campo-medio" id="campoTrocaMes" hidden>
+                <span class="q-rotulo">Mês</span>
+                <input type="month" id="indice2Desde">
+              </label>
+              <label class="q-campo q-campo-largo" id="campoTrocaIndice" hidden>
+                <span class="q-rotulo">Novo índice</span>
+                <select id="indice2">
+                  <option value="ipca">IPCA (IBGE)</option>
+                  <option value="tjsp">Tabela Prática do TJSP</option>
+                  <option value="inpc">INPC (IBGE)</option>
+                  <option value="ipcae">IPCA-E (IBGE)</option>
+                  <option value="igpm">IGP-M (FGV)</option>
+                  <option value="nenhum">Sem correção monetária</option>
+                </select>
+              </label>
+            </div>
+            <div class="linha-opcoes" data-so="particular">
+              <label class="opcao" id="opcaoCompostos"><input type="checkbox" id="jurosCompostos"> Juros compostos (capitalização mensal, só nas taxas fixas)</label>
+              <label class="opcao">
+                <input type="checkbox" id="multaContratual"> Multa contratual de
+                <input type="text" inputmode="decimal" id="multaContratualPct" value="2" class="mini" aria-label="Percentual da multa contratual"> % sobre o capital corrigido
+              </label>
+            </div>
+            <fieldset class="grupo-opcoes grupo-sucumbencia">
+              <legend class="rotulo-secao">Honorários de sucumbência fixados no título (antes do art. 523)</legend>
+              <label class="q-campo q-campo-largo">
+                <span class="q-rotulo">Incluir</span>
+                <select id="sucBase">
+                  <option value="">Não incluir</option>
+                  <option value="condenacao">% sobre a condenação</option>
+                  <option value="causa">% sobre o valor da causa</option>
+                  <option value="fixo">Valor fixado em reais</option>
+                </select>
+              </label>
+              <label class="q-campo q-campo-curto" id="campoSucPct" hidden>
+                <span class="q-rotulo">Percentual (%)</span>
+                <input type="text" inputmode="decimal" id="sucPct" value="10">
+              </label>
+              <label class="q-campo q-campo-medio" id="campoSucValor" hidden>
+                <span class="q-rotulo" id="rotuloSucValor">Valor (R$)</span>
+                <input type="text" inputmode="decimal" id="sucValor" class="dir" placeholder="0,00">
+              </label>
+              <label class="q-campo q-campo-medio" id="campoSucData" hidden>
+                <span class="q-rotulo">Corrigido desde</span>
+                <input type="date" id="sucData">
+              </label>
+            </fieldset>
+            <p class="nota">Os padrões da tela servem para a maioria dos casos. Para correção ou juros com datas próprias de uma parcela (ex.: dano moral, Súmulas 54 e 362 do STJ), use o botão de calendário ao lado da parcela.</p>
+          </div>
+        </details>
       </section>
 
       <section class="painel" id="painelPensao" data-so="pensao">
@@ -219,7 +318,7 @@
               <h3 id="tituloParcelas">Parcelas</h3>
               <span class="sub" id="subParcelas"></span>
             </div>
-            <div class="lista-cab cols-parcela" aria-hidden="true"><span>Nº</span><span>Vencimento</span><span>Valor (R$)</span><span></span></div>
+            <div class="lista-cab cols-parcela" aria-hidden="true"><span>Nº</span><span>Vencimento</span><span>Valor (R$)</span><span></span><span></span></div>
             <ol class="lista" id="parcelas"></ol>
             <div class="cartao-acoes">
               <button type="button" class="q-btn-flat" id="addParcela"><svg class="ic"><use href="#i-add"/></svg>Adicionar parcela</button>
@@ -463,7 +562,13 @@
       <span class="num-item"></span>
       <label class="q-campo q-campo-sem-rotulo"><input type="date" class="p-venc" aria-label="Vencimento"></label>
       <label class="q-campo q-campo-sem-rotulo"><input type="text" inputmode="decimal" class="p-valor dir" placeholder="0,00" aria-label="Valor"></label>
+      <button type="button" class="q-btn-icone p-termos" aria-expanded="false" aria-label="Datas próprias de correção e juros desta parcela" title="Datas próprias de correção e juros desta parcela"><svg class="ic"><use href="#i-cal"/></svg></button>
       <button type="button" class="q-btn-icone remover" aria-label="Remover parcela" title="Remover parcela"><svg class="ic"><use href="#i-close"/></svg></button>
+      <div class="p-termos-campos" hidden>
+        <label class="q-campo q-campo-medio"><span class="q-rotulo">Correção desde</span><input type="date" class="p-cor"></label>
+        <label class="q-campo q-campo-medio"><span class="q-rotulo">Juros desde</span><input type="date" class="p-jur"></label>
+        <span class="sub">Vazio: vencimento (correção) e o termo geral (juros).</span>
+      </div>
       <span class="origem-item" hidden></span>
     </li>
   </template>

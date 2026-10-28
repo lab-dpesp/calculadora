@@ -9,6 +9,7 @@
  *   4390   Selic mensal         EC 113/2021 (só meses fechados)
  *   29543  Taxa legal           art. 406 do CC
  *   1619   Salário mínimo       pensão em salários mínimos
+ *   189    IGP-M                correção de débito cível pelo IGP-M (opção avançada)
  *
  * Os fatores novos são encadeados a partir do último fator embutido, com o mesmo arredondamento (6 casas) da
  * tabela do TJSP. Nos meses em que já existe fator embutido, a variação do índice é conferida com a tabela:
@@ -27,7 +28,9 @@
   var DADOS = root.DADOS;
   var EMBUTIDOS = JSON.parse(JSON.stringify(DADOS));
   var CHAVE = 'calcjur:indices:v1';
-  var SERIES = { inpc: 188, ipca15: 7478, ipcae: 10764, ipca: 433, selic: 4390, taxaLegal: 29543, sm: 1619 };
+  var SERIES = { inpc: 188, ipca15: 7478, ipcae: 10764, ipca: 433, selic: 4390, taxaLegal: 29543, sm: 1619, igpm: 189 };
+  /* Séries que arquivos de índices exportados por versões anteriores podem não ter. */
+  var OPCIONAIS = { igpm: 1 };
   var INICIO_BUSCA = '01/01/2024';
   var VALIDADE_MS = 12 * 3600 * 1000;
 
@@ -114,6 +117,8 @@
       Object.keys(s.ipca).forEach(function (m) { DADOS.IPCA[m] = s.ipca[m]; });
       DADOS.INPC = DADOS.INPC || {};
       Object.keys(s.inpc).forEach(function (m) { DADOS.INPC[m] = s.inpc[m]; });
+      DADOS.IGPM = DADOS.IGPM || {};
+      Object.keys(s.igpm).forEach(function (m) { DADOS.IGPM[m] = s.igpm[m]; });
       Object.keys(s.taxaLegal).forEach(function (m) {
         if (DADOS.TAXA_LEGAL[m] != null && Math.abs(DADOS.TAXA_LEGAL[m] - s.taxaLegal[m]) > 5e-7) {
           conf.divergencias.push('Taxa legal de ' + m.slice(5) + '/' + m.slice(0, 4) + ': tabela ' + DADOS.TAXA_LEGAL[m] + ', Banco Central ' + s.taxaLegal[m] + '. Vale o Banco Central.');
@@ -193,7 +198,7 @@
     var pacote;
     try { pacote = JSON.parse(texto); } catch (_) { return Promise.reject(new Error('O arquivo não é um JSON válido.')); }
     if (!pacote || pacote.formato !== 'calcjur-indices' || !pacote.series) return Promise.reject(new Error('O arquivo não é um pacote de índices desta calculadora.'));
-    var faltam = Object.keys(SERIES).filter(function (k) { return !Array.isArray(pacote.series[k]); });
+    var faltam = Object.keys(SERIES).filter(function (k) { return !OPCIONAIS[k] && !Array.isArray(pacote.series[k]); });
     if (faltam.length) return Promise.reject(new Error('Faltam séries no arquivo: ' + faltam.join(', ') + '.'));
     pacote.origem = 'Arquivo importado (' + (pacote.origem || 'origem não informada') + ')';
     aplicar(pacote.series);

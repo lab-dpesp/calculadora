@@ -171,7 +171,14 @@ button, input, select { font: inherit; color: inherit; }
 /* Listas de parcelas e pagamentos */
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .lista-cab { font-size: 12px; color: var(--texto-3); margin-bottom: 6px; }
-.cols-parcela { display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 36px; gap: 8px; align-items: center; }
+.cols-parcela { display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 36px 36px; gap: 8px; align-items: center; }
+.p-termos-campos { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; padding: 4px 0 6px; }
+.p-termos-campos .sub { flex: 1 1 180px; }
+.p-termos[aria-expanded=true], .p-termos.com-termos { color: var(--primaria); }
+.avancadas { margin-top: 16px; border-top: 1px solid var(--borda); padding-top: 12px; }
+.avancadas > summary { align-items: center; }
+.avancadas-corpo { padding-top: 8px; }
+.grupo-sucumbencia { margin-top: 8px; align-items: flex-end; gap: 8px 12px; }
 .cols-pagamento { display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1fr) 36px; gap: 8px; align-items: center; }
 .num-item { font-size: 12px; color: var(--texto-3); text-align: right; }
 .vazio-lista { font-size: 12px; color: var(--texto-3); padding: 4px 0; }
