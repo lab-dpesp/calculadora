@@ -182,6 +182,11 @@
               <input type="checkbox" id="honorarios"> Honorários de
               <input type="text" inputmode="decimal" id="honorariosPct" value="10" class="mini" aria-label="Percentual de honorários"> %
             </label>
+            <label class="q-campo q-campo-inline" id="campoPrazo523" hidden>
+              <span class="q-rotulo">Fim do prazo de 15 dias</span>
+              <input type="date" id="prazo523">
+            </label>
+            <p class="nota" id="notaPrazo523" hidden>Opcional. Se houver pagamentos, só os feitos até o fim do prazo reduzem a base da multa e dos honorários (art. 523, § 2º).</p>
           </fieldset>
         </div>
 
@@ -250,6 +255,10 @@
               <label class="q-campo q-campo-medio" id="campoSucData" hidden>
                 <span class="q-rotulo">Corrigido desde</span>
                 <input type="date" id="sucData">
+              </label>
+              <label class="q-campo q-campo-medio" id="campoSucTransito" hidden>
+                <span class="q-rotulo">Trânsito em julgado (juros)</span>
+                <input type="date" id="sucTransito">
               </label>
             </fieldset>
             <p class="nota">Os padrões da tela servem para a maioria dos casos. Para correção ou juros com datas próprias de uma parcela (ex.: dano moral, Súmulas 54 e 362 do STJ), use o botão de calendário ao lado da parcela.</p>

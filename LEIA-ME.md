@@ -66,10 +66,14 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
   - índice de correção: Tabela Prática (padrão), IPCA, INPC, IPCA-E, IGP-M ou sem correção, com troca de índice a partir de um mês (ex.: IGP-M do contrato até 08/2024 e IPCA depois);
   - juros compostos, com capitalização mensal, nas taxas fixas (contratos que preveem capitalização);
   - multa contratual ou moratória em % sobre o capital corrigido.
-- Honorários de sucumbência fixados no título (cível e Fazenda): % sobre a condenação; no cível, também % sobre o valor da causa ou valor fixo, corrigidos desde a data indicada. Entram no débito antes da multa e dos honorários do art. 523.
+- Honorários de sucumbência fixados no título (cível e Fazenda): % sobre a condenação; no cível, também % sobre o valor da causa ou valor fixo, corrigidos desde a data indicada e, se informado o trânsito em julgado, com juros de mora desde ele (art. 85, § 16, do CPC). Entram no débito antes da multa e dos honorários do art. 523.
+- Deflação (Tema 678/STJ): índices negativos entram na conta, mas o índice acumulado desde o início da correção nunca fica abaixo de 1, preservado o valor nominal.
+- Art. 523, § 2º: com o fim do prazo de 15 dias informado, só os pagamentos feitos até ele reduzem a base da multa e dos honorários; os posteriores abatem o débito, mas a base é o débito como se não tivessem sido feitos.
+- Fazenda após a EC 136/2025: a tela avisa que o índice anterior ao requisitório está em discussão no STF (Tema 1.484).
 - Termos próprios por parcela: o botão de calendário ao lado da parcela abre "Correção desde" e "Juros desde". Ex.: dano moral com correção do arbitramento (Súmula 362/STJ) e juros do evento (Súmula 54/STJ). Os juros anteriores ao início da correção incidem sobre o valor nominal.
 - `node ferramentas/testar-aleatorio.js [quantidade]` gera casos aleatórios de cível e Fazenda e os recalcula por uma implementação independente (algoritmos diferentes do motor), além de conferir que pagar o total zera o débito e que a imputação soma o valor pago.
 - `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
+- `node ferramentas/testar-propriedades.js [quantidade]` confere regras de bom senso em casos aleatórios de cível, Fazenda e pensão, sem precisar do valor certo: data do cálculo mais tarde não reduz o débito (salvo índice negativo), a ordem de lançamento não muda o total, uma parcela dividida em metades dá o mesmo total, as prestações e os 13º gerados batem com o calendário, prisão + penhora = débito etc. As propriedades “a decidir” dependem de regra a confirmar (perguntas ao contador) e só são relatadas.
 
 ## Pagamentos e levantamentos
 

@@ -388,10 +388,12 @@
         usados[m] = n;
         var p = m.split('-').map(Number);
         var venc = Date.UTC(p[0], p[1] - 1, Math.min(dia, new Date(Date.UTC(p[0], p[1], 0)).getUTCDate()));
-        if (venc > calc) continue;
-        var v = aplicarAjuste(per, 'p:' + m, valorPrestacao(per, venc, avisos));
-        out.push({ chave: 'p:' + m, vencimento: iso(venc), valor: v.valor, origem: 'pensao', periodo: n, detalhes: v.detalhes || [],
-          descricao: 'Pensão de ' + mesBr(m) + ': ' + v.texto + ' = ' + moedaFmt(v.valor) });
+        if (venc <= calc) {
+          var v = aplicarAjuste(per, 'p:' + m, valorPrestacao(per, venc, avisos));
+          out.push({ chave: 'p:' + m, vencimento: iso(venc), valor: v.valor, origem: 'pensao', periodo: n, detalhes: v.detalhes || [],
+            descricao: 'Pensão de ' + mesBr(m) + ': ' + v.texto + ' = ' + moedaFmt(v.valor) });
+        }
+        // O 13º vence em 20/12 mesmo que a prestação de dezembro vença depois da data do cálculo.
         if (per.decimo && p[1] === 12) {
           var v13 = Date.UTC(p[0], 11, 20);
           if (v13 <= calc) {
@@ -437,12 +439,25 @@
     par.b = t; par.pre = false;
   }
 
+  /* Aplica o fator de correção f à parcela. Tema 678/STJ: índices negativos (deflação) entram na conta, mas o
+   * índice acumulado desde o início da correção nunca fica abaixo de 1 (preservado o valor nominal). */
+  function aplicarFator(par, f) {
+    var prev = par.indiceReal;
+    par.indiceReal *= f;
+    var g = prev >= 1 && par.indiceReal >= 1 ? f : Math.max(1, par.indiceReal) / Math.max(1, prev);
+    if (g !== 1) { par.P = r2(par.P * g); par.J = r2(par.J * g); par.indice *= g; }
+    return par.indiceReal < 1;
+  }
+  function avisoPiso(par) {
+    log(par, 'Índice acumulado desde o início da correção abaixo de 1 (deflação): preservado o valor nominal (Tema 678/STJ).');
+  }
   function corrigirParcela(par, mi, mf, ctx) {
     if (mi === mf || !(par.P > 0 || par.J > 0)) return;
     var c = correcao(ctx.cor, mi, mf);
     if (!c.textos.length) return;
-    par.P = r2(par.P * c.f); par.J = r2(par.J * c.f); par.indice *= c.f;
+    var piso = aplicarFator(par, c.f);
     c.textos.forEach(function (x) { log(par, x); });
+    if (piso) avisoPiso(par);
   }
   function jurosTrecho(par, a, b, ctx, regime) {
     var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros);
@@ -529,9 +544,10 @@
       var mi = mes(x), mf = mes(y);
       if (mi !== mf && (par.P > 0 || par.J > 0)) {
         var f = fatorIPCAE(mf) / fatorIPCAE(mi);
-        par.P = r2(par.P * f); par.J = r2(par.J * f); par.indice *= f;
+        var pisoF = aplicarFator(par, f);
         log(par, 'Correção pelo IPCA-E, ' + mesBr(mi) + ' (' + pctFmt(fatorIPCAE(mi), 6) + ') a ' +
           mesBr(mf) + ' (' + pctFmt(fatorIPCAE(mf), 6) + '): índice ' + pctFmt(f, 6) + '.');
+        if (pisoF) avisoPiso(par);
       }
       var a = Math.max(par.jurosDe, x), bj = Math.min(y, ctx.M1);
       if (a < bj && par.P > 0) {
@@ -712,7 +728,7 @@
       if (!fazenda && (e.regime === 'selic' || e.regime === 'selic_tl')) taxaSelic(mes(Math.min(ij, b0, calc)));
       var par = {
         n: p.n, chave: p.chave, origem: p.origem, descricao: p.descricao, vencimento: venc, valor: r2(p.valor), inicioJuros: ij,
-        inicioCorrecao: b0, b: b0, pre: ij < b0, P: r2(p.valor), J: 0, E: 0, jurosDe: ij, indice: 1, eventos: (p.detalhes || []).slice(), imputacoes: []
+        inicioCorrecao: b0, b: b0, pre: ij < b0, P: r2(p.valor), J: 0, E: 0, jurosDe: ij, indice: 1, indiceReal: 1, eventos: (p.detalhes || []).slice(), imputacoes: []
       };
       if (p.correcaoDesde || p.jurosDesde) {
         par.eventos.push('Termos próprios desta parcela: correção desde ' + br(b0) + (semJuros ? '' : '; juros desde ' + br(ij)) + '.');
@@ -779,7 +795,7 @@
     t.multaContratualPct = !pensao && !fazenda && civel.multaContratualPct > 0 ? Number(civel.multaContratualPct) : 0;
     t.multaContratual = t.multaContratualPct ? r2(t.capital * t.multaContratualPct / 100) : 0;
     // Honorários de sucumbência fixados no título (opção avançada).
-    t.sucumbencia = 0; t.sucumbenciaTexto = '';
+    t.sucumbencia = 0; t.sucumbenciaTexto = ''; var avisosSuc = [];
     var sc = !pensao && e.sucumbencia && e.sucumbencia.base ? e.sucumbencia : null;
     if (sc) {
       if (sc.base === 'condenacao') {
@@ -794,23 +810,62 @@
         var db = parse(sc.data);
         if (db > calc) throw erro('A data-base dos honorários de sucumbência é posterior à data do cálculo.');
         checarIndice(cor, mes(db));
-        var cs = correcao(cor, mes(db), mes(calc)), vc = r2(r2(sc.valor) * cs.f);
-        t.sucumbencia = sc.base === 'causa' ? r2(vc * sc.pct / 100) : vc;
-        t.sucumbenciaTexto = 'Honorários de sucumbência: ' + (sc.base === 'causa'
-          ? pctFmt(Number(sc.pct), 2) + '% sobre o valor da causa de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido para ' + moedaFmt(vc)
-          : 'valor fixado de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido') +
-          ' (índice ' + pctFmt(cs.f, 6) + ') = ' + moedaFmt(t.sucumbencia) + '. ' + (cs.textos.join(' ') || 'Sem correção.');
+        var tj = sc.transito ? parse(sc.transito) : null;
+        if (tj && tj > calc) throw erro('A data do trânsito em julgado é posterior à data do cálculo.');
+        var cs = correcao(cor, mes(db), mes(calc)), fs = Math.max(1, cs.f), pisoS = cs.f < 1 && cs.textos.length;
+        var notaPiso = pisoS ? ' Índice abaixo de 1 (deflação): preservado o valor nominal (Tema 678/STJ).' : '';
+        if (!tj) {
+          var vc = r2(r2(sc.valor) * fs);
+          t.sucumbencia = sc.base === 'causa' ? r2(vc * sc.pct / 100) : vc;
+          t.sucumbenciaTexto = 'Honorários de sucumbência: ' + (sc.base === 'causa'
+            ? pctFmt(Number(sc.pct), 2) + '% sobre o valor da causa de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido para ' + moedaFmt(vc)
+            : 'valor fixado de ' + moedaFmt(sc.valor) + ' (' + br(db) + '), corrigido') +
+            ' (índice ' + pctFmt(fs, 6) + ') = ' + moedaFmt(t.sucumbencia) + '. ' + (cs.textos.join(' ') || 'Sem correção.') + notaPiso;
+          avisosSuc.push('Honorários de sucumbência fixados em quantia certa têm juros de mora desde o trânsito em julgado (art. 85, § 16, do CPC). Informe a data do trânsito para incluí-los.');
+        } else {
+          // Verba própria: correção desde a data-base e juros legais de mora desde o trânsito em julgado.
+          var p0 = sc.base === 'causa' ? r2(r2(sc.valor) * sc.pct / 100) : r2(sc.valor);
+          var rs = ctx.regime === 'selic' || ctx.regime === 'selic_tl' || ctx.regime === 'taxalegal' ? ctx.regime : 'tjsp';
+          var cx = Object.assign({}, ctx, { regime: rs, opcJuros: null });
+          var ps = { n: 0, P: p0, J: 0, E: 0, b: db, jurosDe: tj, pre: tj < db, indice: 1, indiceReal: 1, eventos: [] };
+          atualizar(ps, calc, cx);
+          t.sucumbencia = r2(ps.P + ps.J);
+          t.sucumbenciaTexto = 'Honorários de sucumbência: ' + (sc.base === 'causa'
+            ? pctFmt(Number(sc.pct), 2) + '% sobre o valor da causa de ' + moedaFmt(sc.valor) + ' (' + br(db) + ') = ' + moedaFmt(p0)
+            : 'valor fixado de ' + moedaFmt(sc.valor) + ' (' + br(db) + ')') +
+            ', corrigido e com juros de mora desde o trânsito em julgado (' + br(tj) + ', art. 85, § 16, do CPC): ' +
+            moedaFmt(ps.P) + ' de valor corrigido + ' + moedaFmt(ps.J) + ' de juros = ' + moedaFmt(t.sucumbencia) + '. ' + ps.eventos.join(' ');
+        }
       } else throw erro('Base dos honorários de sucumbência desconhecida.');
     }
     t.debito = r2(t.subtotal + t.multaContratual + t.sucumbencia);
     var baseEncargos = ritoAtivo ? t.penhora : t.debito;
+    // Art. 523, § 2º: o pagamento parcial só reduz a base da multa e dos honorários se feito dentro do prazo.
+    // Pagamentos posteriores ao prazo continuam abatendo o débito, mas não a base desses encargos.
+    var avisos523 = [], encargos523 = (!fazenda && e.multa) || e.honorarios, prazo = e.prazo523 ? parse(e.prazo523) : null;
+    t.base523 = null; t.tardios523 = 0;
+    if (encargos523 && prazo) {
+      var tardios = pagamentos.filter(function (p) { return p.t > prazo; });
+      if (tardios.length) {
+        var e2 = Object.assign({}, e, { prazo523: '', multa: false, honorarios: false,
+          pagamentos: (e.pagamentos || []).filter(function (p) { return parse(p.data) <= prazo; }) });
+        var t2 = calcular(e2).totais;
+        baseEncargos = ritoAtivo ? t2.penhora : t2.debito;
+        t.base523 = baseEncargos;
+        t.tardios523 = tardios.length;
+      }
+      if (prazo > calc) avisos523.push('O prazo para pagamento voluntário (art. 523 do CPC) termina depois da data do cálculo: a multa e os honorários só serão devidos se não houver pagamento até ' + br(prazo) + '.');
+    } else if (encargos523 && pagamentos.length) {
+      avisos523.push('Pelo art. 523, § 2º, do CPC, o pagamento parcial só reduz a base da multa e dos honorários se feito dentro do prazo de 15 dias. Informe o fim do prazo para a calculadora conferir; sem ele, todos os pagamentos reduzem a base.');
+    }
     t.multa = (!fazenda && e.multa) ? r2(baseEncargos * 0.10) : 0;
     t.honorariosPct = e.honorarios ? Number(e.honorariosPct) || 0 : 0;
     t.honorarios = e.honorarios ? r2(baseEncargos * t.honorariosPct / 100) : 0;
     t.total = r2(t.debito + t.multa + t.honorarios);
     if (ritoAtivo) t.totalPenhora = r2(t.penhora + t.multa + t.honorarios);
 
-    var avisos = (lista.avisos || []).slice();
+    var avisos = (lista.avisos || []).slice().concat(avisosSuc, avisos523);
+    if (fazenda && calc >= ctx.M2) avisos.push('Depois da EC 136/2025, o índice aplicável antes da expedição do precatório ou da RPV está em discussão no STF (Tema 1.484 da repercussão geral, ainda sem julgamento de mérito). Confira o título e a orientação mais recente.');
     if (fazenda && e.multa) avisos.push('A multa do art. 523, § 1º, não se aplica ao cumprimento de sentença contra a Fazenda Pública (art. 534, § 2º, do CPC) e foi desconsiderada.');
     if (ctx.selicLimitada) avisos.push((fazenda ? 'A Selic e o IPCA foram aplicados até ' : 'A Selic foi aplicada até ') + br(fimDoMesExcl(ultimoMesTab('SELIC')) - DIA) + ', último mês fechado disponível.');
     if (sobra > 0) avisos.push('Os pagamentos superam o débito em ' + moedaFmt(sobra) + ' (valores da data de cada pagamento, sem atualização).');

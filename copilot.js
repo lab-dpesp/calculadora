@@ -16,7 +16,8 @@
  *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 29/08/2024, depois índice + taxa legal.
  *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
  *              "jurosCompostos": false, "multaContratualPct": 2 },  (débito cível, opcional: opções avançadas)
- *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo", "pct": 10, "valor": 0, "data": "AAAA-MM-DD" },   (opcional)
+ *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo", "pct": 10, "valor": 0, "data": "AAAA-MM-DD",
+ *                    "transito": "AAAA-MM-DD" },   (opcional; trânsito em julgado: juros do art. 85, § 16, do CPC)
  *   "periodos": [ { "inicio": "AAAA-MM", "fim": "AAAA-MM" | null, "diaVencimento": 10,
  *                   "base": "pct_sm" | "qtd_sm" | "pct_rend" | "fixo", "valor": 30, "incide13": false,
  *                   "rendimentos": [ { "desde": "AAAA-MM", "valor": 3500.00, "origem": "..." } ],
@@ -30,7 +31,8 @@
  *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD" } ],   (termos próprios, opcionais)
  *   "pagamentos": [ { "data": "AAAA-MM-DD", "valor": 0, "origem": "..." } ],
  *   "fazenda": { "posEC136": "selic" | "ipca2" },                     (opcional)
- *   "encargos": { "multa523": false, "honorariosPct": null },        (opcional)
+ *   "encargos": { "multa523": false, "honorariosPct": null, "prazo523": "AAAA-MM-DD" },   (opcional; prazo523 = fim do
+ *                                                                      prazo de 15 dias, para o art. 523, § 2º)
  *   "pendencias": [ "..." ],
  *   "observacoes": "...",
  *   "calculoAnterior": { "dataCalculo": "AAAA-MM-DD", "total": 0, "totalPrisao": 0, "totalPenhora": 0, "origem": "..." }   (opcional)
@@ -184,7 +186,7 @@
     if (o.sucumbencia && typeof o.sucumbencia === 'object' && o.sucumbencia.base) {
       var su = o.sucumbencia, sb = { condenacao: 1, causa: 1, fixo: 1 }[su.base] ? su.base : null;
       if (!sb) erros.push('Base dos honorários de sucumbência desconhecida: "' + texto(su.base) + '".');
-      else d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '' };
+      else d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '', transito: data(su.transito) || '' };
     }
 
     (Array.isArray(o.periodos) ? o.periodos : []).forEach(function (p, i) {
@@ -279,7 +281,7 @@
 
     if (o.encargos && typeof o.encargos === 'object') {
       var hp = o.encargos.honorariosPct == null || o.encargos.honorariosPct === '' ? null : numero(o.encargos.honorariosPct);
-      d.encargos = { multa: o.encargos.multa523 === true, honorariosPct: hp > 0 ? hp : null };
+      d.encargos = { multa: o.encargos.multa523 === true, honorariosPct: hp > 0 ? hp : null, prazo523: data(o.encargos.prazo523) || '' };
     }
     d.pendencias = (Array.isArray(o.pendencias) ? o.pendencias : (o.pendencias ? [o.pendencias] : [])).map(textoPendencia).filter(Boolean);
 

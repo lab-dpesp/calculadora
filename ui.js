@@ -476,7 +476,7 @@
     if (faz && ($('sucBase').value === 'causa' || $('sucBase').value === 'fixo')) $('sucBase').value = 'condenacao';
     var sb = $('sucBase').value;
     $('campoSucPct').hidden = !(sb === 'condenacao' || sb === 'causa');
-    $('campoSucValor').hidden = $('campoSucData').hidden = !(sb === 'causa' || sb === 'fixo');
+    $('campoSucValor').hidden = $('campoSucData').hidden = $('campoSucTransito').hidden = !(sb === 'causa' || sb === 'fixo');
     $('rotuloSucValor').textContent = sb === 'causa' ? 'Valor da causa (R$)' : 'Valor dos honorários (R$)';
     var emUso = avancadasEmUso();
     $('seloAvancadas').hidden = !emUso.length;
@@ -487,6 +487,8 @@
     $('opcaoMulta').classList.toggle('opcao-desativada', faz);
     $('opcaoMulta').title = faz ? 'Não se aplica contra a Fazenda Pública (art. 534, § 2º, do CPC)' : '';
     $('honorariosPct').disabled = !$('honorarios').checked;
+    var com523 = ($('multa').checked && !faz) || $('honorarios').checked;
+    $('campoPrazo523').hidden = $('notaPrazo523').hidden = !com523;
     $('legendaEncargos').textContent = pen && $('dataAjuizamento').value ? 'Art. 523, § 1º, do CPC (sobre o rito da penhora)' : 'Art. 523, § 1º, do CPC';
     $('tituloParcelas').textContent = pen ? 'Outras parcelas' : 'Parcelas';
     $('subParcelas').textContent = pen ? 'Despesas extraordinárias, diferenças e valores fora do título' : '';
@@ -552,6 +554,7 @@
       multa: $('multa').checked,
       honorarios: $('honorarios').checked,
       honorariosPct: lerNumero($('honorariosPct').value),
+      prazo523: (($('multa').checked && tipo !== 'fazenda') || $('honorarios').checked) ? $('prazo523').value : '',
       periodos: tipo === 'pensao' ? coletarPeriodos() : [],
       ajustes: tipo === 'pensao' ? ajustesMotor() : [],
       dataAjuizamento: tipo === 'pensao' ? $('dataAjuizamento').value : '',
@@ -564,13 +567,13 @@
         multaContratualPct: $('multaContratual').checked ? lerNumero($('multaContratualPct').value) : 0
       } : {},
       sucumbencia: tipo !== 'pensao' && $('sucBase').value ? { base: $('sucBase').value, pct: lerNumero($('sucPct').value),
-        valor: lerNumero($('sucValor').value), data: $('sucData').value } : null,
+        valor: lerNumero($('sucValor').value), data: $('sucData').value, transito: $('sucTransito').value } : null,
       parcelas: parcelas,
       pagamentos: pagamentos
     };
   }
   /* Campos das opções avançadas e dos juros em duas taxas, como texto da tela (para guardar e restaurar). */
-  var CAMPOS_AVANCADOS = ['duasTaxa1', 'duasAte', 'duasDepois', 'duasTaxa2', 'indiceCorrecao', 'indice2', 'indice2Desde', 'multaContratualPct', 'sucBase', 'sucPct', 'sucValor', 'sucData'];
+  var CAMPOS_AVANCADOS = ['duasTaxa1', 'duasAte', 'duasDepois', 'duasTaxa2', 'indiceCorrecao', 'indice2', 'indice2Desde', 'multaContratualPct', 'sucBase', 'sucPct', 'sucValor', 'sucData', 'sucTransito'];
   var MARCAS_AVANCADAS = ['trocaIndice', 'jurosCompostos', 'multaContratual'];
   function avancadosBrutos() {
     var o = {};
@@ -589,7 +592,7 @@
       localStorage.setItem(CHAVE, JSON.stringify({
         tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, posEC136: e.posEC136,
         termoJuros: e.termoJuros, dataJuros: e.dataJuros, multa: $('multa').checked, honorarios: e.honorarios,
-        honorariosPct: $('honorariosPct').value, dataAjuizamento: $('dataAjuizamento').value, pdfDetalhado: $('pdfDetalhado').checked,
+        honorariosPct: $('honorariosPct').value, prazo523: $('prazo523').value, dataAjuizamento: $('dataAjuizamento').value, pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
         periodos: coletarPeriodosBrutos(),
         parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde]; }),
@@ -637,6 +640,7 @@
       $('multa').checked = !!s.multa;
       $('honorarios').checked = !!s.honorarios;
       $('honorariosPct').value = s.honorariosPct || '10';
+      $('prazo523').value = s.prazo523 || '';
       $('dataAjuizamento').value = s.dataAjuizamento || '';
       if (s.pdfDetalhado === false) $('pdfDetalhado').checked = false;
       $('procUnidade').value = s.unidade || ''; $('procCidade').value = s.cidade || ''; $('procAutor').value = s.autor || '';
@@ -982,7 +986,9 @@
       c.push('Pagamentos e levantamentos imputados na data em que foram feitos (CC, arts. 352 a 355): primeiro na parcela indicada, se houver; depois nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada parcela, primeiro nos juros e encargos, depois no capital (art. 354).');
     }
     if ((e.multa && e.tipo !== 'fazenda') || e.honorarios) {
-      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')));
+      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) +
+        (res && res.totais.base523 != null ? ' ' + (res.totais.tardios523 === 1 ? 'O pagamento feito' : 'Os pagamentos feitos') + ' depois do fim do prazo (' + brIso(e.prazo523) + ') ' + (res.totais.tardios523 === 1 ? 'abate' : 'abatem') + ' o débito, mas não a base desses encargos (art. 523, § 2º), que é de ' + moeda(res.totais.base523) + '.' : '') +
+        (e.prazo523 && !(res && res.totais.base523 != null) && e.pagamentos.length ? ' Pagamentos feitos até o fim do prazo (' + brIso(e.prazo523) + '): reduzem a base (art. 523, § 2º).' : ''));
     }
     var st = I.estado();
     c.push('Valores arredondados em centavos a cada atualização. Índices ' + (st.fonte === 'online' ? 'atualizados pelo Banco Central em ' + dataHoraBr(st.atualizadoEm) : 'da tabela embutida' + (D.indicesEmbutidosEm ? ', conferida com o Banco Central em ' + brIso(D.indicesEmbutidosEm) : '')) +
@@ -1372,12 +1378,13 @@
     $('sucBase').value = su ? su.base : '';
     if (su) {
       if (su.pct > 0) $('sucPct').value = num(su.pct, su.pct % 1 ? 2 : 0);
-      $('sucValor').value = su.valor > 0 ? num(su.valor, 2) : ''; $('sucData').value = su.data || '';
+      $('sucValor').value = su.valor > 0 ? num(su.valor, 2) : ''; $('sucData').value = su.data || ''; $('sucTransito').value = su.transito || '';
     }
     if (d.encargos) {
       $('multa').checked = d.encargos.multa;
       $('honorarios').checked = !!d.encargos.honorariosPct;
       if (d.encargos.honorariosPct) $('honorariosPct').value = num(d.encargos.honorariosPct, d.encargos.honorariosPct % 1 ? 2 : 0);
+      $('prazo523').value = d.encargos.prazo523 || '';
     }
     listaPe.innerHTML = '';
     d.periodos.forEach(function (p) {
@@ -1497,7 +1504,8 @@
       civel: e.tipo === 'particular' ? semVazio({ indice: e.civel.indice, indice2: e.civel.indice2 || undefined, indice2Desde: e.civel.indice2 ? e.civel.indice2Desde : undefined,
         jurosCompostos: e.civel.jurosCompostos || undefined, multaContratualPct: e.civel.multaContratualPct > 0 ? e.civel.multaContratualPct : undefined }) : undefined,
       sucumbencia: e.sucumbencia ? semVazio({ base: e.sucumbencia.base, pct: e.sucumbencia.base !== 'fixo' ? e.sucumbencia.pct : undefined,
-        valor: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.valor : undefined, data: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.data : undefined }) : undefined,
+        valor: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.valor : undefined, data: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.data : undefined,
+        transito: e.sucumbencia.base !== 'condenacao' && e.sucumbencia.transito ? e.sucumbencia.transito : undefined }) : undefined,
       fazenda: faz ? { posEC136: e.posEC136 } : undefined,
       periodos: e.tipo === 'pensao' ? periodos : [],
       ajustes: e.tipo === 'pensao' && ajustes.length ? ajustes.map(function (a) {
@@ -1510,7 +1518,7 @@
         .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined }); }),
       pagamentos: e.pagamentos.filter(function (p) { return p.data && p.valor > 0; })
         .map(function (p) { return semVazio({ data: p.data, valor: p.valor, parcela: p.parcela || undefined, origem: p.origem || undefined }); }),
-      encargos: { multa523: !faz && e.multa, honorariosPct: e.honorarios ? e.honorariosPct : null },
+      encargos: semVazio({ multa523: !faz && e.multa, honorariosPct: e.honorarios ? e.honorariosPct : null, prazo523: e.prazo523 || undefined }),
       pendencias: importacao && !importacao.revisado ? importacao.pendencias.slice() : [],
       observacoes: importacao && importacao.observacoes ? importacao.observacoes : undefined,
       revisado: !(importacao && !importacao.revisado),
@@ -1717,11 +1725,13 @@
     if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido']);
     if (e.sucumbencia && e.sucumbencia.base) gerais.push(['Honorários de sucumbência', ({ condenacao: num(e.sucumbencia.pct, 2) + '% sobre a condenação',
       causa: num(e.sucumbencia.pct, 2) + '% sobre o valor da causa de ' + moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
-      fixo: moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : '') })[e.sucumbencia.base]]);
+      fixo: moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : '') })[e.sucumbencia.base] +
+      (e.sucumbencia.base !== 'condenacao' && e.sucumbencia.transito ? '; juros desde o trânsito em julgado (' + brIso(e.sucumbencia.transito) + ')' : '')]);
     else gerais.push(['Critério após 10/09/2025', e.posEC136 === 'ipca2' ? 'IPCA + 2% a.a., limitado à Selic' : 'Selic']);
     if (faz || e.regime !== 'nenhum') gerais.push(['Termo inicial dos juros', e.termoJuros === 'data' ? brIso(e.dataJuros) : 'vencimento de cada parcela']);
     if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) : 'não informado']);
-    if (!faz) gerais.push(['Art. 523, § 1º', (e.multa ? 'multa de 10%' : 'sem multa') + '; ' + (e.honorarios ? 'honorários de ' + num(e.honorariosPct, e.honorariosPct % 1 ? 2 : 0) + '%' : 'sem honorários')]);
+    if (!faz) gerais.push(['Art. 523, § 1º', (e.multa ? 'multa de 10%' : 'sem multa') + '; ' + (e.honorarios ? 'honorários de ' + num(e.honorariosPct, e.honorariosPct % 1 ? 2 : 0) + '%' : 'sem honorários') +
+      (e.prazo523 && (e.multa || e.honorarios) ? '; fim do prazo em ' + brIso(e.prazo523) : '')]);
     gerais.push(['Total apurado', moeda(res.totais.total)]);
     if (res.rito) gerais.push(['Rito da prisão / rito da penhora', moeda(res.totais.prisao) + ' / ' + moeda(res.totais.totalPenhora)]);
     h += '<table class="dados">' + gerais.map(function (g) { return '<tr><th>' + esc(g[0]) + '</th><td>' + esc(g[1]) + '</td></tr>'; }).join('') + '</table>';
