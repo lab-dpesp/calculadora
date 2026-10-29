@@ -74,6 +74,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 - `node ferramentas/testar-aleatorio.js [quantidade]` gera casos aleatórios de cível e Fazenda e os recalcula por uma implementação independente (algoritmos diferentes do motor), além de conferir que pagar o total zera o débito e que a imputação soma o valor pago.
 - `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
 - `node ferramentas/testar-propriedades.js [quantidade]` confere regras de bom senso em casos aleatórios de cível, Fazenda e pensão, sem precisar do valor certo: data do cálculo mais tarde não reduz o débito (salvo índice negativo), a ordem de lançamento não muda o total, uma parcela dividida em metades dá o mesmo total, as prestações e os 13º gerados batem com o calendário, prisão + penhora = débito etc. As propriedades “a decidir” dependem de regra a confirmar (perguntas ao contador) e só são relatadas.
+- Gabarito do TJSP: `python3 ferramentas/tjsp/gabarito-tjsp.py [quantidade]` calcula casos aleatórios na planilha oficial "Cálculo Simples" do TJSP (pasta `ferramentas/tjsp/planilhas`), pelo LibreOffice, e `node ferramentas/tjsp/comparar-tjsp.js` compara com a calculadora, separando correção, juros de 1% e taxa legal. No GitHub, a ação "Testar contra a planilha do TJSP" faz isso todo dia 6, baixando antes a planilha do mês no site do TJSP.
 
 ## Pagamentos e levantamentos
 
