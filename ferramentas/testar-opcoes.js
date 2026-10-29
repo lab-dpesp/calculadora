@@ -26,6 +26,17 @@ function proRata(tab, a, b) {   // soma pro rata das taxas mensais entre as data
   }
   return pct;
 }
+function proRataF(f, a, b) { // o mesmo, com a taxa de cada mês dada por f(mês); para no primeiro mês sem taxa
+  let x = t(a), fim = t(b), pct = 0;
+  while (x < fim) {
+    const d = new Date(x), p = Math.min(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1), fim);
+    const m = new Date(x).toISOString().slice(0, 7), tx = f(m);
+    if (tx == null) break;
+    pct += tx * Math.round((p - x) / DIA) / diasMes(m + '-01');
+    x = p;
+  }
+  return pct;
+}
 function base(extra) {
   return Object.assign({ tipo: 'particular', dataCalculo: '2026-10-31', regime: 'nenhum', termoJuros: 'vencimento', dataJuros: '',
     parcelas: [{ vencimento: '2023-03-15', valor: 10000 }], pagamentos: [], multa: false, honorarios: false, honorariosPct: 10 }, extra);
@@ -107,10 +118,68 @@ caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 
     r2(l.capital + jur + r2(r2(l.capital + jur) * selPct / 100)));
 })();
 
+// 12. Juros fixos com vencimento no dia 31: de 31/01 a 31/03 são 2 meses; de 31/01 a 28/02, 1 mês (último dia do mês).
+caso('juros fixos do dia 31 a 31/03', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-03-31',
+  parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), 10200);
+caso('juros fixos do dia 31 a 28/02', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-02-28',
+  parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), 10100);
+
+// 13. Fazenda com IPCA + 2% a.a. limitado à Selic após a EC 136/2025: Selic de 10/06/2025 a 09/09/2025, sobre o capital;
+// depois, min(IPCA + 2/12, Selic) de cada mês, pro rata, sobre capital + juros (sem a Selic já apurada), até o último
+// mês com IPCA e Selic (09/2026).
+(function () {
+  const s1 = r2(10000 * proRata('SELIC', '2025-06-10', '2025-09-10') / 100);
+  const s2 = r2(10000 * proRataF(m => D.IPCA[m] == null || D.SELIC[m] == null ? null : Math.min(D.IPCA[m] + 2 / 12, D.SELIC[m]), '2025-09-10', '2026-10-31') / 100);
+  caso('Fazenda, IPCA + 2% após a EC 136', { tipo: 'fazenda', dataCalculo: '2026-10-31', termoJuros: 'vencimento', posEC136: 'ipca2',
+    parcelas: [{ vencimento: '2025-06-10', valor: 10000 }], pagamentos: [] }, r2(10000 + s1 + s2));
+})();
+
+// 14. Pensão de R$ 1.000,00 fixada em 01/2024 com reajuste pelo salário mínimo: em cada aniversário, proporção entre o
+// mínimo do mês do reajuste e o da data-base (sem encadear). Soma das prestações de 03/2025 e 03/2026.
+(function () {
+  const sm = a => D.SALARIO_MINIMO[a + '-01-01'];
+  const esp = r2(r2(1000 * sm(2025) / sm(2024)) + r2(1000 * sm(2026) / sm(2024)));
+  caso('pensão com reajuste pelo salário mínimo', () => {
+    const ps = E.gerarPensao([{ inicio: '2024-01', fim: '2026-03', dia: 10, base: 'fixo', quantidade: 1000, reajuste: 'sm' }], '2026-10-31');
+    return r2(ps.find(p => p.chave === 'p:2025-03').valor + ps.find(p => p.chave === 'p:2026-03').valor);
+  }, esp);
+})();
+
+// 15. Deflação (Tema 678/STJ): IPCA de 05/2020 negativo; o valor não fica abaixo do nominal.
+caso('deflação preserva o nominal', { tipo: 'particular', dataCalculo: '2020-06-15', regime: 'nenhum', termoJuros: 'vencimento',
+  civel: { indice: 'ipca' }, parcelas: [{ vencimento: '2020-05-10', valor: 10000 }], pagamentos: [] }, 10000);
+// Deflação seguida de inflação: o índice acumulado real vale (abaixo de 1 só não reduz o nominal).
+caso('deflação e depois inflação', { tipo: 'particular', dataCalculo: '2020-09-15', regime: 'nenhum', termoJuros: 'vencimento',
+  civel: { indice: 'ipca' }, parcelas: [{ vencimento: '2020-05-10', valor: 10000 }], pagamentos: [] },
+  r2(10000 * Math.max(1, acum('IPCA', '2020-05', '2020-09'))));
+
+// 16. Art. 523, § 2º: pagamento depois do prazo abate o débito, mas não a base da multa e dos honorários.
+(function () {
+  const b = { tipo: 'particular', dataCalculo: '2026-10-31', regime: 'nenhum', termoJuros: 'vencimento',
+    parcelas: [{ vencimento: '2026-01-10', valor: 100000 }], multa: true, honorarios: true, honorariosPct: 10 };
+  const semPag = E.calcular(Object.assign({}, b, { pagamentos: [] })).totais.debito;
+  const comPag = E.calcular(Object.assign({}, b, { pagamentos: [{ data: '2026-01-20', valor: 60000 }] })).totais.debito;
+  caso('art. 523, pagamento dentro do prazo', Object.assign({}, b, { prazo523: '2026-01-30', pagamentos: [{ data: '2026-01-20', valor: 60000 }] }),
+    r2(comPag + 2 * r2(comPag * 0.1)));
+  caso('art. 523, pagamento depois do prazo', Object.assign({}, b, { prazo523: '2026-01-15', pagamentos: [{ data: '2026-01-20', valor: 60000 }] }),
+    r2(comPag + 2 * r2(semPag * 0.1)));
+})();
+
+// 17. Art. 85, § 16: honorários de sucumbência em quantia certa com juros desde o trânsito em julgado.
+(function () {
+  const fat = E.dados.FATORES_TJSP['2026-10'] / E.dados.FATORES_TJSP['2024-03'];
+  const vc = r2(5000 * fat);
+  const j = E.juros('2024-06-01', '2026-10-31', 'tjsp').pct;
+  const semSuc = E.calcular({ tipo: 'particular', dataCalculo: '2026-10-31', regime: 'tjsp', termoJuros: 'vencimento', parcelas: [{ vencimento: '2024-01-10', valor: 10000 }], pagamentos: [] }).totais.total;
+  caso('sucumbência fixa com juros desde o trânsito', { tipo: 'particular', dataCalculo: '2026-10-31', regime: 'tjsp', termoJuros: 'vencimento',
+    parcelas: [{ vencimento: '2024-01-10', valor: 10000 }], pagamentos: [],
+    sucumbencia: { base: 'fixo', valor: 5000, data: '2024-03-01', transito: '2024-06-01' } }, r2(semSuc + vc + r2(vc * j / 100)));
+})();
+
 let falhas = 0;
 casos.forEach(c => {
   let tot;
-  try { tot = E.calcular(c.entrada).totais.total; } catch (e) { console.log('ERRO   ' + c.nome + ': ' + e.message); falhas++; return; }
+  try { tot = typeof c.entrada === 'function' ? c.entrada() : E.calcular(c.entrada).totais.total; } catch (e) { console.log('ERRO   ' + c.nome + ': ' + e.message); falhas++; return; }
   const ok = Math.abs(tot - c.esperado) <= 0.011;
   if (!ok) falhas++;
   console.log((ok ? 'ok     ' : 'DIFERE ') + c.nome + ': ' + tot.toFixed(2) + (ok ? '' : ' (conta à mão ' + c.esperado.toFixed(2) + ')'));

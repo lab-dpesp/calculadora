@@ -105,11 +105,12 @@ function parcelaCivel(p, c, e) {
   }
   const jEf = j > b ? j : b;
   if (!selic) {
-    const f = fator(cor, mesDe(b), mesDe(c));
-    if (mesDe(b) !== mesDe(c)) { P = r2(P * f); J = r2(J * f); }
+    const f = Math.max(1, fator(cor, mesDe(b), mesDe(c)));   // Tema 678/STJ: preservado o valor nominal
+    if (mesDe(b) !== mesDe(c) && f !== 1) { P = r2(P * f); J = r2(J * f); }
     if (reg !== 'nenhum' && jEf < c) J = r2(J + r2(P * jurosPct(jEf, c, reg, o) / 100));
     return { P, J };
   }
+  let R = 1;   // índice acumulado real desde o início da correção (o aplicado nunca fica abaixo de 1)
   const cortes = [b, c];
   if (jEf > b && jEf < c) cortes.push(jEf);
   if (reg === 'selic_tl' && VIG > b && VIG < c) cortes.push(VIG);
@@ -118,7 +119,10 @@ function parcelaCivel(p, c, e) {
     const x = cortes[i], y = cortes[i + 1];
     if (x === y) continue;
     if (x >= jEf && (reg === 'selic' || x < VIG)) { J = r2(J + r2(P * somaDiaria(D.SELIC, x, y) / 100)); continue; }
-    if (mesDe(x) !== mesDe(y)) { const f = fator(cor, mesDe(x), mesDe(y)); P = r2(P * f); J = r2(J * f); }
+    if (mesDe(x) !== mesDe(y)) {
+      const R2 = R * fator(cor, mesDe(x), mesDe(y)), g = Math.max(1, R2) / Math.max(1, R); R = R2;
+      if (g !== 1) { P = r2(P * g); J = r2(J * g); }
+    }
     if (x >= jEf) J = r2(J + r2(P * somaDiaria(D.TAXA_LEGAL, x, y) / 100));
   }
   return { P, J };
@@ -138,7 +142,7 @@ function parcelaFazenda(p, c, e) {
   const selicDe = [M1, j, b].sort()[2];
   const y = c < selicDe ? c : selicDe;
   if (b < selicDe) {
-    if (mesDe(b) !== mesDe(y)) { const f = fator({ indice: 'ipcae' }, mesDe(b), mesDe(y)); P = r2(P * f); J = r2(J * f); }
+    if (mesDe(b) !== mesDe(y)) { const f = Math.max(1, fator({ indice: 'ipcae' }, mesDe(b), mesDe(y))); if (f !== 1) { P = r2(P * f); J = r2(J * f); } }
     const a = j > b ? j : b, bj = y < M1 ? y : M1;
     if (a < bj) J = r2(J + r2(P * somaDiaria(D.JUROS_POUPANCA, a, bj) / 100));
   }
@@ -187,7 +191,7 @@ function esperadoCivel(c) {
   const mc = e.civel.multaContratualPct ? r2(cap * e.civel.multaContratualPct / 100) : 0;
   let suc = 0, s = e.sucumbencia;
   if (s && s.base === 'condenacao') suc = r2(r2(sub + mc) * s.pct / 100);
-  if (s && s.base !== 'condenacao') { const vc = r2(s.valor * fator(c.cor, mesDe(s.data), mesDe(e.dataCalculo))); suc = s.base === 'causa' ? r2(vc * s.pct / 100) : vc; }
+  if (s && s.base !== 'condenacao') { const vc = r2(s.valor * Math.max(1, fator(c.cor, mesDe(s.data), mesDe(e.dataCalculo)))); suc = s.base === 'causa' ? r2(vc * s.pct / 100) : vc; }
   const deb = r2(sub + mc + suc);
   const total = r2(deb + (e.multa ? r2(deb * 0.1) : 0) + (e.honorarios ? r2(deb * e.honorariosPct / 100) : 0));
   return { total, cap, jur };

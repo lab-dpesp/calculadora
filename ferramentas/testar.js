@@ -25,6 +25,7 @@ function entrada(d) {
       rendimentos: p.rendimentos, reajuste: p.reajuste, dataBase: p.dataBase }; }),
     ajustes: d.ajustes || [], dataAjuizamento: d.ajuizamento ? d.ajuizamento.data : '', parcelas: d.parcelas, pagamentos: d.pagamentos,
     multa: !!(d.encargos && d.encargos.multa), honorarios: !!(d.encargos && d.encargos.honorariosPct), honorariosPct: d.encargos && d.encargos.honorariosPct,
+    prazo523: d.encargos ? d.encargos.prazo523 : '',
     civel: d.civel, jurosDuas: j.duas, sucumbencia: d.sucumbencia };
 }
 let falhas = 0;
