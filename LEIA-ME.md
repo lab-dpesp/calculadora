@@ -115,7 +115,12 @@ A mesma pasta funciona como site: basta publicar `calc.html` (renomeado para `in
 
 - verde: até 1,3 vez a média; amarelo: acima de 1,3 e até 1,5 vez; vermelho: acima de 1,5 vez; cinza: sem comparação possível;
 - os limites ficam em `TRAFFIC_LIMITS`, em `contrato/regras.js`;
-- `ferramentas/atualizar-series-contrato.js` atualiza as séries do BACEN na publicação diária e `ferramentas/testar-contrato.js` roda os testes do módulo;
+- `node ferramentas/testar-contrato-aleatorio.js [quantidade] [semente]` estressa os cálculos com casos reprodutíveis (padrão: 2.000 casos e semente 20261030);
+- `node ferramentas/testar-contrato-abordagens.js` compara com fórmulas independentes e confere gabaritos, propriedades e datas de calendário;
+- `node ferramentas/testar-series-contrato.js` simula falhas e respostas inválidas do BACEN sem internet;
+- `npm ci && npx playwright install chromium firefox webkit` seguido de `CONTRACT_BROWSER=chromium node ferramentas/testar-contrato-navegador.js [quantidade] [semente]` (troque por `firefox` ou `webkit`) valida a tela, acessibilidade e larguras de tela;
+- `node ferramentas/testar-mutantes-contrato.js` verifica se as regressões do módulo detectam alterações deliberadas na taxa, nas datas e no arredondamento;
+- `ferramentas/atualizar-series-contrato.js` atualiza as séries do BACEN na publicação diária e `ferramentas/testar-contrato.js` roda os testes de regressão do módulo;
 - é análise preliminar de triagem, não conclusão jurídica.
 
 ## Limitações
