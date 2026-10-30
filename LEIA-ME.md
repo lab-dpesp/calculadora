@@ -109,6 +109,15 @@ A mesma pasta funciona como site: basta publicar `calc.html` (renomeado para `in
 - `.github/workflows/publicar-web.yml` é um modelo de rotina diária (06:30 de Brasília) que roda os dois scripts e publica o site; para o servidor da Defensoria ou um pacote do SharePoint, troque só o passo final de envio.
 - Também dá para atualizar sem internet no servidor: exporte o arquivo de índices pela extensão e rode `node ferramentas/atualizar-indices.js --series=arquivo.json`.
 
+## Análise de contrato bancário (protótipo)
+
+`contrato.html` é um módulo separado, ligado pelo botão "Análise de contrato bancário" na calculadora. Compara os juros do contrato (crédito pessoal não consignado, consignado e veículos) com a taxa média do Banco Central do mês da contratação e mostra um semáforo:
+
+- verde: até 1,3 vez a média; amarelo: acima de 1,3 e até 1,5 vez; vermelho: acima de 1,5 vez; cinza: sem comparação possível;
+- os limites ficam em `TRAFFIC_LIMITS`, em `contrato/regras.js`;
+- `ferramentas/atualizar-series-contrato.js` atualiza as séries do BACEN na publicação diária e `ferramentas/testar-contrato.js` roda os testes do módulo;
+- é análise preliminar de triagem, não conclusão jurídica.
+
 ## Limitações
 
 - Fazenda: só natureza não tributária, com vencimentos a partir de 07/2009. Não trata previdenciário, tributário nem desapropriação, nem o período posterior à expedição do requisitório.
