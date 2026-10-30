@@ -111,16 +111,23 @@ A mesma pasta funciona como site: basta publicar `calc.html` (renomeado para `in
 
 ## Análise de contrato bancário (protótipo)
 
-`contrato.html` é um módulo separado, ligado pelo botão "Análise de contrato bancário" na calculadora. Compara os juros do contrato (crédito pessoal não consignado, consignado e veículos) com a taxa média do Banco Central do mês da contratação e mostra um semáforo:
+`contrato.html` é um módulo separado, ligado pelo botão "Análise de contrato bancário" na calculadora. Compara os juros do contrato (crédito pessoal não consignado, consignado e veículos) com a taxa média mensal do Banco Central da competência exata do contrato e mostra um semáforo:
 
 - verde: até 1,3 vez a média; amarelo: acima de 1,3 e até 1,5 vez; vermelho: acima de 1,5 vez; cinza: sem comparação possível;
+- não extrapola nem troca a competência: antes da primeira observação informa o mês de início daquela série; depois da última, informa a última competência disponível. Os limites vêm das observações carregadas em `contrato/series-bacen.js`, não de datas fixadas na tela;
+- no consignado, escolha INSS (SGS 25468), setor público (SGS 25467) ou setor privado (SGS 25466). Se não souber, a tabela mostra as três séries e o semáforo usa a maior média disponível. A série agregada (SGS 25469) permanece só como informação adicional. Para "não sei / CDC genérico", compara crédito pessoal (SGS 25464) e veículos (SGS 25471) pelo mesmo critério conservador; candidatas sem observação aparecem como "sem dado";
+- nas séries atuais, as primeiras competências informadas são 03/2011 (SGS 25464), 01/2004 (consignado agregado, SGS 25469) e 06/2000 (veículos, SGS 25471). Para as três séries novas por subtipo, a primeira competência é apurada dos dados oficiais recebidos, sem ser fixada no código;
+- a importação do Copilot é somente local: crie um agente com as instruções de `agente-copilot-contrato.txt` (menos de 8.000 caracteres). Ele devolve JSON `contrato-copilot`, versão 1, com origem de cada dado e pendências; não calcula nem presume. Cole a resposta, clique "Ler dados", confira a prévia e escolha "Preencher a análise". Campos importados exibem sua fonte e o resultado fica "a conferir" até "Concluí a revisão". Bloco malformado, versão desconhecida e campos com tipo inválido são recusados; o texto é dado, nunca HTML ou código executável;
+- CSV e JSON registram a modalidade escolhida, a eventual ambiguidade e a série que definiu o semáforo;
+- tema Automático/Claro/Escuro usa `tema.js` e compartilha a escolha salva (`calcjur:tema`) com a calculadora principal. O botão de ajuda "i" abre explicações; se a página estiver embutida, "Abrir em nova aba" fica disponível;
 - os limites ficam em `TRAFFIC_LIMITS`, em `contrato/regras.js`;
 - `node ferramentas/testar-contrato-aleatorio.js [quantidade] [semente]` estressa os cálculos com casos reprodutíveis (padrão: 2.000 casos e semente 20261030);
 - `node ferramentas/testar-contrato-abordagens.js` compara com fórmulas independentes e confere gabaritos, propriedades e datas de calendário;
 - `node ferramentas/testar-series-contrato.js` simula falhas e respostas inválidas do BACEN sem internet;
 - `npm ci && npx playwright install chromium firefox webkit` seguido de `CONTRACT_BROWSER=chromium node ferramentas/testar-contrato-navegador.js [quantidade] [semente]` (troque por `firefox` ou `webkit`) valida a tela, acessibilidade e larguras de tela;
 - `node ferramentas/testar-mutantes-contrato.js` verifica se as regressões do módulo detectam alterações deliberadas na taxa, nas datas e no arredondamento;
-- `ferramentas/atualizar-series-contrato.js` atualiza as séries do BACEN na publicação diária e `ferramentas/testar-contrato.js` roda os testes de regressão do módulo;
+- `ferramentas/atualizar-series-contrato.js` atualiza as séries do BACEN na publicação diária e informa o início e fim de cada série; `ferramentas/testar-contrato.js` roda os testes de regressão do módulo;
+- os códigos específicos do consignado e seus metadados estão em `contrato/catalogo-bacen.js`, com links para os conjuntos oficiais do SGS. O primeiro e o último mês são calculados a partir dos dados baixados, pois a cobertura pode mudar quando o Banco Central publica novas observações;
 - é análise preliminar de triagem, não conclusão jurídica.
 
 ## Limitações

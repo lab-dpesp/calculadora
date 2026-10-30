@@ -7,52 +7,115 @@
   <title>Análise de contrato bancário</title>
   <link rel="icon" href="icons/icon32.png">
   <link rel="stylesheet" href="contrato/contrato.css">
+  <script src="tema.js"></script>
 </head>
 <body>
+  <svg width="0" height="0" aria-hidden="true"><symbol id="i-tema" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></symbol></svg>
   <header class="topo">
-    <div>
+    <div class="topo-titulos">
       <a href="calc.html" class="voltar">← Calculadora de débitos</a>
       <h1>Análise de contrato bancário</h1>
       <p class="subtitulo">Ferramenta de apoio à triagem. Os resultados devem ser conferidos.</p>
     </div>
+    <div class="topo-acoes">
+      <a class="secundario" id="novaAba" href="contrato.html" target="_blank" rel="noopener" hidden>Abrir em nova aba</a>
+      <button type="button" class="secundario btn-tema" id="btnTema" title="Tema da tela: automático, claro ou escuro">
+        <svg class="icone-tema" aria-hidden="true"><use href="#i-tema"></use></svg><span id="rotuloTema">Automático</span>
+      </button>
+    </div>
   </header>
   <main class="pagina">
-    <p class="aviso" role="note"><strong>Análise preliminar, não é conclusão jurídica.</strong> Não informe nome, CPF ou nº do processo; os dados ficam no seu dispositivo.</p>
+    <p class="aviso aviso-escuro" role="note"><strong>Análise preliminar, não é conclusão jurídica.</strong> Não informe nome, CPF ou nº do processo; os dados ficam no seu dispositivo.</p>
+
+    <details class="painel painel-copilot" id="painelCopilot">
+      <summary>
+        <strong>Importar do Copilot</strong>
+      </summary>
+      <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button>
+      <span class="sub ajuda">Cole o bloco de extração do contrato. O Copilot não calcula; confira as fontes antes de preencher.</span>
+      <div>
+        <label for="textoCopilot">Resposta do Copilot</label>
+        <textarea id="textoCopilot" rows="6" placeholder="Cole aqui a resposta inteira, incluindo o bloco JSON entre chaves."></textarea>
+        <p class="nota">A leitura ocorre neste navegador. O texto não é enviado para fora.</p>
+        <div class="acoes copilot-acoes">
+          <button type="button" class="primario" id="lerCopilot">Ler dados</button>
+          <button type="button" class="secundario" id="limparCopilot">Limpar</button>
+        </div>
+        <div id="previaCopilot" hidden>
+          <div id="errosCopilot" class="erro" role="alert" hidden></div>
+          <div id="avisosCopilot" class="nota" role="status"></div>
+          <div class="tabela-wrap">
+            <table id="tabCopilot">
+              <thead><tr><th>Item</th><th>Dado</th><th>Origem informada pelo Copilot</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="acoes"><button type="button" class="primario" id="aplicarCopilot" disabled>Preencher a análise</button></div>
+        </div>
+      </div>
+    </details>
+
+    <section class="painel revisao" id="revisao" hidden aria-live="polite">
+      <h2>Dados importados — a conferir</h2>
+      <p>Confira cada valor no documento e revise as pendências apontadas. A análise permanece marcada "a conferir" até concluir a revisão.</p>
+      <ul id="revisaoPendencias"></ul>
+      <button type="button" class="primario" id="concluirRevisao">Concluí a revisão</button>
+    </section>
 
     <form id="formContrato" autocomplete="off" novalidate>
       <section class="painel">
         <h2>Dados do contrato</h2>
         <div class="grade">
-          <label>Modalidade
+          <div class="campo-modalidade">
+            <label for="modality">Modalidade</label>
             <select id="modality" required>
               <option value="personal_unsecured">Crédito pessoal não consignado</option>
               <option value="payroll">Consignado parcelado</option>
               <option value="vehicle_finance">Financiamento de veículo</option>
+              <option value="personal_or_vehicle">Não sei / CDC genérico (veículo ou crédito pessoal)</option>
               <option disabled>Cheque especial — módulo em desenvolvimento</option>
               <option disabled>Cartão / RMC / RCC — módulo em desenvolvimento</option>
             </select>
+            <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação sobre modalidade">i</button>
+            <span class="ajuda">Se não souber se o CDC é de veículo ou crédito pessoal, escolha "Não sei / CDC genérico".</span>
+            <span class="campo-origem" data-origem="modality"></span>
+          </div>
+          <label id="payrollSubtypeField" hidden>Subtipo do consignado
+            <select id="payrollSubtype">
+              <option value="nao_sei">Não sei</option>
+              <option value="inss">Aposentados e pensionistas do INSS</option>
+              <option value="servidor_publico">Servidores públicos</option>
+              <option value="setor_privado">Trabalhadores do setor privado</option>
+            </select>
+            <span class="campo-origem" data-origem="payrollSubtype"></span>
           </label>
           <label>Data do contrato
             <input id="contractDate" type="date">
+            <span class="campo-origem" data-origem="contractDate"></span>
           </label>
           <label>Valor financiado (R$)
             <input id="financedAmount" inputmode="decimal" required placeholder="Ex.: 10.000,00">
+            <span class="campo-origem" data-origem="financedAmount"></span>
           </label>
           <label>Número de parcelas
             <input id="installments" type="number" min="1" max="1200" step="1" required>
+            <span class="campo-origem" data-origem="installments"></span>
           </label>
           <label>Valor da parcela (R$)
             <input id="installmentAmount" inputmode="decimal" required placeholder="Ex.: 700,00">
+            <span class="campo-origem" data-origem="installmentAmount"></span>
           </label>
           <label>Juros remuneratórios informados (% ao mês)
             <input id="monthlyRate" inputmode="decimal" placeholder="Ex.: 5,5">
+            <span class="campo-origem" data-origem="monthlyRate"></span>
           </label>
           <label>Sistema de amortização
             <select id="amortization" required>
               <option value="PRICE">Price</option>
               <option value="SAC">SAC</option>
-              <option disabled>Desconhecido / irregular — informe os fluxos detalhados fora deste MVP</option>
+              <option value="unknown">Desconhecido / irregular — informe os fluxos detalhados fora deste MVP</option>
             </select>
+            <span class="campo-origem" data-origem="amortization"></span>
           </label>
         </div>
         <p class="nota">Use somente dados do contrato ou dos extratos. Campos desconhecidos ficam em branco.</p>
@@ -88,15 +151,19 @@
           </label>
           <label>Data da liberação do crédito
             <input id="disbursementDate" type="date">
+            <span class="campo-origem" data-origem="disbursementDate"></span>
           </label>
           <label>Valor líquido disponibilizado (R$)
             <input id="netDisbursed" inputmode="decimal" placeholder="Ex.: 1.000,00">
+            <span class="campo-origem" data-origem="netDisbursed"></span>
           </label>
           <label>Vencimento da primeira parcela
             <input id="firstDueDate" type="date">
+            <span class="campo-origem" data-origem="firstDueDate"></span>
           </label>
           <label>CET informado (% ao ano)
             <input id="statedCet" inputmode="decimal" placeholder="Opcional">
+            <span class="campo-origem" data-origem="statedCet"></span>
           </label>
           <label>Capitalização indicada no contrato
             <select id="capitalization">
@@ -104,6 +171,7 @@
               <option value="monthly">Mensal</option>
               <option value="annual">Anual</option>
             </select>
+            <span class="campo-origem" data-origem="capitalization"></span>
           </label>
         </div>
         <p id="reconhecimentoAviso" class="nota" hidden>Contratação não reconhecida: priorize a conferência documental; este módulo não avalia fraude.</p>
@@ -121,11 +189,19 @@
     </form>
 
     <section id="resultado" class="painel resultado" hidden aria-live="polite">
+      <p id="resultadoRevisao" class="nota pendente-revisao" hidden></p>
       <div id="semaforo" class="semaforo semaforo-gray" role="status">
         <span id="semaforoIcone" class="semaforo-icone" aria-hidden="true">?</span>
         <div>
           <strong id="semaforoTitulo"></strong>
           <p id="semaforoTexto"></p>
+        </div>
+        <div id="seriesCandidatas" class="tabela-wrap tabela-series" tabindex="0" aria-label="Tabela de séries candidatas" hidden>
+          <table>
+            <thead><tr><th>Série candidata</th><th>Código SGS</th><th>Média no mês</th><th>Razão</th></tr></thead>
+            <tbody id="seriesCandidatasBody"></tbody>
+          </table>
+          <p id="avisoAmbiguidade" class="nota"></p>
         </div>
       </div>
       <div id="cartoes" class="metricas cartoes"></div>
@@ -176,6 +252,7 @@
   <script src="contrato/series-bacen.js"></script>
   <script src="contrato/bacen.js"></script>
   <script src="contrato/regras.js"></script>
+  <script src="contrato/copilot-contrato.js"></script>
   <script src="contrato/app.js"></script>
 </body>
 </html>
