@@ -8,6 +8,7 @@ const financial = require('../contrato/financeiro.js');
 const legal = require('../contrato/regras.js');
 const bacen = require('../contrato/bacen.js');
 const snapshot = require('../contrato/series-bacen.js');
+const copilot = require('../contrato/copilot-contrato.js');
 const ROOT = path.resolve(__dirname, '..');
 let passed = 0;
 
@@ -33,7 +34,9 @@ test('T1 Price, taxa implícita, simulação e TAC por vigência', function () {
   snapshot.consultedAt = '2026-10-30T00:00:00.000Z';
   const comparison = bacen.compareRates(0.093, bacen.observation('personal_unsecured', '2026-08'));
   close(comparison.differencePercentagePoints, 1.87, 1e-10);
-  assert.ok(legal.evaluate({ monthlyRate: 0.093, comparison }).some((item) => item.id === 'JUR_001'));
+  const rateFinding = legal.evaluate({ monthlyRate: 0.093, comparison }).find((item) => item.id === 'JUR_001');
+  assert.ok(rateFinding);
+  assert.match(rateFinding.message, /série de referência BACEN usada/);
   delete snapshot.observations['25464'];
   snapshot.consultedAt = null;
 });
@@ -216,6 +219,102 @@ test('T26 formatos numéricos de entrada comuns e sujos', function () {
   });
   assert.ok(legal.trafficLight({ available: true, ratio: 1.3 }).state === 'green');
   assert.ok(legal.trafficLight({ available: true, ratio: 1.5 }).state === 'yellow');
+});
+test('T27 início e fim da série vêm das observações carregadas, sem extrapolação', function () {
+  const original = snapshot.observations['25464'];
+  snapshot.observations['25464'] = [
+    { month: '2011-03', value: 5.5 },
+    { month: '2011-04', value: 5.6 },
+    { month: '2026-09', value: 6.1 }
+  ];
+  try {
+    const before = bacen.observation('personal_unsecured', '2011-02');
+    assert.strictEqual(before.available, false);
+    assert.strictEqual(before.period, 'before');
+    assert.match(before.reason, /começa em 03\/2011; este contrato é de 02\/2011/);
+    assert.strictEqual(bacen.observation('personal_unsecured', '2011-03').value, 5.5);
+    const after = bacen.observation('personal_unsecured', '2026-10');
+    assert.strictEqual(after.available, false);
+    assert.strictEqual(after.period, 'after');
+    assert.match(after.reason, /para 10\/2026 ainda não foi divulgada \(última disponível: 09\/2026\)/);
+    assert.strictEqual(legal.trafficLight(before).state, 'gray');
+    assert.strictEqual(legal.trafficLight(after).state, 'gray');
+  } finally {
+    if (original === undefined) delete snapshot.observations['25464'];
+    else snapshot.observations['25464'] = original;
+  }
+});
+test('T28 consignado não identificado escolhe a maior média e preserva todas as candidatas', function () {
+  const keys = ['25466', '25467', '25468'];
+  const previous = keys.map((key) => snapshot.observations[key]);
+  snapshot.observations['25466'] = [{ month: '2025-01', value: 3.2 }];
+  snapshot.observations['25467'] = [{ month: '2025-01', value: 4.1 }];
+  snapshot.observations['25468'] = [{ month: '2025-01', value: 2.8 }];
+  try {
+    const result = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+    assert.strictEqual(result.ambiguous, true);
+    assert.strictEqual(result.candidates.length, 3);
+    assert.strictEqual(result.selected.key, 'payroll_public');
+    close(result.comparison.bacenPercent, 4.1, 1e-12);
+    close(result.comparison.ratio, 6 / 4.1, 1e-12);
+    assert.deepStrictEqual(bacen.candidateKeys('payroll', 'inss'), ['payroll_inss']);
+    assert.deepStrictEqual(bacen.candidateKeys('personal_or_vehicle'), ['personal_unsecured', 'vehicle_finance']);
+    delete snapshot.observations['25467'];
+    const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+    assert.strictEqual(partial.selected.key, 'payroll_private');
+    assert.strictEqual(partial.candidates.find((item) => item.key === 'payroll_public').observation.available, false);
+    ['25466', '25468'].forEach((key) => { delete snapshot.observations[key]; });
+    const none = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+    assert.strictEqual(none.comparison.available, false);
+    assert.strictEqual(legal.trafficLight(none.comparison).state, 'gray');
+  } finally {
+    keys.forEach((key, index) => {
+      if (previous[index] === undefined) delete snapshot.observations[key];
+      else snapshot.observations[key] = previous[index];
+    });
+  }
+});
+test('T29 leitor Copilot aceita dados e pendências e recusa malformado, malicioso e versão desconhecida', function () {
+  const block = {
+    formato: 'contrato-copilot', versao: 1,
+    modalidade: { valor: 'consignado', origem: 'Cláusula 2, p. 3' },
+    subtipoConsignado: { valor: 'nao_sei', origem: 'Informado pelo usuário' },
+    contratacaoReconhecida: { valor: 'unknown', origem: 'Informado pelo usuário' },
+    questaoPrincipal: { valor: 'Conferir valores', origem: 'Informado pelo usuário' },
+    origemPrincipalInformacoes: { valor: 'contract', origem: 'Contrato anexado' },
+    dataContrato: { valor: '2025-03-10', origem: 'Cláusula 1' },
+    dataLiberacao: { valor: null, origem: '' },
+    dataPrimeiroVencimento: { valor: '2025-04-10', origem: 'Quadro 4' },
+    valorFinanciado: { valor: 10000, origem: 'Quadro 4' },
+    valorLiquidoDisponibilizado: { valor: null, origem: '' },
+    numeroParcelas: { valor: 24, origem: 'Quadro 4' },
+    valorParcela: { valor: 600, origem: 'Quadro 4' },
+    jurosMensaisPct: { valor: 2.5, origem: 'Cláusula 5' },
+    cetAnualPct: { valor: null, origem: '' },
+    sistemaAmortizacao: { valor: 'PRICE', origem: 'Cláusula 5' },
+    capitalizacao: { valor: null, origem: '' },
+    encargos: [{ tipo: 'insurance', valor: 100, formaPagamento: 'financed',
+      descricao: '<img src=x onerror=alert(1)>', origem: 'Quadro 4' }],
+    pendencias: ['Confirmar se há seguro facultativo']
+  };
+  const valid = copilot.ler('```json\n' + JSON.stringify(block) + '\n```');
+  assert.deepStrictEqual(valid.erros, []);
+  assert.deepStrictEqual(valid.dados.pending, ['Confirmar se há seguro facultativo']);
+  assert.strictEqual(copilot.toInput(valid.dados).modality, 'payroll');
+  assert.strictEqual(copilot.toInput(valid.dados).payrollSubtype, 'nao_sei');
+  assert.strictEqual(valid.dados.rows.find((row) => row.item.indexOf('Encargo:') === 0).value,
+    '100 · financed');
+  assert.strictEqual(copilot.ler('texto sem objeto').dados, null);
+  assert.match(copilot.ler(Object.assign({}, block, { versao: 2 })).erros.join(' '), /versão.*não suportada/i);
+  const badType = JSON.parse(JSON.stringify(block));
+  badType.numeroParcelas.valor = [24];
+  assert.match(copilot.ler(badType).erros.join(' '), /tipo de dado inválido/);
+  const missingOrigin = JSON.parse(JSON.stringify(block));
+  missingOrigin.valorParcela.origem = '';
+  assert.match(copilot.ler(missingOrigin).erros.join(' '), /informe a origem do dado/);
+  const badDate = JSON.parse(JSON.stringify(block));
+  badDate.dataContrato.valor = '2025-02-30';
+  assert.match(copilot.ler(badDate).erros.join(' '), /data inexistente/);
 });
 
 console.log('Todos os ' + passed + ' testes de contrato passaram.');

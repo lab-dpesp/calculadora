@@ -48,6 +48,7 @@ async function mustPreservePrevious(name, fetchImpl, options = {}) {
     });
     assert.strictEqual(result.catalogVersion, catalog.version);
     assert.strictEqual(require(output).observations['25464'][0].month, '2025-01');
+    assert.deepStrictEqual(Object.keys(result.observations).sort(), ['25464', '25466', '25467', '25468', '25469', '25471']);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -68,6 +69,11 @@ async function mustPreservePrevious(name, fetchImpl, options = {}) {
   await mustPreservePrevious('valor nulo', fetchFor(() => [{ data: '01/01/2025', valor: null }]));
   await mustPreservePrevious('formato de conteúdo inesperado', async () => response([], 'text/html'));
   await mustPreservePrevious('API fora do ar', async () => ({ ok: false, status: 503 }), { retryDelayMs: 0 });
+  await mustPreservePrevious('falha na nova série consignada', async (url) => {
+    if (url.includes('.25467/')) return { ok: false, status: 503 };
+    const code = Number(url.match(/bcdata\.sgs\.(\d+)/)[1]);
+    return response(rowsFor(code));
+  }, { retryDelayMs: 0 });
   await mustPreservePrevious('API lenta', async (_url, { signal }) => new Promise((resolve, reject) => {
     signal.addEventListener('abort', () => reject(new Error('tempo esgotado')), { once: true });
   }), { timeoutMs: 2, retryDelayMs: 0 });
@@ -77,7 +83,7 @@ async function mustPreservePrevious(name, fetchImpl, options = {}) {
   try {
     const missing = bacen.observation('personal_unsecured', '2025-02');
     assert.strictEqual(missing.available, false);
-    assert.match(missing.reason, /Sem observação BACEN exata/);
+    assert.match(missing.reason, /ainda não foi divulgada \(última disponível: 01\/2025\)/);
     assert.strictEqual(require('../contrato/regras.js').trafficLight(missing).state, 'gray');
   } finally {
     snapshot.observations['25464'] = original;

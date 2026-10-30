@@ -72,7 +72,8 @@ async function updateSeries(options = {}) {
     if (!entry.eligibleForComparison) continue;
     const data = await fetchSeries(entry.seriesCode, options);
     observations[String(entry.seriesCode)] = data;
-    if (options.log !== false) console.log('SGS ' + entry.seriesCode + ': ' + data.length + ' observações, competência mais recente ' + data[data.length - 1].month + '.');
+    if (options.log !== false) console.log('SGS ' + entry.seriesCode + ': ' + data.length + ' observações (' +
+      data[0].month + ' a ' + data[data.length - 1].month + ').');
   }
   const snapshot = { catalogVersion: catalog.version, consultedAt: (options.now || (() => new Date()))().toISOString(), observations };
   const contents = '(function (root) {\n  \'use strict\';\n  var snapshot = ' +

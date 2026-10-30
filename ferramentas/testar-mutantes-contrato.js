@@ -12,7 +12,7 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mutantes-contrato-'));
 const files = [
   'contrato.html',
   'contrato/financeiro.js', 'contrato/regras.js', 'contrato/bacen.js',
-  'contrato/catalogo-bacen.js', 'contrato/series-bacen.js',
+  'contrato/catalogo-bacen.js', 'contrato/series-bacen.js', 'contrato/copilot-contrato.js',
   'ferramentas/testar-contrato.js', 'ferramentas/testar-contrato-abordagens.js',
   'ferramentas/casos-contrato/gabaritos.json'
 ];

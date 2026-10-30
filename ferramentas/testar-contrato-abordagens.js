@@ -121,15 +121,19 @@ checkClose(regressionCet * 100, 72.17, 0.01, 'CET do caso de regressão');
 
 const originalSeries = snapshot.observations['25464'];
 snapshot.observations['25464'] = [
-  { month: '2000-01', value: 5.1 }, { month: '2026-10', value: 5.5 }
+  { month: '2011-03', value: 5.1 }, { month: '2026-09', value: 5.5 }
 ];
 try {
-  const firstObservation = bacen.observation('personal_unsecured', '2000-01');
-  const lastObservation = bacen.observation('personal_unsecured', '2026-10');
+  const firstObservation = bacen.observation('personal_unsecured', '2011-03');
+  const lastObservation = bacen.observation('personal_unsecured', '2026-09');
   assert.strictEqual(firstObservation.available, true, 'primeira competência simulada indisponível');
   assert.strictEqual(lastObservation.available, true, 'última competência simulada indisponível');
-  assert.strictEqual(bacen.observation('personal_unsecured', '1999-12').available, false);
-  assert.strictEqual(bacen.observation('personal_unsecured', '2026-11').available, false);
+  const beforeStart = bacen.observation('personal_unsecured', '2011-02');
+  assert.strictEqual(beforeStart.available, false);
+  assert.match(beforeStart.reason, /começa em 03\/2011; este contrato é de 02\/2011/);
+  const afterLast = bacen.observation('personal_unsecured', '2026-10');
+  assert.strictEqual(afterLast.available, false);
+  assert.match(afterLast.reason, /última disponível: 09\/2026/);
   const observationForDate = (date) => bacen.observation('personal_unsecured', date.slice(0, 7));
   const sameMonthA = observationForDate('2000-01-02');
   const sameMonthB = observationForDate('2000-01-31');
@@ -138,5 +142,25 @@ try {
   snapshot.observations['25464'] = originalSeries;
 }
 
-console.log('Propriedades metamórficas, datas (29/30/31, fevereiro, ano e bissexto) e limites da série BACEN passaram.');
-console.log('a decidir: série para modalidade ambígua e contratos fora do período observado pelo BACEN.');
+const payrollCodes = ['25466', '25467', '25468'];
+const originalPayroll = payrollCodes.map((code) => snapshot.observations[code]);
+snapshot.observations['25466'] = [{ month: '2025-01', value: 3.2 }];
+snapshot.observations['25467'] = [{ month: '2025-01', value: 4.1 }];
+snapshot.observations['25468'] = [{ month: '2025-01', value: 2.8 }];
+try {
+  const ambiguous = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+  assert.strictEqual(ambiguous.ambiguous, true);
+  assert.strictEqual(ambiguous.selected.key, 'payroll_public');
+  assert.strictEqual(ambiguous.comparison.bacenPercent, 4.1);
+  delete snapshot.observations['25467'];
+  const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+  assert.strictEqual(partial.selected.key, 'payroll_private');
+  assert.strictEqual(partial.candidates.find((item) => item.key === 'payroll_public').observation.available, false);
+} finally {
+  payrollCodes.forEach((code, index) => {
+    if (originalPayroll[index] === undefined) delete snapshot.observations[code];
+    else snapshot.observations[code] = originalPayroll[index];
+  });
+}
+
+console.log('Propriedades metamórficas, datas (29/30/31, fevereiro, ano e bissexto), período BACEN e maior média entre candidatas passaram.');

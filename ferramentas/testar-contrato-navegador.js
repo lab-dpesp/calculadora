@@ -109,6 +109,7 @@ async function servePage() {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const errors = [];
   await page.addInitScript(() => {
+    try { localStorage.setItem('calcjur:tema', 'auto'); } catch (_) {}
     Element.prototype.scrollIntoView = function () {};
   });
   page.on('dialog', (dialog) => dialog.accept());
@@ -119,6 +120,17 @@ async function servePage() {
   await page.goto(baseUrl + '/contrato.html');
   await page.waitForSelector('#formContrato');
   await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  assert.strictEqual(await page.locator('#rotuloTema').innerText(), 'Automático');
+  await page.locator('#btnTema').click();
+  assert.strictEqual(await page.locator('#rotuloTema').innerText(), 'Claro');
+  assert.strictEqual(await page.locator('html').getAttribute('data-tema'), 'claro');
+  assert.strictEqual(await page.evaluate(() => localStorage.getItem('calcjur:tema')), 'claro');
+  await page.locator('#btnTema').click();
+  assert.strictEqual(await page.locator('#rotuloTema').innerText(), 'Escuro');
+  assert.strictEqual(await page.locator('html').getAttribute('data-tema'), 'escuro');
+  await page.locator('#btnTema').click();
+  assert.strictEqual(await page.locator('#rotuloTema').innerText(), 'Automático');
+  assert.strictEqual(await page.locator('html').getAttribute('data-tema'), null);
   await assertAccessible(page, 'antes do cálculo');
   assert.strictEqual(await page.locator('#maisOpcoes').evaluate((node) => node.open), false);
   await page.locator('#contractDate').fill('2025-03-10');
@@ -142,6 +154,89 @@ async function servePage() {
   await page.getByRole('button', { name: 'Calcular análise' }).click();
   assert.strictEqual(await page.locator('#resultado').innerText(), regressionResult, 'recalcular mudou o resultado');
   await assertAccessible(page, 'depois do cálculo');
+
+  await page.goto(baseUrl + '/contrato.html');
+  await page.waitForSelector('#formContrato');
+  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  await page.evaluate(() => { window.__contractCopilotXss = 0; });
+  const contractBlock = {
+    formato: 'contrato-copilot', versao: 1,
+    modalidade: { valor: 'credito_pessoal_nao_consignado', origem: 'Cláusula 2, p. 3' },
+    subtipoConsignado: { valor: null, origem: '' },
+    contratacaoReconhecida: { valor: 'unknown', origem: 'Informado pelo usuário' },
+    questaoPrincipal: { valor: 'Conferir valores', origem: 'Informado pelo usuário' },
+    origemPrincipalInformacoes: { valor: 'contract', origem: 'Contrato anexado' },
+    dataContrato: { valor: '2025-03-10', origem: 'Cláusula 1' },
+    dataLiberacao: { valor: '2025-03-10', origem: 'Quadro 4' },
+    dataPrimeiroVencimento: { valor: '2025-04-10', origem: 'Quadro 4' },
+    valorFinanciado: { valor: 10000, origem: 'Quadro 4' },
+    valorLiquidoDisponibilizado: { valor: 10000, origem: 'Informado pelo usuário' },
+    numeroParcelas: { valor: 24, origem: 'Quadro 4' },
+    valorParcela: { valor: 700, origem: 'Quadro 4' },
+    jurosMensaisPct: { valor: 5.5, origem: 'Cláusula 5' },
+    cetAnualPct: { valor: null, origem: '' },
+    sistemaAmortizacao: { valor: 'PRICE', origem: 'Cláusula 5' },
+    capitalizacao: { valor: null, origem: '' },
+    encargos: [{ tipo: 'other', valor: 1, formaPagamento: 'upfront',
+      descricao: '<img src=x onerror="window.__contractCopilotXss++">', origem: 'Quadro 4' }],
+    pendencias: ['Confirmar a forma de pagamento do encargo']
+  };
+  await page.locator('#painelCopilot summary').click();
+  await page.locator('#textoCopilot').fill(JSON.stringify(contractBlock));
+  await page.getByRole('button', { name: 'Ler dados' }).click();
+  assert.ok(await page.locator('#tabCopilot tbody').innerText().then((text) => text.includes('Cláusula 2, p. 3')));
+  await page.getByRole('button', { name: 'Preencher a análise' }).click();
+  assert.ok(await page.locator('#revisao').isVisible());
+  assert.match(await page.locator('[data-origem="contractDate"]').innerText(), /Cláusula 1/);
+  assert.match(await page.locator('#encargos .campo-origem').innerText(), /Quadro 4/);
+  assert.strictEqual(await page.locator('#encargos img, #encargos script').count(), 0);
+  assert.strictEqual(await page.evaluate(() => window.__contractCopilotXss), 0);
+  await page.getByRole('button', { name: 'Calcular análise' }).click();
+  assert.ok(await page.locator('#erro').isHidden(), await page.locator('#erro').innerText());
+  await page.locator('#resultado').waitFor({ state: 'visible' });
+  assert.match(await page.locator('#resultadoRevisao').innerText(), /a conferir/i);
+  await page.getByRole('button', { name: 'Concluí a revisão' }).click();
+  assert.ok(await page.locator('#revisao').isHidden());
+  assert.ok(await page.locator('#resultadoRevisao').isHidden());
+
+  await page.goto(baseUrl + '/contrato.html');
+  await page.waitForSelector('#formContrato');
+  await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  await page.evaluate(() => {
+    window.ContratoSeriesBacen.observations['25464'] = [{ month: '2025-03', value: 5 }];
+    window.ContratoSeriesBacen.observations['25471'] = [{ month: '2025-03', value: 6 }];
+  });
+  await page.locator('#modality').selectOption('personal_or_vehicle');
+  await page.locator('#contractDate').fill('2025-03-10');
+  await page.locator('#financedAmount').fill('10.000,00');
+  await page.locator('#installments').fill('24');
+  await page.locator('#installmentAmount').fill('700,00');
+  await page.locator('#monthlyRate').fill('5,5');
+  await page.getByRole('button', { name: 'Calcular análise' }).click();
+  await page.locator('#resultado').waitFor({ state: 'visible' });
+  assert.strictEqual(await page.locator('#seriesCandidatas tbody tr').count(), 2);
+  assert.match(await page.locator('#semaforoTexto').innerText(),
+    /Modalidade não identificada com precisão: o semáforo usa a maior média entre as séries possíveis \(critério conservador\)/);
+  assert.match(await page.locator('#comparacao').textContent(), /SGS 25471/);
+  const [ambiguousJsonDownload] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar JSON' }).click()
+  ]);
+  const ambiguousJson = JSON.parse(fs.readFileSync(await ambiguousJsonDownload.path(), 'utf8'));
+  assert.strictEqual(ambiguousJson.result.bacenComparison.ambiguous, true);
+  assert.strictEqual(ambiguousJson.result.bacenComparison.seriesDefiningTrafficLight.seriesCode, 25471);
+  const [ambiguousCsvDownload] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar CSV' }).click()
+  ]);
+  const ambiguousCsv = fs.readFileSync(await ambiguousCsvDownload.path(), 'utf8');
+  assert.match(ambiguousCsv, /Modalidade ambígua.*sim/);
+  assert.match(ambiguousCsv, /SGS 25471/);
+  await page.locator('#btnTema').click();
+  await assertAccessible(page, 'tema claro com modalidade ambígua');
+  await page.locator('#btnTema').click();
+  await assertAccessible(page, 'tema escuro com modalidade ambígua');
+  await page.locator('#modality').selectOption('payroll');
+  assert.ok(await page.locator('#payrollSubtypeField').isVisible());
+  await page.locator('#payrollSubtype').selectOption('nao_sei');
   await page.goto(baseUrl + '/contrato.html');
   await page.waitForSelector('#formContrato');
   await page.locator('#monthlyRate').fill('5,5');
@@ -246,7 +341,7 @@ async function servePage() {
     page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar CSV' }).click()
   ]);
   const csv = require('fs').readFileSync(await csvDownload.path(), 'utf8');
-  assert.strictEqual(csv.split(/\r?\n/).length, 421, 'CSV de 420 prestações incompleto');
+  assert.strictEqual(csv.split(/\r?\n/).length, 425, 'CSV de 420 prestações incompleto ou sem metadados BACEN');
 
   await page.emulateMedia({ colorScheme: 'dark' });
   for (const width of [360, 768, 1440]) {

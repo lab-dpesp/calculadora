@@ -5,6 +5,7 @@ const assert = require('assert');
 const financial = require('../contrato/financeiro.js');
 const legal = require('../contrato/regras.js');
 const bacen = require('../contrato/bacen.js');
+const snapshot = require('../contrato/series-bacen.js');
 
 const quantity = Number(process.argv[2] || 2000);
 const originalSeed = Number(process.argv[3] || 20261030);
@@ -160,9 +161,24 @@ for (const ratio of [1, 1.3, 1.3000001, 1.5, 1.5000001]) {
   assert.strictEqual(legal.trafficLight({ available: true, ratio }).state, expected);
 }
 assert.strictEqual(legal.trafficLight({ available: false }).state, 'gray');
-const outsidePeriod = bacen.observation('personal_unsecured', '1999-12');
-assert.strictEqual(outsidePeriod.available, false);
-assert.strictEqual(legal.trafficLight(bacen.compareRates(0.05, outsidePeriod)).state, 'gray');
+const originalSeries = snapshot.observations['25464'];
+snapshot.observations['25464'] = [
+  { month: '2011-03', value: 5.1 }, { month: '2011-04', value: 5.2 },
+  { month: '2026-09', value: 5.5 }
+];
+try {
+  const outsidePeriod = bacen.observation('personal_unsecured', '2011-02');
+  assert.strictEqual(outsidePeriod.available, false);
+  assert.match(outsidePeriod.reason, /começa em 03\/2011; este contrato é de 02\/2011/);
+  assert.strictEqual(bacen.observation('personal_unsecured', '2011-03').available, true);
+  const futurePeriod = bacen.observation('personal_unsecured', '2026-10');
+  assert.strictEqual(futurePeriod.available, false);
+  assert.match(futurePeriod.reason, /última disponível: 09\/2026/);
+  assert.strictEqual(legal.trafficLight(bacen.compareRates(0.05, outsidePeriod)).state, 'gray');
+} finally {
+  if (originalSeries === undefined) delete snapshot.observations['25464'];
+  else snapshot.observations['25464'] = originalSeries;
+}
 assert.ok(financial.pricePayment(10000000, 0.04, 12) > financial.pricePayment(10000000, 0.02, 12),
   'juros maiores não elevaram a parcela Price');
 assert.ok(financial.pricePayment(10000000, 0.02, 24) < financial.pricePayment(10000000, 0.02, 12),
@@ -193,4 +209,4 @@ for (let index = 0; index < quantity; index++) {
 console.log(completed + ' contratos aleatórios válidos passaram; ' + rejected +
   ' combinações Price foram recusadas com mensagem clara (semente ' + originalSeed + ').');
 rejectedCases.forEach((item) => console.log('Price recusado: ' + JSON.stringify(item)));
-console.log('a decidir: contratos anteriores à série BACEN — sem extrapolação automática da comparação.');
+console.log('Competências anterior e posterior às observações BACEN permanecem sem extrapolação automática.');
