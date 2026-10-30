@@ -170,5 +170,52 @@ test('T23 níveis de cor nos pontos de atenção', function () {
   assert.strictEqual(items.find((item) => item.id === 'JUR_003').level, 'red');
   assert.strictEqual(items.find((item) => item.id === 'JUR_004').level, 'yellow');
 });
+test('T24 Price preserva parcelas constantes e recusa arredondamento incompatível', function () {
+  const rows = financial.schedulePrice(104100, 0.0885, 30);
+  assert.ok(rows.every((row) => row.installmentCents === rows[0].installmentCents));
+  assert.strictEqual(rows.reduce((sum, row) => sum + row.principalCents, 0), 104100);
+  assert.strictEqual(rows.at(-1).balanceCents, 0);
+  assert.throws(() => financial.schedulePrice(45509597, 0.13356062220409512, 123), /arredondamento em centavos/);
+  const zeroRate = financial.schedulePrice(10000, 0, 3);
+  assert.ok(zeroRate.every((row) => row.interestCents === 0));
+  assert.ok(Math.max(...zeroRate.map((row) => row.installmentCents)) -
+    Math.min(...zeroRate.map((row) => row.installmentCents)) <= 1);
+  assert.strictEqual(zeroRate.reduce((sum, row) => sum + row.principalCents, 0), 10000);
+});
+test('T25 SAC distribui centavos e datas incoerentes são rejeitadas', function () {
+  const rows = financial.scheduleSac(100001, 0.01, 12);
+  const amortizations = rows.map((row) => row.principalCents);
+  assert.ok(Math.max(...amortizations) - Math.min(...amortizations) <= 1);
+  assert.strictEqual(amortizations.reduce((sum, amount) => sum + amount, 0), 100001);
+  assert.ok(rows.every((row, index) => !index || row.installmentCents <= rows[index - 1].installmentCents));
+  const input = {
+    modality: 'personal_unsecured', amortization: 'PRICE', installments: 30,
+    financedAmount: '1000', installmentAmount: '100'
+  };
+  assert.throws(() => financial.validateInput(Object.assign({}, input, {
+    contractDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  })), /não pode estar no futuro/);
+  assert.throws(() => financial.validateInput(Object.assign({}, input, {
+    contractDate: '2024-12-01', disbursementDate: '2025-01-01', firstDueDate: '2025-01-01'
+  })), /posterior à data da liberação/);
+  assert.throws(() => financial.validateInput(Object.assign({}, input, {
+    contractDate: '2025-03-01', disbursementDate: '2025-01-01', firstDueDate: '2025-02-01'
+  })), /posterior à data do contrato/);
+  assert.throws(() => financial.validateInput(Object.assign({}, input, {
+    disbursementDate: '2025-02-30'
+  })), /Data inválida/);
+});
+test('T26 formatos numéricos de entrada comuns e sujos', function () {
+  [['5,5', 550], ['5,50', 550], ['5.5', 550], ['1.234,56', 123456],
+    ['1234,56', 123456], ['R$ 1.234,56', 123456], [' 10.000 ', 1000000],
+    ['0,5', 50]].forEach(function (pair) {
+    assert.strictEqual(financial.parseMoney(pair[0]), pair[1], pair[0]);
+  });
+  [',5', '5,', 'abc', '1e3', '999999999999999999999'].forEach(function (value) {
+    assert.throws(() => financial.parseMoney(value), value);
+  });
+  assert.ok(legal.trafficLight({ available: true, ratio: 1.3 }).state === 'green');
+  assert.ok(legal.trafficLight({ available: true, ratio: 1.5 }).state === 'yellow');
+});
 
 console.log('Todos os ' + passed + ' testes de contrato passaram.');
