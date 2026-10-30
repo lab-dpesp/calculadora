@@ -125,14 +125,11 @@
     parent.appendChild(card);
   }
   function periodicDates(first, count) {
-    var start = F.parseIsoDate(first);
-    var year = start.getUTCFullYear(), month = start.getUTCMonth(), day = start.getUTCDate();
-    return Array.from({ length: count }, function (_, index) {
-      var date = new Date(Date.UTC(year, month + index, 1));
-      var lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-      date.setUTCDate(Math.min(day, lastDay));
-      return date.toISOString().slice(0, 10);
-    });
+    return F.periodicDates(first, count);
+  }
+  function estimatedFirstDueDate(input) {
+    var start = input.contractDate || input.disbursementDate;
+    return start ? periodicDates(start, 2)[1] : '';
   }
   function readInput() {
     var input = {
@@ -154,7 +151,15 @@
       statedCet: percent(fieldValue('statedCet'), false, MAX_PLAUSIBLE_CET, 'CET anual'),
       charges: readCharges()
     };
-    if (!input.disbursementDate) input.disbursementDate = input.contractDate;
+    var assumptions = [];
+    if (!input.disbursementDate && input.contractDate) {
+      input.disbursementDate = input.contractDate;
+      assumptions.push('liberação presumida na data do contrato (' + formatDate(input.contractDate) + ')');
+    }
+    if (!input.netDisbursed && input.charges.length === 0 && input.financedAmount) {
+      input.netDisbursed = input.financedAmount;
+      assumptions.push('valor líquido presumido igual ao valor financiado, sem encargos informados');
+    }
     var amounts = F.validateInput(input);
     input.principalCents = amounts.principalCents;
     input.paymentCents = amounts.paymentCents;
@@ -164,6 +169,7 @@
     if (input.monthlyRate === null && input.amortization === 'SAC') {
       throw new Error('Para o SAC, informe a taxa mensal contratual; a taxa implícita Price não se aplica.');
     }
+    Object.defineProperty(input, 'assumptions', { value: assumptions });
     return input;
   }
   function calculate(input) {
@@ -175,8 +181,15 @@
     var schedule = scheduleRate === null ? null : (input.amortization === 'PRICE'
       ? F.schedulePrice(input.principalCents, scheduleRate, input.installments)
       : F.scheduleSac(input.principalCents, scheduleRate, input.installments));
-    var dates = input.firstDueDate ? periodicDates(input.firstDueDate, input.installments) : [];
-    var cashflows = dates.map(function (date) { return { date: date, amountCents: input.paymentCents }; });
+    var estimatedFirst = !input.firstDueDate && Boolean(input.contractDate || input.disbursementDate);
+    var firstDueDate = input.firstDueDate || estimatedFirstDueDate(input);
+    var presumptions = input.assumptions.slice();
+    if (estimatedFirst) presumptions.push('primeiro vencimento presumido em ' + formatDate(firstDueDate));
+    var dates = firstDueDate ? periodicDates(firstDueDate, input.installments) : [];
+    var cashflows = dates.map(function (date, index) {
+      return { date: date, amountCents: input.amortization === 'SAC' && schedule
+        ? schedule[index].installmentCents : input.paymentCents };
+    });
     var cet = null;
     var cetIncomplete = false;
     var net = F.parseMoney(input.netDisbursed);
@@ -196,6 +209,7 @@
       modality: input.modality, comparison: comparison, charges: input.charges
     });
     return { input: input, schedule: schedule, implied: implied, cet: cet, cetIncomplete: cetIncomplete,
+      firstDueDate: firstDueDate, presumptions: presumptions,
       reference: reference, comparison: comparison, findings: findings };
   }
   function display(result) {
@@ -218,11 +232,20 @@
     metric(cards, 'Taxa contratada', result.input.monthlyRate === null ? 'Não informada' : formatPercent.format(result.input.monthlyRate * 100) + '% a.m.');
     metric(cards, 'Média BACEN', result.comparison.available ? formatPercent.format(result.comparison.bacenPercent) + '% a.m.' : 'Indisponível');
     metric(cards, 'Diferença em vezes', result.comparison.available && result.comparison.ratio !== null ? formatPercent.format(result.comparison.ratio) + 'x' : 'Indisponível');
-    metric(cards, 'CET estimado', result.cet === null ? 'Não identificável' : formatPercent.format(result.cet * 100) + '% a.a.' + (result.cetIncomplete ? ' (incompleto)' : ''));
+    metric(cards, result.presumptions.length ? 'CET estimado (dados presumidos)' : 'CET estimado',
+      result.cet === null ? 'Não identificável' : formatPercent.format(result.cet * 100) + '% a.a.' + (result.cetIncomplete ? ' (incompleto)' : ''));
+    if (result.presumptions.length) {
+      var cetNote = addText(cards, 'p', 'Para esta estimativa: ' + result.presumptions.join('; ') + '.');
+      cetNote.className = 'nota';
+    }
     var metrics = get('metricas');
     metrics.replaceChildren();
     metric(metrics, 'Valor financiado', formatMoney.format(result.input.principalCents / 100));
-    metric(metrics, 'Total das parcelas informadas', formatMoney.format(result.input.paymentCents * result.input.installments / 100));
+    var totalPayments = result.input.amortization === 'SAC' && result.schedule
+      ? result.schedule.reduce(function (sum, row) { return sum + row.installmentCents; }, 0)
+      : result.input.paymentCents * result.input.installments;
+    metric(metrics, result.input.amortization === 'SAC' ? 'Total do cronograma SAC' : 'Total das parcelas informadas',
+      formatMoney.format(totalPayments / 100));
     if (result.input.statedCet !== null) metric(metrics, 'CET informado', formatPercent.format(result.input.statedCet * 100) + '% a.a.');
     if (result.implied !== null) metric(metrics, 'Taxa de fluxo implícita (Price)', formatPercent.format(result.implied * 100) + '% a.m.');
     var installmentWarning = get('alertaParcela');
@@ -317,8 +340,8 @@
       'netDisbursed', 'financedAmount', 'amortization', 'installments', 'installmentAmount', 'firstDueDate'].forEach(function (id) {
       if (input[id] !== undefined && input[id] !== null) get(id).value = String(input[id]);
     });
-    get('monthlyRate').value = input.monthlyRate == null ? '' : String(input.monthlyRate * 100).replace('.', ',');
-    get('statedCet').value = input.statedCet == null ? '' : String(input.statedCet * 100).replace('.', ',');
+    get('monthlyRate').value = input.monthlyRate == null ? '' : String(Number((input.monthlyRate * 100).toFixed(6))).replace('.', ',');
+    get('statedCet').value = input.statedCet == null ? '' : String(Number((input.statedCet * 100).toFixed(6))).replace('.', ',');
     feeList.replaceChildren();
     (input.charges || []).forEach(addFee);
     if ((input.charges || []).length) get('maisOpcoes').open = true;
@@ -360,7 +383,7 @@
         calculationVersion: '1.0.0',
         rulesVersion: window.ContratoRegras.version,
         createdAt: new Date().toISOString(),
-        assumptions: ['Períodos mensais regulares', 'Revisão humana necessária'],
+        assumptions: ['Períodos mensais regulares'].concat(current.presumptions, ['Revisão humana necessária']),
         bacenObservation: current.reference.available ? current.reference : null
       }
     }, null, 2), 'application/json');
@@ -368,7 +391,11 @@
   get('importarJson').addEventListener('change', function (event) {
     var file = event.target.files && event.target.files[0];
     if (!file) return;
-    if (file.size > 1000000) { setError('Arquivo limitado a 1 MB.'); return; }
+    if (file.size > 1000000) {
+      setError('Arquivo limitado a 1 MB.');
+      event.target.value = '';
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function () {
       try {

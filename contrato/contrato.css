@@ -43,7 +43,7 @@ input, select { min-width: 0; min-height: 40px; padding: 7px 10px; border: 1px s
 .encargo { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, .7fr) minmax(160px, .9fr) auto; gap: 8px; align-items: end; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
 .encargo label { display: grid; gap: 4px; font-size: 12px; }
 .primario, .secundario { min-height: 40px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--green); font-weight: 600; }
-.primario { color: #fff; background: var(--green); }
+.primario { color: #fff; background: #2e6f24; }
 .secundario { background: transparent; color: var(--green); }
 .erro { border: 1px solid #b71c1c; border-radius: 6px; color: #b71c1c; padding: 10px; margin: 12px 0; }
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; align-items: center; }
@@ -77,7 +77,7 @@ summary { cursor: pointer; font-weight: 600; }
 .semaforo strong { font-size: 18px; }
 .semaforo-icone { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; font-size: 22px; font-weight: 800; color: #fff; background: var(--badge, #777); }
 .semaforo-green { --badge: #2e7d32; border-color: #2e7d32; background: var(--verde-fundo); }
-.semaforo-yellow { --badge: #b77900; border-color: var(--amarelo); background: var(--amarelo-fundo); }
+.semaforo-yellow { --badge: #745000; border-color: var(--amarelo); background: var(--amarelo-fundo); }
 .semaforo-red { --badge: #c10015; border-color: var(--vermelho); background: var(--vermelho-fundo); }
 .semaforo-gray { --badge: #6b6f6c; border-color: #8a8f8b; background: var(--cinza-fundo); }
 .cartoes { margin-bottom: 12px; }

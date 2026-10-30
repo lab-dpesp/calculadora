@@ -59,11 +59,37 @@
     var payment = pricePayment(principalCents, rate, count);
     var balance = principalCents;
     var rows = [];
+    if (rate === 0) {
+      var baseAmortization = Math.floor(principalCents / count);
+      var extraCents = principalCents % count;
+      for (var zeroPeriod = 1; zeroPeriod <= count; zeroPeriod++) {
+        var zeroAmortization = baseAmortization + (zeroPeriod <= extraCents ? 1 : 0);
+        balance -= zeroAmortization;
+        rows.push({
+          period: zeroPeriod,
+          installmentCents: zeroAmortization,
+          interestCents: 0,
+          principalCents: zeroAmortization,
+          balanceCents: balance
+        });
+      }
+      return rows;
+    }
     for (var period = 1; period <= count; period++) {
       var interest = Math.round(balance * rate);
-      var installment = period === count ? balance + interest : payment;
+      var installment = payment;
       var amortization = installment - interest;
+      if (period === count) {
+        amortization = balance;
+        interest = installment - amortization;
+        if (interest < 0) {
+          throw new Error('O arredondamento em centavos impede parcelas Price constantes; confira valor, taxa e prazo.');
+        }
+      }
       if (amortization <= 0 && balance > 0) throw new Error('A prestação não amortiza o saldo; verifique os dados.');
+      if (period < count && amortization >= balance) {
+        throw new Error('O arredondamento em centavos impede parcelas Price constantes; confira valor, taxa e prazo.');
+      }
       balance = Math.max(0, balance - amortization);
       rows.push({ period: period, installmentCents: installment, interestCents: interest, principalCents: amortization, balanceCents: balance });
     }
@@ -76,9 +102,10 @@
     if (!Number.isSafeInteger(principalCents) || principalCents <= 0) throw new Error('O valor financiado deve ser maior que zero.');
     var balance = principalCents;
     var base = Math.floor(principalCents / count);
+    var remainder = principalCents % count;
     var rows = [];
     for (var period = 1; period <= count; period++) {
-      var amortization = period === count ? balance : base;
+      var amortization = base + (period <= remainder ? 1 : 0);
       var interest = Math.round(balance * rate);
       var installment = amortization + interest;
       balance -= amortization;
@@ -114,6 +141,17 @@
     date.setUTCHours(0, 0, 0, 0);
     if (date.getUTCFullYear() !== parts[0] || date.getUTCMonth() !== parts[1] - 1 || date.getUTCDate() !== parts[2]) throw new Error('Data inválida.');
     return date;
+  }
+
+  function periodicDates(first, count) {
+    var start = parseIsoDate(first);
+    var year = start.getUTCFullYear(), month = start.getUTCMonth(), day = start.getUTCDate();
+    return Array.from({ length: count }, function (_, index) {
+      var date = new Date(Date.UTC(year, month + index, 1));
+      var lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+      date.setUTCDate(Math.min(day, lastDay));
+      return date.toISOString().slice(0, 10);
+    });
   }
 
   function datedRate(receivedCents, receivedDate, payments) {
@@ -213,7 +251,21 @@
       });
     }
     if (input.contractDate) parseIsoDate(input.contractDate);
+    if (input.disbursementDate) parseIsoDate(input.disbursementDate);
     if (input.firstDueDate) parseIsoDate(input.firstDueDate);
+    var today = new Date();
+    var todayDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0')].join('-');
+    if (input.contractDate && input.contractDate > todayDate) {
+      throw new Error('A data do contrato não pode estar no futuro.');
+    }
+    var paymentStart = input.disbursementDate || input.contractDate;
+    if (input.firstDueDate && input.contractDate && input.firstDueDate <= input.contractDate) {
+      throw new Error('O primeiro vencimento deve ser posterior à data do contrato.');
+    }
+    if (input.firstDueDate && paymentStart && input.firstDueDate <= paymentStart) {
+      throw new Error('O primeiro vencimento deve ser posterior à data da liberação do crédito.');
+    }
     return { principalCents: principal, paymentCents: payment };
   }
 
@@ -246,6 +298,7 @@
     solvePeriodicRate: solvePeriodicRate,
     datedRate: datedRate,
     calculateCet: calculateCet,
+    periodicDates: periodicDates,
     annualEffective: annualEffective,
     monthlyEffective: monthlyEffective,
     csvCell: csvCell,
