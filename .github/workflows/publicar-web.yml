@@ -34,17 +34,20 @@ jobs:
           node-version: 20
       - name: Atualizar índices pelo Banco Central
         run: node ferramentas/atualizar-indices.js
+      - name: Atualizar séries BACEN de contratos
+        run: node ferramentas/atualizar-series-contrato.js
       - name: Conferir totais de referência
         run: |
           node ferramentas/testar.js
           node ferramentas/testar-opcoes.js
           node ferramentas/testar-aleatorio.js 1000
           node ferramentas/testar-propriedades.js 500
+          node ferramentas/testar-contrato.js
       - name: Montar o site
         run: |
           mkdir -p _site
           cp calc.html index.html
-          cp -r index.html calc.html calc.css tema.js data.js indices.js engine.js copilot.js ui.js icons fonts _site/
+          cp -r index.html calc.html calc.css tema.js data.js indices.js engine.js copilot.js ui.js contrato.html contrato icons fonts _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
