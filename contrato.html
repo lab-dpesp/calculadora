@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Análise de contrato bancário</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="contrato/contrato.css">
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <a href="calc.html" class="voltar">← Calculadora de débitos</a>
+      <h1>Análise de contrato bancário</h1>
+      <p class="subtitulo">Ferramenta de apoio à triagem. Os resultados devem ser conferidos.</p>
+    </div>
+  </header>
+  <main class="pagina">
+    <p class="aviso" role="note"><strong>Análise preliminar, não é conclusão jurídica.</strong> Não informe nome, CPF ou nº do processo; os dados ficam no seu dispositivo.</p>
+
+    <form id="formContrato" autocomplete="off" novalidate>
+      <section class="painel">
+        <h2>Dados do contrato</h2>
+        <div class="grade">
+          <label>Modalidade
+            <select id="modality" required>
+              <option value="personal_unsecured">Crédito pessoal não consignado</option>
+              <option value="payroll">Consignado parcelado</option>
+              <option value="vehicle_finance">Financiamento de veículo</option>
+              <option disabled>Cheque especial — módulo em desenvolvimento</option>
+              <option disabled>Cartão / RMC / RCC — módulo em desenvolvimento</option>
+            </select>
+          </label>
+          <label>Data do contrato
+            <input id="contractDate" type="date">
+          </label>
+          <label>Valor financiado (R$)
+            <input id="financedAmount" inputmode="decimal" required placeholder="Ex.: 10.000,00">
+          </label>
+          <label>Número de parcelas
+            <input id="installments" type="number" min="1" max="1200" step="1" required>
+          </label>
+          <label>Valor da parcela (R$)
+            <input id="installmentAmount" inputmode="decimal" required placeholder="Ex.: 700,00">
+          </label>
+          <label>Juros remuneratórios informados (% ao mês)
+            <input id="monthlyRate" inputmode="decimal" placeholder="Ex.: 5,5">
+          </label>
+          <label>Sistema de amortização
+            <select id="amortization" required>
+              <option value="PRICE">Price</option>
+              <option value="SAC">SAC</option>
+              <option disabled>Desconhecido / irregular — informe os fluxos detalhados fora deste MVP</option>
+            </select>
+          </label>
+        </div>
+        <p class="nota">Use somente dados do contrato ou dos extratos. Campos desconhecidos ficam em branco.</p>
+      </section>
+
+      <details class="painel mais-opcoes" id="maisOpcoes">
+        <summary>Mais opções</summary>
+        <div class="grade">
+          <label>O consumidor reconhece a contratação?
+            <select id="recognition">
+              <option value="unknown">Não sabe</option>
+              <option value="yes">Sim</option>
+              <option value="no">Não</option>
+            </select>
+          </label>
+          <label>Principal questão
+            <select id="problem">
+              <option>Conferir valores</option>
+              <option>Juros altos</option>
+              <option>Tarifa ou seguro</option>
+              <option>Saldo que não diminui</option>
+              <option>Outro</option>
+            </select>
+          </label>
+          <label>Origem principal das informações
+            <select id="evidenceSource">
+              <option value="contract">Contrato</option>
+              <option value="statement">Extrato</option>
+              <option value="consumer">Informação do consumidor</option>
+              <option value="inferred">Estimativa / inferência</option>
+              <option value="unknown">Não informada</option>
+            </select>
+          </label>
+          <label>Data da liberação do crédito
+            <input id="disbursementDate" type="date">
+          </label>
+          <label>Valor líquido disponibilizado (R$)
+            <input id="netDisbursed" inputmode="decimal" placeholder="Ex.: 1.000,00">
+          </label>
+          <label>Vencimento da primeira parcela
+            <input id="firstDueDate" type="date">
+          </label>
+          <label>CET informado (% ao ano)
+            <input id="statedCet" inputmode="decimal" placeholder="Opcional">
+          </label>
+          <label>Capitalização indicada no contrato
+            <select id="capitalization">
+              <option value="unknown">Não sabe / não informado</option>
+              <option value="monthly">Mensal</option>
+              <option value="annual">Anual</option>
+            </select>
+          </label>
+        </div>
+        <p id="reconhecimentoAviso" class="nota" hidden>Contratação não reconhecida: priorize a conferência documental; este módulo não avalia fraude.</p>
+        <h3 class="titulo-encargos">Encargos informados</h3>
+        <p class="nota">Informe só encargos identificados; o modo de pagamento altera o fluxo financeiro.</p>
+        <div id="encargos" class="encargos"></div>
+        <button type="button" class="secundario" id="adicionarEncargo">Adicionar encargo</button>
+      </details>
+
+      <div id="erro" class="erro" role="alert" hidden></div>
+      <div class="acoes">
+        <button type="submit" class="primario">Calcular análise</button>
+        <button type="button" class="secundario" id="reiniciar">Reiniciar análise</button>
+      </div>
+    </form>
+
+    <section id="resultado" class="painel resultado" hidden aria-live="polite">
+      <div id="semaforo" class="semaforo semaforo-gray" role="status">
+        <span id="semaforoIcone" class="semaforo-icone" aria-hidden="true">?</span>
+        <div>
+          <strong id="semaforoTitulo"></strong>
+          <p id="semaforoTexto"></p>
+        </div>
+      </div>
+      <div id="cartoes" class="metricas cartoes"></div>
+      <div id="metricas" class="metricas"></div>
+      <p id="alertaParcela" class="nota" role="status" hidden></p>
+      <section class="subresultado">
+        <h3>Pontos de atenção</h3>
+        <ul id="achados" class="achados"></ul>
+      </section>
+      <details class="detalhes">
+        <summary>Ver detalhes: fonte BACEN e hipóteses</summary>
+        <p id="resumo" class="nota"></p>
+        <p id="comparacao"></p>
+        <p class="nota">A média BACEN é referência agregada; o CET não é comparado com ela. As hipóteses e fundamentos dependem de revisão humana.</p>
+      </details>
+      <details class="detalhes">
+        <summary>Ver detalhes: simulações</summary>
+        <div id="simulacoes" class="metricas"></div>
+        <p class="nota">Cenários dependem das premissas e não representam valor devido ou recuperável.</p>
+      </details>
+      <details class="detalhes">
+        <summary>Ver detalhes: memória de amortização</summary>
+        <div class="tabela-wrap">
+          <table>
+            <thead><tr><th>Parcela</th><th>Prestação</th><th>Juros</th><th>Amortização</th><th>Saldo</th></tr></thead>
+            <tbody id="tabelaAmortizacao"></tbody>
+          </table>
+        </div>
+      </details>
+      <div class="acoes discretas">
+        <button type="button" class="secundario" id="imprimir">Imprimir / salvar PDF</button>
+        <button type="button" class="secundario" id="baixarCsv">Exportar CSV</button>
+        <button type="button" class="secundario" id="baixarJson">Exportar JSON</button>
+        <label class="secundario importar">Importar JSON<input id="importarJson" type="file" accept="application/json,.json" hidden></label>
+      </div>
+      <p class="versao">Versão do cálculo 1.0.0 · regras 1.0.0 · apoio à triagem, sujeito a revisão por defensor(a).</p>
+    </section>
+
+    <details class="painel metodologia">
+      <summary>Metodologia e limitações</summary>
+      <p>As prestações Price e SAC são calculadas por períodos mensais, com juros e valores em centavos. A taxa implícita é inferida do valor financiado e das parcelas uniformes; se houver encargos ou pagamentos irregulares, ela pode representar o custo global do fluxo, não juros remuneratórios isolados. O CET usa as datas fornecidas e ano de 365 dias, como estimativa informativa; não substitui a revisão normativa do fluxo completo.</p>
+      <p>As séries BACEN são médias agregadas de novas operações. Só há comparação quando existe observação da competência exata. Módulos de cheque especial, cartão, RMC/RCC, atraso, quitação antecipada, importação de documentos e extração de dados não estão implementados.</p>
+      <p>As regras jurídicas são sinalizações iniciais, não pareceres, e permanecem pendentes de validação jurídica institucional. Nenhum dado é enviado a serviços externos pelo navegador.</p>
+    </details>
+  </main>
+  <script src="contrato/financeiro.js"></script>
+  <script src="contrato/catalogo-bacen.js"></script>
+  <script src="contrato/series-bacen.js"></script>
+  <script src="contrato/bacen.js"></script>
+  <script src="contrato/regras.js"></script>
+  <script src="contrato/app.js"></script>
+</body>
+</html>
