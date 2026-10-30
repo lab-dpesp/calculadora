@@ -1,11 +1,11 @@
-# Teste em massa contra a planilha oficial do TJSP ("Cálculo Simples"), usada como gabarito.
+# Teste em massa contra as planilhas oficiais do TJSP ("Extenso" e "Cálculo Simples"), usadas como gabarito.
 # Todo mês, depois que o TJSP publica os índices novos (e também quando você clicar em "Run workflow"):
-#   1. baixa a planilha do mês do site do TJSP (se não conseguir, usa a cópia do repositório);
-#   2. gera casos aleatórios e calcula cada um na planilha, pelo LibreOffice (sem macros);
+#   1. baixa as planilhas do mês do site do TJSP (se não conseguir, usa as cópias do repositório);
+#   2. gera casos aleatórios e calcula cada um nas planilhas, pelo LibreOffice (sem macros);
 #   3. calcula os mesmos casos na calculadora e compara, separando correção, juros de 1% e taxa legal.
 # O resultado fica no resumo da execução e no arquivo "relatorio-tjsp" (Artifacts).
-# Só falha se a correção monetária divergir ou se a calculadora recusar um caso válido; diferenças de
-# critério de juros são relatadas, sem falhar.
+# Falha se a correção monetária divergir, se a calculadora recusar um caso válido ou se, na planilha Extenso, o
+# regime padrão ou a taxa fixa derem total diferente sem ser por uma diferença de critério já conhecida.
 name: Testar contra a planilha do TJSP
 
 on:
@@ -23,7 +23,7 @@ permissions:
 jobs:
   tjsp:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,19 +33,24 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libreoffice-calc-nogui python3-uno
-      - name: Baixar a planilha do mês no site do TJSP
+      - name: Baixar as planilhas do mês no site do TJSP
         run: python3 ferramentas/tjsp/baixar-planilha.py
       - name: Atualizar índices pelo Banco Central
         run: node ferramentas/atualizar-indices.js
-      - name: Calcular os casos na planilha do TJSP
-        run: /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}"
-      - name: Comparar com a calculadora
-        run: node ferramentas/tjsp/comparar-tjsp.js
+      - name: Calcular os casos nas planilhas do TJSP
+        run: |
+          /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}" '' extenso
+          /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}" '' simples
+      - name: Comparar com a calculadora (planilha Extenso)
+        run: node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito-extenso.json
+      - name: Comparar com a calculadora (planilha Cálculo Simples)
+        if: always()
+        run: node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito.json
       - name: Guardar o relatório
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-tjsp
           path: |
-            ferramentas/tjsp/relatorio.md
-            ferramentas/tjsp/gabarito.json
+            ferramentas/tjsp/relatorio*.md
+            ferramentas/tjsp/gabarito*.json
