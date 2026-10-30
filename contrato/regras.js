@@ -55,7 +55,7 @@
     if (input.comparison && input.comparison.available &&
         Number.isFinite(input.monthlyRate) && input.comparison.differencePercentagePoints > 0) {
       add('JUR_001', 'Taxa informada acima da referência BACEN', 'POTENTIAL_ISSUE',
-        'A taxa remuneratória informada supera a média agregada da mesma modalidade e competência. A diferença é um dado de triagem, não conclusão de abusividade.',
+        'A taxa remuneratória informada supera a série de referência BACEN usada para esta modalidade e competência. A diferença é um dado de triagem, não conclusão de abusividade.',
         'STJ Tema 27 — verificar a tese vigente e as circunstâncias do contrato.', ['contrato integral', 'memória de cálculo'],
         (function (state) { return state === 'red' ? 'red' : 'yellow'; })(trafficLight(input.comparison).state));
     }

@@ -4,6 +4,7 @@
   var form = document.getElementById('formContrato');
   var feeList = document.getElementById('encargos');
   var current = null;
+  var importState = null;
   var feeNames = {
     iof: 'IOF', TAC: 'TAC', cadastro: 'Tarifa de cadastro', third_party: 'Serviços de terceiros',
     correspondent: 'Comissão de correspondente', evaluation: 'Avaliação do bem', registration: 'Registro',
@@ -50,6 +51,7 @@
         amountCents: amount,
         paymentMode: row.querySelector('.modo').value,
         description: row.querySelector('.descricao').value.trim(),
+        source: row.dataset.source || '',
         serviceVerified: row.querySelector('.comprovado').checked ? true : null,
         freelyChosen: row.querySelector('.escolha').checked ? true : null
       };
@@ -60,6 +62,7 @@
     var row = document.createElement('div');
     row.className = 'encargo';
     row.setAttribute('data-encargo', '');
+    row.dataset.source = charge.source || '';
     var typeLabel = document.createElement('label');
     typeLabel.textContent = 'Tipo';
     var type = document.createElement('select');
@@ -115,6 +118,10 @@
     freelyChosen.checked = charge.freelyChosen === true;
     choiceLabel.append(freelyChosen, document.createTextNode(' Escolha livre (seguro)'));
     row.append(description, evidenceLabel, choiceLabel);
+    if (charge.source) {
+      var source = addText(row, 'small', 'Origem: ' + charge.source);
+      source.className = 'campo-origem';
+    }
     feeList.appendChild(row);
   }
   function metric(parent, label, value) {
@@ -135,6 +142,7 @@
     var input = {
       schemaVersion: '1.0.0',
       modality: fieldValue('modality'),
+      payrollSubtype: fieldValue('payrollSubtype'),
       recognition: fieldValue('recognition'),
       problem: fieldValue('problem'),
       evidenceSource: fieldValue('evidenceSource'),
@@ -201,8 +209,14 @@
       } catch (_) { cet = null; }
     }
     var referenceMonth = input.contractDate ? input.contractDate.slice(0, 7) : '';
-    var reference = window.ContratoBacen.observation(input.modality, referenceMonth);
-    var comparison = window.ContratoBacen.compareRates(input.monthlyRate, reference);
+    var match = window.ContratoBacen.compareCandidates(input.monthlyRate, input.modality,
+      input.payrollSubtype, referenceMonth);
+    var reference = match.selected ? match.selected.observation : {
+      available: false, reason: match.comparison.reason
+    };
+    var comparison = match.comparison;
+    var aggregateReference = input.modality === 'payroll'
+      ? window.ContratoBacen.observation('payroll', referenceMonth) : null;
     var findings = window.ContratoRegras.evaluate({
       recognition: input.recognition, contractDate: input.contractDate, monthlyRate: input.monthlyRate,
       statedCet: input.statedCet, calculatedCet: cet, cetIncomplete: cetIncomplete, capitalization: input.capitalization,
@@ -210,23 +224,62 @@
     });
     return { input: input, schedule: schedule, implied: implied, cet: cet, cetIncomplete: cetIncomplete,
       firstDueDate: firstDueDate, presumptions: presumptions,
-      reference: reference, comparison: comparison, findings: findings };
+      reference: reference, comparison: comparison, candidates: match.candidates,
+      ambiguous: match.ambiguous, aggregateReference: aggregateReference, findings: findings };
   }
   function display(result) {
     current = result;
     var resultNode = get('resultado');
     resultNode.hidden = false;
-    get('resumo').textContent = 'Modalidade: ' + window.ContratoCatalogoBacen.series[result.input.modality].modality +
+    get('resultadoRevisao').hidden = !importState || importState.revised;
+    if (importState && !importState.revised) {
+      get('resultadoRevisao').textContent = 'A conferir: dados importados do Copilot. Confira as fontes e clique em "Concluí a revisão".';
+    }
+    var selectedEntry = window.ContratoCatalogoBacen.series[result.input.modality];
+    get('resumo').textContent = 'Modalidade: ' + (selectedEntry ? selectedEntry.modality :
+      'CDC genérico / veículo ou crédito pessoal') +
+      (result.input.modality === 'payroll' && result.input.payrollSubtype && result.input.payrollSubtype !== 'nao_sei'
+        ? ' — subtipo: ' + result.input.payrollSubtype : '') +
       '. Hipótese de amortização: ' + result.input.amortization + '. Competência BACEN: ' +
       (result.input.contractDate ? result.input.contractDate.slice(5, 7) + '/' + result.input.contractDate.slice(0, 4) : 'não informada') + '.';
     var light = window.ContratoRegras.trafficLight(result.comparison);
     get('semaforo').className = 'semaforo semaforo-' + light.state;
     get('semaforoIcone').textContent = light.icon;
     get('semaforoTitulo').textContent = light.label;
-    get('semaforoTexto').textContent = result.comparison.available
+    get('semaforoTexto').textContent = (result.ambiguous
+      ? 'Modalidade não identificada com precisão: o semáforo usa a maior média entre as séries possíveis (critério conservador). '
+      : '') + (result.comparison.available
       ? 'Juros contratados: ' + formatPercent.format(result.comparison.ratio) + 'x a média BACEN da competência (limites: ' +
         formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.yellow) + 'x e ' + formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.red) + 'x).'
-      : result.comparison.reason;
+      : result.comparison.reason);
+    var candidatesPanel = get('seriesCandidatas');
+    candidatesPanel.hidden = !result.ambiguous;
+    if (result.ambiguous) {
+      var candidateBody = get('seriesCandidatasBody');
+      candidateBody.replaceChildren();
+      result.candidates.forEach(function (candidate) {
+        var row = document.createElement('tr');
+        var observation = candidate.observation;
+        var entry = window.ContratoCatalogoBacen.series[candidate.key];
+        var selected = result.comparison.selectedBy === candidate.key;
+        [
+          (observation.modality || entry.modality) + (selected ? ' (usada no semáforo)' : ''),
+          String(entry.seriesCode),
+          observation.available ? formatPercent.format(observation.value) + '% a.m.' : 'sem dado',
+          candidate.comparison.available && candidate.comparison.ratio !== null
+            ? formatPercent.format(candidate.comparison.ratio) + 'x'
+            : (observation.available ? 'não calculável' : '—')
+        ].forEach(function (value) { addText(row, 'td', value); });
+        if (selected) row.setAttribute('aria-label', 'Série que definiu o semáforo');
+        candidateBody.appendChild(row);
+      });
+      get('avisoAmbiguidade').textContent =
+        (result.input.modality === 'payroll'
+          ? (result.aggregateReference && result.aggregateReference.available
+            ? ' A série agregada (SGS ' + result.aggregateReference.seriesCode + ') é exibida apenas como informação adicional.'
+            : ' A série agregada consignada é mantida apenas como informação adicional.')
+          : '');
+    }
     var cards = get('cartoes');
     cards.replaceChildren();
     metric(cards, 'Taxa contratada', result.input.monthlyRate === null ? 'Não informada' : formatPercent.format(result.input.monthlyRate * 100) + '% a.m.');
@@ -271,6 +324,11 @@
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
     } else comparison.textContent = 'Comparação indisponível: ' + result.comparison.reason;
+    if (result.input.modality === 'payroll' && result.aggregateReference && result.aggregateReference.available) {
+      comparison.appendChild(document.createTextNode(' Média agregada consignada para informação adicional: ' +
+        formatPercent.format(result.aggregateReference.value) + '% a.m. (SGS ' +
+        result.aggregateReference.seriesCode + ', ' + result.aggregateReference.referenceMonth + ').'));
+    }
     var findings = get('achados');
     findings.replaceChildren();
     if (!result.findings.length) addText(findings, 'li', 'Nenhuma sinalização inicial identificada. Ausência de alerta não comprova regularidade.');
@@ -313,8 +371,25 @@
       ? F.scheduleSac(principalCents, rate, count)[0].installmentCents
       : F.pricePayment(principalCents, rate, count);
   }
+  function selectedObservation(result) {
+    if (result.comparison.observation) return result.comparison.observation;
+    var selected = result.candidates.find(function (candidate) {
+      return candidate.key === result.comparison.selectedBy && candidate.observation.available;
+    });
+    return selected ? selected.observation : null;
+  }
   function toCSV(result) {
-    var lines = [['Parcela', 'Prestacao (R$)', 'Juros (R$)', 'Amortizacao (R$)', 'Saldo (R$)']];
+    var selected = selectedObservation(result);
+    var definingSeries = selected
+      ? 'SGS ' + selected.seriesCode + ' — ' + selected.label
+      : 'Indisponível';
+    var lines = [
+      ['Modalidade escolhida', result.input.modality],
+      ['Subtipo consignado', result.input.payrollSubtype || 'não aplicável'],
+      ['Modalidade ambígua', result.ambiguous ? 'sim' : 'não'],
+      ['Série que definiu o semáforo', definingSeries],
+      ['Parcela', 'Prestacao (R$)', 'Juros (R$)', 'Amortizacao (R$)', 'Saldo (R$)']
+    ];
     (result.schedule || []).forEach(function (row) {
       lines.push([row.period, row.installmentCents / 100, row.interestCents / 100, row.principalCents / 100, row.balanceCents / 100]);
     });
@@ -336,16 +411,93 @@
     error.hidden = false;
   }
   function populate(input) {
-    ['modality', 'recognition', 'problem', 'evidenceSource', 'capitalization', 'contractDate', 'disbursementDate',
+    ['modality', 'payrollSubtype', 'recognition', 'problem', 'evidenceSource', 'capitalization', 'contractDate', 'disbursementDate',
       'netDisbursed', 'financedAmount', 'amortization', 'installments', 'installmentAmount', 'firstDueDate'].forEach(function (id) {
       if (input[id] !== undefined && input[id] !== null) get(id).value = String(input[id]);
     });
+    get('payrollSubtypeField').hidden = get('modality').value !== 'payroll';
     get('monthlyRate').value = input.monthlyRate == null ? '' : String(Number((input.monthlyRate * 100).toFixed(6))).replace('.', ',');
     get('statedCet').value = input.statedCet == null ? '' : String(Number((input.statedCet * 100).toFixed(6))).replace('.', ',');
     feeList.replaceChildren();
     (input.charges || []).forEach(addFee);
     if ((input.charges || []).length) get('maisOpcoes').open = true;
   }
+
+  var copilotResult = null;
+  var sourceFields = {
+    modalidade: 'modality', subtipoConsignado: 'payrollSubtype',
+    contratacaoReconhecida: 'recognition', questaoPrincipal: 'problem',
+    origemPrincipalInformacoes: 'evidenceSource',
+    dataContrato: 'contractDate', dataLiberacao: 'disbursementDate',
+    dataPrimeiroVencimento: 'firstDueDate', valorFinanciado: 'financedAmount',
+    valorLiquidoDisponibilizado: 'netDisbursed', numeroParcelas: 'installments',
+    valorParcela: 'installmentAmount', jurosMensaisPct: 'monthlyRate',
+    cetAnualPct: 'statedCet', sistemaAmortizacao: 'amortization',
+    capitalizacao: 'capitalization'
+  };
+  function showCopilotResult(result) {
+    var preview = get('previaCopilot');
+    var errorBox = get('errosCopilot');
+    var warningBox = get('avisosCopilot');
+    var body = get('tabCopilot').tBodies[0];
+    preview.hidden = false;
+    errorBox.hidden = !result.erros.length;
+    errorBox.textContent = result.erros.join(' ');
+    warningBox.textContent = result.avisos.join(' ');
+    body.replaceChildren();
+    if (result.dados) result.dados.rows.forEach(function (item) {
+      var row = document.createElement('tr');
+      [item.item, item.value, item.source].forEach(function (value) { addText(row, 'td', value); });
+      body.appendChild(row);
+    });
+    get('aplicarCopilot').disabled = !!result.erros.length || !result.dados;
+  }
+  get('lerCopilot').addEventListener('click', function () {
+    copilotResult = window.ContratoCopilot.ler(get('textoCopilot').value);
+    showCopilotResult(copilotResult);
+  });
+  get('limparCopilot').addEventListener('click', function () {
+    get('textoCopilot').value = '';
+    get('previaCopilot').hidden = true;
+    get('errosCopilot').textContent = '';
+    get('avisosCopilot').textContent = '';
+    get('tabCopilot').tBodies[0].replaceChildren();
+    copilotResult = null;
+    get('aplicarCopilot').disabled = true;
+    get('textoCopilot').focus();
+  });
+  get('aplicarCopilot').addEventListener('click', function () {
+    if (!copilotResult || copilotResult.erros.length || !copilotResult.dados) return;
+    if (fieldValue('financedAmount') && !window.confirm('Substituir os dados atualmente preenchidos pelos dados do Copilot?')) return;
+    var input = window.ContratoCopilot.toInput(copilotResult.dados);
+    populate(input);
+    Object.keys(sourceFields).forEach(function (key) {
+      var node = document.querySelector('[data-origem="' + sourceFields[key] + '"]');
+      if (node) node.textContent = copilotResult.dados.sources[key]
+        ? 'Origem: ' + copilotResult.dados.sources[key] : '';
+    });
+    importState = { pending: copilotResult.dados.pending, revised: false };
+    var list = get('revisaoPendencias');
+    list.replaceChildren();
+    importState.pending.forEach(function (pending) { addText(list, 'li', pending); });
+    if (!importState.pending.length) addText(list, 'li', 'Nenhuma pendência informada pelo Copilot.');
+    get('revisao').hidden = false;
+    get('resultado').hidden = true;
+    get('resultadoRevisao').hidden = true;
+    get('erro').hidden = true;
+    get('painelCopilot').open = false;
+    get('textoCopilot').value = '';
+    get('previaCopilot').hidden = true;
+    copilotResult = null;
+    get('revisao').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  get('concluirRevisao').addEventListener('click', function () {
+    if (!importState) return;
+    importState.revised = true;
+    get('revisao').hidden = true;
+    get('resultadoRevisao').hidden = true;
+    get('resultadoRevisao').textContent = '';
+  });
 
   form.addEventListener('submit', function (event) {
     event.preventDefault();
@@ -362,6 +514,9 @@
     if (event.target.closest('.remover-encargo')) event.target.closest('.encargo').remove();
   });
   get('recognition').addEventListener('change', function (event) { get('reconhecimentoAviso').hidden = event.target.value !== 'no'; });
+  get('modality').addEventListener('change', function (event) {
+    get('payrollSubtypeField').hidden = event.target.value !== 'payroll';
+  });
   get('reiniciar').addEventListener('click', function () {
     if (!window.confirm('Apagar os dados desta análise e começar de novo?')) return;
     form.reset();
@@ -369,6 +524,11 @@
     get('resultado').hidden = true;
     get('erro').hidden = true;
     get('reconhecimentoAviso').hidden = true;
+    get('revisao').hidden = true;
+    get('payrollSubtypeField').hidden = true;
+    get('resultadoRevisao').hidden = true;
+    document.querySelectorAll('.campo-origem').forEach(function (node) { node.textContent = ''; });
+    importState = null;
     current = null;
   });
   get('imprimir').addEventListener('click', function () { window.print(); });
@@ -384,7 +544,14 @@
         rulesVersion: window.ContratoRegras.version,
         createdAt: new Date().toISOString(),
         assumptions: ['Períodos mensais regulares'].concat(current.presumptions, ['Revisão humana necessária']),
-        bacenObservation: current.reference.available ? current.reference : null
+        bacenObservation: current.reference.available ? current.reference : null,
+        bacenComparison: {
+          modalityChosen: current.input.modality,
+          payrollSubtype: current.input.payrollSubtype || null,
+          ambiguous: current.ambiguous,
+          selectionRule: current.ambiguous ? 'highest_bacen_average' : 'explicit_series',
+          seriesDefiningTrafficLight: selectedObservation(current)
+        }
       }
     }, null, 2), 'application/json');
   });

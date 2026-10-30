@@ -219,7 +219,7 @@
 
   function validateInput(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Análise inválida.');
-    if (!['personal_unsecured', 'payroll', 'vehicle_finance'].includes(input.modality)) throw new Error('Modalidade fora do MVP.');
+    if (!['personal_unsecured', 'payroll', 'vehicle_finance', 'personal_or_vehicle'].includes(input.modality)) throw new Error('Modalidade fora do MVP.');
     if (!['PRICE', 'SAC'].includes(input.amortization)) throw new Error('Selecione Price ou SAC.');
     validateCount(input.installments);
     var principal = parseMoney(input.financedAmount);
