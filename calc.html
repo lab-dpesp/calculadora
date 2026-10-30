@@ -115,20 +115,27 @@
           <label class="q-campo q-campo-largo" data-nao="fazenda">
             <span class="q-rotulo">Juros de mora</span>
             <select id="regime">
-              <option value="tjsp">1% a.m. até 29/08/2024, depois taxa legal</option>
+              <option value="tjsp">1% a.m. até 28/08/2024, depois taxa legal</option>
               <option value="taxalegal">Taxa legal em todo o período (Tema 1368/STJ)</option>
               <option value="fixa">Taxa fixa mensal</option>
               <option value="nenhum">Sem juros</option>
               <optgroup label="Outros critérios">
                 <option value="duas">Uma taxa até certa data, depois outra</option>
                 <option value="selic">Selic (juros e correção) em todo o período</option>
-                <option value="selic_tl">Selic até 29/08/2024, depois correção + taxa legal</option>
+                <option value="selic_tl">Selic até 28/08/2024, depois correção + taxa legal</option>
               </optgroup>
             </select>
           </label>
           <label class="q-campo q-campo-curto" id="campoTaxaFixa" hidden>
             <span class="q-rotulo">Taxa mensal (%)</span>
             <input type="text" inputmode="decimal" id="taxaFixa" value="1">
+          </label>
+          <label class="q-campo q-campo-medio" id="campoContagem">
+            <span class="q-rotulo">Contagem dos dias (juros fixos)</span>
+            <select id="contagemDias">
+              <option value="dias360">Mês comercial de 30 dias (planilhas do TJSP)</option>
+              <option value="corridos">Meses de data a data e dias corridos</option>
+            </select>
           </label>
         </div>
         <div class="linha-campos" id="campoDuas" hidden>
@@ -138,7 +145,7 @@
           </label>
           <label class="q-campo q-campo-medio">
             <span class="q-rotulo">até (inclusive)</span>
-            <input type="date" id="duasAte" value="2024-08-29">
+            <input type="date" id="duasAte" value="2024-08-28">
           </label>
           <label class="q-campo q-campo-medio">
             <span class="q-rotulo">Depois</span>

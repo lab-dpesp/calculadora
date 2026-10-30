@@ -11,9 +11,10 @@
  *   "processo": "0000000-00.0000.8.26.0000",                       (opcional)
  *   "juros": { "regime": "tjsp" | "taxalegal" | "fixa" | "nenhum" | "duas" | "selic" | "selic_tl", "taxaMensal": 1,
  *              "termoInicial": "vencimento" | "data", "data": "AAAA-MM-DD", "origem": "...",
+ *              "contagemDias": "dias360" | "corridos",   (juros fixos: mês comercial, padrão, ou dias corridos)
  *              "duasTaxas": { "taxa1": 1, "ate": "AAAA-MM-DD", "depois": "taxalegal" | "fixa", "taxa2": 0.5 } },   (opcional)
  *       duas      taxa1 até a data "ate" (inclusive) e, depois, taxa legal ou taxa2;
- *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 29/08/2024, depois índice + taxa legal.
+ *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 28/08/2024, depois índice + taxa legal.
  *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
  *              "jurosCompostos": false, "multaContratualPct": 2 },  (débito cível, opcional: opções avançadas)
  *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo", "pct": 10, "valor": 0, "data": "AAAA-MM-DD",
@@ -163,6 +164,7 @@
         if (!(jr.duas.taxa1 >= 0) || !jr.duas.ate) erros.push('Juros em duas taxas sem a primeira taxa ou sem a data da troca.');
         if (jr.duas.depois === 'fixa' && !(jr.duas.taxa2 >= 0)) erros.push('Juros em duas taxas sem a segunda taxa.');
       }
+      if (j.contagemDias === 'corridos') jr.contagemDias = 'corridos';
       if (j.termoInicial === 'data') {
         jr.termo = 'data'; jr.data = data(j.data);
         if (!jr.data) erros.push('Termo inicial dos juros por data, mas a data é inválida: "' + texto(j.data) + '".');

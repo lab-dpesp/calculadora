@@ -13,7 +13,7 @@
  * DÉBITOS ENTRE PARTICULARES E PENSÃO
  * - Correção: Tabela Prática do TJSP (Lei 14.905/2024). Índice = fator(mês final) ÷ fator(mês inicial).
  * - Juros simples sobre o capital corrigido (Res. CMN 5.171/2024, art. 7º), em um dos regimes:
- *   tjsp       1% a.m. até 29/08/2024 e taxa legal a partir de 30/08/2024;
+ *   tjsp       1% a.m. até 28/08/2024 e taxa legal a partir de 29/08/2024;
  *   taxalegal  taxa legal em todo o período (leitura do Tema 1368/STJ);
  *   fixa       taxa mensal informada;
  *   nenhum     sem juros.
@@ -198,17 +198,37 @@
   }
 
   /* ---------- Juros entre particulares ---------- */
-  /* Juros a taxa fixa: meses completos de data a data, mais os dias restantes ÷ 30. Compostos (opção avançada):
-   * (1 + taxa)^(meses + dias ÷ 30) − 1, capitalização mensal. */
-  function trechoFixo(a, b, taxa, rotulo, composto) {
-    var meses = 0;
-    while (somaMeses(a, meses + 1) <= b) meses++;
-    var dias = Math.round((b - somaMeses(a, meses)) / DIA);
+  /* Dias entre a e b no calendário comercial (mês de 30 dias), como a função DIAS360 das planilhas do TJSP
+   * (método americano: último dia de fevereiro e dia 31 contam como dia 30). */
+  function dias360(a, b) {
+    var x = new Date(a), y = new Date(b);
+    var y1 = x.getUTCFullYear(), m1 = x.getUTCMonth() + 1, d1 = x.getUTCDate();
+    var y2 = y.getUTCFullYear(), m2 = y.getUTCMonth() + 1, d2 = y.getUTCDate();
+    var fimFev = function (yy, mm, dd) { return mm === 2 && dd === new Date(Date.UTC(yy, 2, 0)).getUTCDate(); };
+    if (fimFev(y1, m1, d1) && fimFev(y2, m2, d2)) d2 = 30;
+    if (fimFev(y1, m1, d1)) d1 = 30;
+    if (d2 === 31 && d1 >= 30) d2 = 30;
+    if (d1 === 31) d1 = 30;
+    return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
+  }
+  /* Juros a taxa fixa. Contagem 'dias360' (padrão, como as planilhas do TJSP): dias do calendário comercial ÷ 30.
+   * Contagem 'corridos': meses completos de data a data, mais os dias corridos restantes ÷ 30.
+   * Compostos (opção avançada): (1 + taxa)^(meses + dias ÷ 30) − 1, capitalização mensal. */
+  function trechoFixo(a, b, taxa, rotulo, composto, contagem) {
+    var meses = 0, dias;
+    if (contagem === 'corridos') {
+      while (somaMeses(a, meses + 1) <= b) meses++;
+      dias = Math.round((b - somaMeses(a, meses)) / DIA);
+    } else {
+      var d = Math.max(0, dias360(a, b));
+      meses = Math.floor(d / 30); dias = d - meses * 30;
+    }
     var pct = composto ? (Math.pow(1 + taxa / 100, meses + dias / 30) - 1) * 100 : taxa * (meses + dias / 30);
     return {
       pct: pct,
       texto: rotulo + ', ' + periodo(a, b) + ': ' + meses + (meses === 1 ? ' mês' : ' meses') + ' e ' +
-        dias + (dias === 1 ? ' dia' : ' dias') + ' = ' + pctFmt(pct) + '%' + (composto ? ' (juros compostos)' : '')
+        dias + (dias === 1 ? ' dia' : ' dias') + (contagem === 'corridos' ? '' : ' (mês comercial de 30 dias)') +
+        ' = ' + pctFmt(pct) + '%' + (composto ? ' (juros compostos)' : '')
     };
   }
   function trechoTaxaLegal(a, b) {
@@ -216,21 +236,21 @@
     return { pct: s.pct, texto: 'Taxa legal, ' + periodo(a, b) + ': ' + pctFmt(s.pct) + '%' };
   }
   /* opc (opcional): { composto, taxa1, ate (data, exclusive), depois: 'taxalegal' | 'fixa', taxa2 } para o regime 'duas'. */
-  function jurosParticular(a, b, regime, taxaFixa, opc) {
+  function jurosParticular(a, b, regime, taxaFixa, opc, contagem) {
     if (regime === 'nenhum' || a >= b) return { pct: 0, trechos: [] };
     opc = opc || {};
     var tr = [], comp = !!opc.composto;
-    if (regime === 'fixa') tr.push(trechoFixo(a, b, taxaFixa, 'Juros de ' + pctFmt(taxaFixa, 2) + '% a.m.', comp));
+    if (regime === 'fixa') tr.push(trechoFixo(a, b, taxaFixa, 'Juros de ' + pctFmt(taxaFixa, 2) + '% a.m.', comp, contagem));
     else if (regime === 'taxalegal') tr.push(trechoTaxaLegal(a, b));
     else if (regime === 'tjsp') {
       var vig = parse(DADOS.vigenciaLei14905);
-      if (a < vig) tr.push(trechoFixo(a, Math.min(b, vig), 1, 'Juros de 1% a.m.'));
+      if (a < vig) tr.push(trechoFixo(a, Math.min(b, vig), 1, 'Juros de 1% a.m.', false, contagem));
       if (b > vig) tr.push(trechoTaxaLegal(Math.max(a, vig), b));
     } else if (regime === 'duas') {
-      if (a < opc.ate) tr.push(trechoFixo(a, Math.min(b, opc.ate), opc.taxa1, 'Juros de ' + pctFmt(opc.taxa1, 2) + '% a.m.', comp));
+      if (a < opc.ate) tr.push(trechoFixo(a, Math.min(b, opc.ate), opc.taxa1, 'Juros de ' + pctFmt(opc.taxa1, 2) + '% a.m.', comp, contagem));
       if (b > opc.ate) {
         var a2 = Math.max(a, opc.ate);
-        tr.push(opc.depois === 'fixa' ? trechoFixo(a2, b, opc.taxa2, 'Juros de ' + pctFmt(opc.taxa2, 2) + '% a.m.', comp) : trechoTaxaLegal(a2, b));
+        tr.push(opc.depois === 'fixa' ? trechoFixo(a2, b, opc.taxa2, 'Juros de ' + pctFmt(opc.taxa2, 2) + '% a.m.', comp, contagem) : trechoTaxaLegal(a2, b));
       }
     } else throw erro('Regime de juros desconhecido.');
     var pct = comp && tr.length > 1
@@ -239,9 +259,9 @@
     return { pct: pct, trechos: tr };
   }
   /* Compatibilidade com a versão 0.1 (testes). */
-  function juros(inicioIso, fimIso, regime, taxaFixa) {
+  function juros(inicioIso, fimIso, regime, taxaFixa, contagem) {
     var a = parse(inicioIso), b = parse(fimIso);
-    var j = jurosParticular(a, b, regime, taxaFixa);
+    var j = jurosParticular(a, b, regime, taxaFixa, null, contagem);
     return { pct: j.pct, dias: Math.max(0, Math.round((b - a) / DIA)), trechos: j.trechos };
   }
 
@@ -460,7 +480,7 @@
     if (piso) avisoPiso(par);
   }
   function jurosTrecho(par, a, b, ctx, regime) {
-    var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros);
+    var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros, ctx.contagem);
     var v = r2(par.P * j.pct / 100);
     par.J = r2(par.J + v);
     j.trechos.forEach(function (x) { log(par, x.texto + '.'); });
@@ -674,7 +694,8 @@
     }
     var ctx = {
       fazenda: fazenda, regime: e.regime, taxaFixa: e.taxaFixa, posEC136: e.posEC136 || 'selic', cor: cor,
-      M1: parse(DADOS.inicioEC113), M2: parse(DADOS.inicioEC136), selicLimitada: false, opcJuros: null
+      M1: parse(DADOS.inicioEC113), M2: parse(DADOS.inicioEC136), selicLimitada: false, opcJuros: null,
+      contagem: e.contagemDias === 'corridos' ? 'corridos' : 'dias360'
     };
     if (!fazenda && !REGIMES[e.regime]) throw erro('Regime de juros desconhecido.');
     if (fazenda) fatorIPCAE(mes(calc)); else checarIndice(cor, mes(calc));

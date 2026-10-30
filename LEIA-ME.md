@@ -58,10 +58,12 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 
 ## Débito cível e Fazenda Pública
 
-- Cível: correção pela Tabela Prática do TJSP; juros de 1% a.m. até 29/08/2024 e taxa legal depois (ou taxa legal em todo o período, taxa fixa, sem juros).
+- Cível: correção pela Tabela Prática do TJSP; juros de 1% a.m. até 28/08/2024 e taxa legal a partir de 29/08/2024, sem lacuna nem sobreposição (ou taxa legal em todo o período, taxa fixa, sem juros).
+- Juros fixos (1% a.m. ou outra taxa): por padrão, dias contados em mês comercial de 30 dias (DIAS360), como nas planilhas do TJSP; ao lado do regime, dá para escolher meses de data a data e dias corridos, se o título mandar.
+- Taxa legal: a do Banco Central (SGS 29543, Selic menos IPCA-15, Res. CMN 5.171/2024), pro rata pelos dias corridos de cada mês. Antes de 08/2024 (só no regime "taxa legal em todo o período"), Selic do mês anterior menos a variação da Tabela Prática, como a coluna "Selic menos correção" das planilhas do TJSP.
 - Fazenda (não tributário, vencimentos a partir de 07/2009): IPCA-E e juros da poupança até 08/12/2021; Selic depois (EC 113/2021); a partir de 10/09/2025, Selic ou IPCA + 2% a.a. limitado à Selic (EC 136/2025), à escolha.
 - O padrão da tela é o caso mais comum. Só mexa nas opções abaixo quando o título mandar outro critério; quando alguma estiver ligada, o selo "Em uso" aparece ao lado de "Opções avançadas".
-- Juros, em "Outros critérios" (cível e pensão): uma taxa até certa data e outra depois (fixa ou taxa legal); Selic como juros e correção em todo o período; Selic até 29/08/2024 e, depois, correção e taxa legal. A Selic entra em soma simples das taxas mensais, pro rata die, sobre o capital, e substitui a correção no mesmo período.
+- Juros, em "Outros critérios" (cível e pensão): uma taxa até certa data e outra depois (fixa ou taxa legal); Selic como juros e correção em todo o período; Selic até 28/08/2024 e, depois, correção e taxa legal. A Selic entra em soma simples das taxas mensais, pro rata die, sobre o capital, e substitui a correção no mesmo período.
 - Opções avançadas do cível:
   - índice de correção: Tabela Prática (padrão), IPCA, INPC, IPCA-E, IGP-M ou sem correção, com troca de índice a partir de um mês (ex.: IGP-M do contrato até 08/2024 e IPCA depois);
   - juros compostos, com capitalização mensal, nas taxas fixas (contratos que preveem capitalização);
@@ -74,7 +76,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 - `node ferramentas/testar-aleatorio.js [quantidade]` gera casos aleatórios de cível e Fazenda e os recalcula por uma implementação independente (algoritmos diferentes do motor), além de conferir que pagar o total zera o débito e que a imputação soma o valor pago.
 - `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
 - `node ferramentas/testar-propriedades.js [quantidade]` confere regras de bom senso em casos aleatórios de cível, Fazenda e pensão, sem precisar do valor certo: data do cálculo mais tarde não reduz o débito (salvo índice negativo), a ordem de lançamento não muda o total, uma parcela dividida em metades dá o mesmo total, as prestações e os 13º gerados batem com o calendário, prisão + penhora = débito etc. As propriedades “a decidir” dependem de regra a confirmar (perguntas ao contador) e só são relatadas.
-- Gabarito do TJSP: `python3 ferramentas/tjsp/gabarito-tjsp.py [quantidade]` calcula casos aleatórios na planilha oficial "Cálculo Simples" do TJSP (pasta `ferramentas/tjsp/planilhas`), pelo LibreOffice, e `node ferramentas/tjsp/comparar-tjsp.js` compara com a calculadora, separando correção, juros de 1% e taxa legal. No GitHub, a ação "Testar contra a planilha do TJSP" faz isso todo dia 6, baixando antes a planilha do mês no site do TJSP.
+- Gabarito do TJSP: `python3 ferramentas/tjsp/gabarito-tjsp.py [quantidade] [semente] '' extenso` (ou `simples`) calcula casos aleatórios nas planilhas oficiais "Atualização Monetária e Juros Moratórios - Extenso" e "Cálculo Simples" do TJSP (pasta `ferramentas/tjsp/planilhas`), pelo LibreOffice, e `node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito-extenso.json` (ou `gabarito.json`) compara com a calculadora, separando correção, juros de 1% e taxa legal. Na Extenso, o regime padrão e a taxa fixa têm de bater ao centavo, salvo diferenças de critério conhecidas (deflação, dias 29 a 31/08/2024). No GitHub, a ação "Testar contra a planilha do TJSP" faz isso todo dia 6, baixando antes as planilhas do mês no site do TJSP.
 
 ## Pagamentos e levantamentos
 

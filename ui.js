@@ -464,6 +464,7 @@
     cada(document.querySelectorAll('[data-so]'), function (el) { el.hidden = el.getAttribute('data-so') !== tipo; });
     cada(document.querySelectorAll('[data-nao]'), function (el) { el.hidden = el.getAttribute('data-nao') === tipo; });
     $('campoTaxaFixa').hidden = faz || reg !== 'fixa';
+    $('campoContagem').hidden = faz || !(reg === 'tjsp' || reg === 'fixa' || reg === 'duas');
     $('campoDuas').hidden = faz || reg !== 'duas';
     $('campoDuasTaxa2').hidden = $('duasDepois').value !== 'fixa';
     var troca = $('trocaIndice').checked;
@@ -548,6 +549,7 @@
       dataCalculo: $('dataCalculo').value,
       regime: $('regime').value,
       taxaFixa: lerNumero($('taxaFixa').value),
+      contagemDias: $('contagemDias').value,
       posEC136: $('posEC136').value,
       termoJuros: termo(),
       dataJuros: $('dataJuros').value,
@@ -590,7 +592,7 @@
   function salvar(e) {
     try {
       localStorage.setItem(CHAVE, JSON.stringify({
-        tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, posEC136: e.posEC136,
+        tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, contagemDias: e.contagemDias, posEC136: e.posEC136,
         termoJuros: e.termoJuros, dataJuros: e.dataJuros, multa: $('multa').checked, honorarios: e.honorarios,
         honorariosPct: $('honorariosPct').value, prazo523: $('prazo523').value, dataAjuizamento: $('dataAjuizamento').value, pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
@@ -633,6 +635,7 @@
       definirTipo(s.tipo || 'pensao');
       $('regime').value = s.regime || 'tjsp';
       $('taxaFixa').value = s.taxaFixa || '1';
+      $('contagemDias').value = s.contagemDias === 'corridos' ? 'corridos' : 'dias360';
       $('posEC136').value = s.posEC136 || 'selic';
       var r = document.querySelector('input[name=termo][value="' + (s.termoJuros || 'vencimento') + '"]');
       if (r) r.checked = true;
@@ -960,17 +963,17 @@
         if (res && res.rito) c.push('Rito da prisão: as três prestações da pensão vencidas antes do ajuizamento (' + brIso(e.dataAjuizamento) + ') e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ). As demais parcelas, inclusive as avulsas, vão para o rito da penhora.');
       }
       c.push(textoCorrecao(e));
-      if (e.regime === 'tjsp') c.push('Juros de 1% ao mês até 29/08/2024 e taxa legal (Selic deduzida do IPCA) a partir de 30/08/2024, vigência da Lei 14.905/2024.');
-      if (e.regime === 'taxalegal') c.push('Taxa legal (Selic deduzida do IPCA, art. 406 do CC) em todo o período, conforme a leitura do Tema 1368/STJ para o período anterior à Lei 14.905/2024.');
+      if (e.regime === 'tjsp') c.push('Juros de 1% ao mês até 28/08/2024 e, a partir de 29/08/2024 (Lei 14.905/2024), taxa legal (Selic deduzida do IPCA-15, Res. CMN 5.171/2024), sem lacuna nem sobreposição de dias.');
+      if (e.regime === 'taxalegal') c.push('Taxa legal (art. 406 do CC) em todo o período, conforme a leitura do Tema 1368/STJ para o período anterior à Lei 14.905/2024: Selic deduzida do IPCA-15 (Res. CMN 5.171/2024) e, antes de 08/2024, Selic deduzida da variação da Tabela Prática, como nas planilhas do TJSP.');
       if (e.regime === 'fixa') c.push('Juros de ' + num(e.taxaFixa, 2) + '% ao mês.');
       if (e.regime === 'nenhum') c.push('Sem juros de mora.');
       if (e.regime === 'duas') c.push('Juros de ' + num(e.jurosDuas.taxa1, 2) + '% ao mês até ' + brIso(e.jurosDuas.ate) + ' e, depois, ' +
-        (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% ao mês.' : 'taxa legal (Selic deduzida do IPCA, art. 406 do CC).'));
+        (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% ao mês.' : 'taxa legal (Selic deduzida do IPCA-15, art. 406 do CC).'));
       if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais, pro rata die, sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
-      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 29/08/2024 (art. 406 do CC, redação anterior); a partir de 30/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais, pro rata die, sobre o capital.');
+      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 28/08/2024 (art. 406 do CC, redação anterior); a partir de 29/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais, pro rata die, sobre o capital.');
       var comp = e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas');
       if (e.regime !== 'nenhum') c.push((comp ? 'Juros compostos, com capitalização mensal, nas taxas fixas: (1 + taxa)^(meses + dias ÷ 30) − 1; taxa legal e Selic sempre simples. ' : 'Juros simples sobre o capital corrigido. ') +
-        'Taxa fixa: meses completos de data a data, mais os dias restantes ÷ 30. Taxa legal: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).');
+        (e.contagemDias === 'corridos' ? 'Taxa fixa: meses completos de data a data, mais os dias corridos restantes ÷ 30. ' : 'Taxa fixa: dias contados em mês comercial de 30 dias (função DIAS360, como nas planilhas do TJSP) ÷ 30. ') + 'Taxa legal: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).');
     }
     if (!(e.tipo !== 'fazenda' && e.regime === 'nenhum')) {
       c.push(e.termoJuros === 'data'
@@ -1305,8 +1308,8 @@
   var lidoCopilot = null;
   var NOMES_BASE = { pct_sm: '% do salário mínimo', qtd_sm: 'salários mínimos', pct_rend: '% dos rendimentos', fixo: 'valor fixo' };
   var NOMES_TIPO = { pensao: 'Pensão alimentícia', particular: 'Débito cível', fazenda: 'Fazenda Pública' };
-  var NOMES_REGIME = { tjsp: '1% a.m. até 29/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros',
-    duas: 'uma taxa até certa data, depois outra', selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 29/08/2024, depois correção e taxa legal' };
+  var NOMES_REGIME = { tjsp: '1% a.m. até 28/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros',
+    duas: 'uma taxa até certa data, depois outra', selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 28/08/2024, depois correção e taxa legal' };
 
   function linhasPrevia(d) {
     var L = [];
@@ -1358,6 +1361,7 @@
     if (d.juros) {
       if (d.juros.regime) $('regime').value = d.juros.regime;
       if (d.juros.regime === 'fixa') $('taxaFixa').value = num(d.juros.taxaMensal, 2);
+      $('contagemDias').value = d.juros.contagemDias === 'corridos' ? 'corridos' : 'dias360';
       if (d.juros.regime === 'duas' && d.juros.duas) {
         $('duasTaxa1').value = num(d.juros.duas.taxa1, 2); $('duasAte').value = d.juros.duas.ate || '';
         $('duasDepois').value = d.juros.duas.depois; if (d.juros.duas.taxa2 >= 0) $('duasTaxa2').value = num(d.juros.duas.taxa2, 2);
@@ -1499,6 +1503,7 @@
       partes: ($('procExequente').value.trim() || $('procExecutado').value.trim()) ? { exequente: $('procExequente').value.trim(), executado: $('procExecutado').value.trim() } : undefined,
       juros: semVazio({ regime: faz ? undefined : e.regime, taxaMensal: !faz && e.regime === 'fixa' ? e.taxaFixa : undefined,
         termoInicial: e.termoJuros, data: e.termoJuros === 'data' ? e.dataJuros : undefined,
+        contagemDias: !faz && e.contagemDias === 'corridos' ? 'corridos' : undefined,
         duasTaxas: !faz && e.regime === 'duas' ? semVazio({ taxa1: e.jurosDuas.taxa1, ate: e.jurosDuas.ate, depois: e.jurosDuas.depois,
           taxa2: e.jurosDuas.depois === 'fixa' ? e.jurosDuas.taxa2 : undefined }) : undefined }),
       civel: e.tipo === 'particular' ? semVazio({ indice: e.civel.indice, indice2: e.civel.indice2 || undefined, indice2Desde: e.civel.indice2 ? e.civel.indice2Desde : undefined,
@@ -1721,7 +1726,8 @@
     if (e.tipo === 'particular') gerais.push(['Correção monetária', textoCorrecao(e).replace(/\. Índice entre.*$/, '')]);
     if (!faz) gerais.push(['Juros', NOMES_REGIME[e.regime] + (e.regime === 'fixa' ? ' de ' + num(e.taxaFixa, 2) + '% a.m.' : '') +
       (e.regime === 'duas' ? ': ' + num(e.jurosDuas.taxa1, 2) + '% a.m. até ' + brIso(e.jurosDuas.ate) + ', depois ' + (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% a.m.' : 'taxa legal') : '') +
-      (e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas') ? ', compostos' : '')]);
+      (e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas') ? ', compostos' : '') +
+      ((e.regime === 'tjsp' || e.regime === 'fixa' || e.regime === 'duas') ? (e.contagemDias === 'corridos' ? '; dias corridos' : '; mês comercial de 30 dias') : '')]);
     if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido']);
     if (e.sucumbencia && e.sucumbencia.base) gerais.push(['Honorários de sucumbência', ({ condenacao: num(e.sucumbencia.pct, 2) + '% sobre a condenação',
       causa: num(e.sucumbencia.pct, 2) + '% sobre o valor da causa de ' + moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
