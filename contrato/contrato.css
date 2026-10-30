@@ -1,0 +1,108 @@
+@font-face {
+  font-family: "Figtree";
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("../fonts/figtree-latin-wght-normal.woff2") format("woff2");
+}
+
+:root {
+  color-scheme: light dark;
+  --green: #3f8223;
+  --text: #161a17;
+  --muted: #59615b;
+  --border: #d5dad6;
+  --background: #fff;
+  font-family: "Figtree", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { --text: #e8ece8; --muted: #b6c0b7; --border: #49534b; --background: #151a17; --green: #82ce62; }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: var(--text); background: var(--background); font-size: 15px; line-height: 1.5; }
+button, input, select { font: inherit; color: inherit; }
+button, .importar { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--green); outline-offset: 2px; }
+.topo { padding: 24px max(20px, calc((100% - 1040px) / 2)); border-bottom: 1px solid var(--border); }
+.topo h1 { margin: 10px 0 0; font-size: clamp(24px, 4vw, 34px); line-height: 1.2; }
+.voltar { color: var(--green); text-decoration: none; }
+.subtitulo, .nota, .versao { color: var(--muted); font-size: 13px; }
+.subtitulo { margin: 6px 0 0; }
+.pagina { width: min(100% - 32px, 1040px); margin: 24px auto 64px; }
+.aviso, .painel { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.aviso { display: grid; gap: 4px; background: color-mix(in srgb, var(--green) 8%, var(--background)); }
+.painel h2 { font-size: 18px; margin: 0 0 14px; }
+.painel h3 { font-size: 16px; margin: 0 0 8px; }
+.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px; }
+.grade label { display: grid; gap: 5px; font-size: 13px; font-weight: 600; }
+input, select { min-width: 0; min-height: 40px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--background); }
+.nota { margin: 12px 0 0; }
+.encargos { display: grid; gap: 8px; margin: 12px 0; }
+.encargo { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, .7fr) minmax(160px, .9fr) auto; gap: 8px; align-items: end; border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.encargo label { display: grid; gap: 4px; font-size: 12px; }
+.primario, .secundario { min-height: 40px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--green); font-weight: 600; }
+.primario { color: #fff; background: var(--green); }
+.secundario { background: transparent; color: var(--green); }
+.erro { border: 1px solid #b71c1c; border-radius: 6px; color: #b71c1c; padding: 10px; margin: 12px 0; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; align-items: center; }
+.importar { display: inline-flex; align-items: center; }
+.resultado { border-top: 4px solid var(--green); }
+.metricas { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.metrica { border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-wrap: anywhere; }
+.metrica span { display: block; color: var(--muted); font-size: 12px; }
+.metrica strong { display: block; margin-top: 4px; font-size: 18px; }
+.subresultado { margin-top: 22px; }
+.subresultado ul { padding-left: 22px; }
+.subresultado li { margin: 8px 0; }
+.tabela-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+.metodologia summary { cursor: pointer; font-weight: 600; }
+.metodologia p { max-width: 90ch; }
+.versao { margin-top: 18px; }
+
+:root { --amarelo: #E9A820; --amarelo-fundo: #FDF6E6; --vermelho: #C10015; --vermelho-fundo: #FDECEE; --verde-fundo: #EEF7E9; --cinza-fundo: #F1F2F1; }
+@media (prefers-color-scheme: dark) {
+  :root { --amarelo-fundo: #3a3217; --vermelho-fundo: #3d1b20; --verde-fundo: #1d2e19; --cinza-fundo: #262b27; --amarelo: #f0c14b; --vermelho: #ff7b86; }
+}
+.aviso { margin: 0 0 16px; font-size: 13px; display: block; }
+summary { cursor: pointer; font-weight: 600; }
+.mais-opcoes > .grade, .titulo-encargos { margin-top: 14px; }
+.titulo-encargos { margin-bottom: 0; }
+.semaforo { display: flex; gap: 14px; align-items: center; border: 2px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.semaforo p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.semaforo strong { font-size: 18px; }
+.semaforo-icone { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; font-size: 22px; font-weight: 800; color: #fff; background: var(--badge, #777); }
+.semaforo-green { --badge: #2e7d32; border-color: #2e7d32; background: var(--verde-fundo); }
+.semaforo-yellow { --badge: #b77900; border-color: var(--amarelo); background: var(--amarelo-fundo); }
+.semaforo-red { --badge: #c10015; border-color: var(--vermelho); background: var(--vermelho-fundo); }
+.semaforo-gray { --badge: #6b6f6c; border-color: #8a8f8b; background: var(--cinza-fundo); }
+.cartoes { margin-bottom: 12px; }
+.cartoes .metrica strong { font-size: 22px; }
+.metricas + .metricas { margin-top: 8px; }
+.achados { list-style: none; padding: 0; }
+.achados li { border-left: 4px solid var(--border); padding: 6px 10px; font-size: 14px; }
+.achados li small { display: block; color: var(--muted); }
+.achados .nivel-yellow { border-left-color: var(--amarelo); background: var(--amarelo-fundo); }
+.achados .nivel-red { border-left-color: var(--vermelho); background: var(--vermelho-fundo); }
+.detalhes { border-top: 1px solid var(--border); padding: 10px 0; margin-top: 8px; }
+.discretas { margin-top: 18px; }
+.discretas .secundario { min-height: 34px; font-size: 13px; border-color: var(--border); color: var(--muted); }
+@media (max-width: 640px) {
+  .encargo { grid-template-columns: 1fr; }
+  .pagina { width: min(100% - 20px, 1040px); margin-top: 12px; }
+  .topo { padding: 18px 12px; }
+}
+@media print {
+  :root { color-scheme: light; --text: #000; --muted: #333; --border: #aaa; --background: #fff; }
+  .topo, #formContrato, .metodologia, .acoes, .versao { display: none !important; }
+  .semaforo-icone { background: #fff; color: #000; border: 2px solid #000; }
+  body { font-size: 11pt; }
+  .pagina { width: 100%; margin: 0; }
+  .painel { break-inside: avoid; border-color: #999; }
+  .resultado { border-top: 0; }
+  table { font-size: 9pt; }
+}
