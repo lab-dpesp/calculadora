@@ -43,6 +43,9 @@ jobs:
           node ferramentas/testar-aleatorio.js 1000
           node ferramentas/testar-propriedades.js 500
           node ferramentas/testar-contrato.js
+          node ferramentas/testar-contrato-abordagens.js
+          node ferramentas/testar-series-contrato.js
+          node ferramentas/testar-contrato-aleatorio.js 1000
       - name: Montar o site
         run: |
           mkdir -p _site

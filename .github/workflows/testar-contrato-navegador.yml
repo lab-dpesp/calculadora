@@ -1,0 +1,47 @@
+name: Testar módulo de contrato no navegador
+
+on:
+  push:
+    paths:
+      - 'contrato/**'
+      - 'contrato.html'
+      - 'ferramentas/testar-contrato*'
+      - 'ferramentas/testar-series-contrato.js'
+      - 'ferramentas/atualizar-series-contrato.js'
+      - 'ferramentas/casos-contrato/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar-contrato-navegador.yml'
+  pull_request:
+    paths:
+      - 'contrato/**'
+      - 'contrato.html'
+      - 'ferramentas/testar-contrato*'
+      - 'ferramentas/testar-series-contrato.js'
+      - 'ferramentas/atualizar-series-contrato.js'
+      - 'ferramentas/casos-contrato/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar-contrato-navegador.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  navegador:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Testes de navegador, acessibilidade, telas e mutação
+        run: |
+          for navegador in chromium firefox webkit; do
+            CONTRACT_BROWSER=$navegador node ferramentas/testar-contrato-navegador.js 20
+          done
+          node ferramentas/testar-mutantes-contrato.js
