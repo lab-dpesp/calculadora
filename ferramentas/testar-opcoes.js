@@ -56,9 +56,9 @@ caso('troca de índice', base({ civel: { indice: 'tjsp', indice2: 'ipca', indice
 caso('IGP-M', base({ civel: { indice: 'igpm' } }), r2(10000 * acum('IGPM', '2023-03', '2026-10')));
 caso('INPC', base({ civel: { indice: 'inpc' } }), r2(10000 * acum('INPC', '2023-03', '2026-10')));
 
-// 4. "Duas taxas" com 1% até 29/08/2024 e taxa legal depois = regime padrão.
+// 4. "Duas taxas" com 1% até 28/08/2024 e taxa legal depois = regime padrão.
 const padrao = E.calcular(base({ regime: 'tjsp' })).totais.total;
-caso('duas taxas = padrão', base({ regime: 'duas', jurosDuas: { taxa1: 1, ate: '2024-08-29', depois: 'taxalegal' } }), padrao);
+caso('duas taxas = padrão', base({ regime: 'duas', jurosDuas: { taxa1: 1, ate: '2024-08-28', depois: 'taxalegal' } }), padrao);
 
 // 5. 1% até 14/03/2025 e 0,5% depois. 15/03/2023 a 15/03/2025: 24 meses; 15/03/2025 a 31/10/2026: 19 meses e 16 dias.
 const cap = r2(10000 * D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2023-03']);
@@ -72,12 +72,12 @@ caso('juros compostos', base({ regime: 'fixa', taxaFixa: 1, civel: { jurosCompos
 // 7. Selic como juros e correção, em todo o período (Selic disponível até 09/2026).
 caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 * proRata('SELIC', '2023-03-15', '2026-10-01') / 100)));
 
-// 8. Selic até 29/08/2024; depois Tabela Prática e taxa legal.
+// 8. Selic até 28/08/2024; depois Tabela Prática e taxa legal.
 (function () {
-  const sel = r2(10000 * proRata('SELIC', '2023-03-15', '2024-08-30') / 100);
+  const sel = r2(10000 * proRata('SELIC', '2023-03-15', '2024-08-29') / 100);
   const f = D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2024-08'];
   const P = r2(10000 * f), J0 = r2(sel * f);
-  const tl = r2(P * proRata('TAXA_LEGAL', '2024-08-30', '2026-10-31') / 100);
+  const tl = r2(P * proRata('TAXA_LEGAL', '2024-08-29', '2026-10-31') / 100);
   caso('Selic até a Lei 14.905, depois taxa legal', base({ regime: 'selic_tl' }), r2(P + r2(J0 + tl)));
 })();
 
@@ -86,8 +86,8 @@ caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 
   const pre = r2(10000 * (28 + 9 / 30) / 100);             // 01/01/2022 a 10/05/2024: 28 meses e 9 dias a 1%
   const f = D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2024-05'];
   const P = r2(10000 * f), J0 = r2(pre * f);
-  const j1 = 3 + 20 / 30;                                     // 10/05/2024 a 30/08/2024: 3 meses e 20 dias
-  const j = r2(P * (j1 + proRata('TAXA_LEGAL', '2024-08-30', '2026-10-31')) / 100);
+  const j1 = 3 + 19 / 30;                                     // 10/05/2024 a 29/08/2024: 3 meses e 19 dias (mês comercial)
+  const j = r2(P * (j1 + proRata('TAXA_LEGAL', '2024-08-29', '2026-10-31')) / 100);
   caso('termos próprios da parcela', base({ regime: 'tjsp', parcelas: [{ vencimento: '2024-05-10', valor: 10000, correcaoDesde: '2024-05-10', jurosDesde: '2022-01-01' }] }),
     r2(P + r2(J0 + j)));
 })();
@@ -118,11 +118,23 @@ caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 
     r2(l.capital + jur + r2(r2(l.capital + jur) * selPct / 100)));
 })();
 
-// 12. Juros fixos com vencimento no dia 31: de 31/01 a 31/03 são 2 meses; de 31/01 a 28/02, 1 mês (último dia do mês).
+// 12. Juros fixos com vencimento no dia 31. Mês comercial (DIAS360, padrão, como as planilhas do TJSP): de 31/01 a 31/03
+// são 60 dias (2 meses); de 31/01 a 28/02, 28 dias. Dias corridos (opção): de 31/01 a 28/02 é 1 mês (último dia do mês).
 caso('juros fixos do dia 31 a 31/03', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-03-31',
   parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), 10200);
-caso('juros fixos do dia 31 a 28/02', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-02-28',
-  parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), 10100);
+caso('juros fixos do dia 31 a 28/02, mês comercial', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-02-28',
+  parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), r2(10000 * (1 + 28 / 30 / 100)));
+caso('juros fixos do dia 31 a 28/02, dias corridos', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-02-28',
+  contagemDias: 'corridos', parcelas: [{ vencimento: '2023-01-31', valor: 10000 }] }), 10100);
+caso('juros fixos de 15/01 a 15/03, dias corridos', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-03-15',
+  contagemDias: 'corridos', parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }), 10200);
+
+// 12b. Mudança de agosto de 2024 (critério do contador): 1% a.m. até 28/08/2024, taxa legal desde 29/08/2024.
+// Vencimento em 28/08: 1 dia de 1% e a taxa legal de 29 a 31/08; vencimento em 29/08: só taxa legal.
+caso('vencimento em 28/08/2024', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-09-30',
+  parcelas: [{ vencimento: '2024-08-28', valor: 10000 }] }), r2(10000 + r2(10000 * (1 / 30 + proRata('TAXA_LEGAL', '2024-08-29', '2024-09-30')) / 100)));
+caso('vencimento em 29/08/2024', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-09-30',
+  parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }), r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-29', '2024-09-30') / 100)));
 
 // 13. Fazenda com IPCA + 2% a.a. limitado à Selic após a EC 136/2025: Selic de 10/06/2025 a 09/09/2025, sobre o capital;
 // depois, min(IPCA + 2/12, Selic) de cada mês, pro rata, sobre capital + juros (sem a Selic já apurada), até o último

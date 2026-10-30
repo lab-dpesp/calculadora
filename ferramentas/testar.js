@@ -19,7 +19,7 @@ const gravar = process.argv.includes('--gravar');
 
 function entrada(d) {
   const j = d.juros || {};
-  return { tipo: d.tipo, dataCalculo: DATA, regime: j.regime || 'tjsp', taxaFixa: j.taxaMensal, termoJuros: j.termo || 'vencimento', dataJuros: j.data || '',
+  return { tipo: d.tipo, dataCalculo: DATA, regime: j.regime || 'tjsp', taxaFixa: j.taxaMensal, contagemDias: j.contagemDias, termoJuros: j.termo || 'vencimento', dataJuros: j.data || '',
     posEC136: d.posEC136 || 'selic',
     periodos: d.periodos.map(function (p) { return { inicio: p.inicio, fim: p.fim, dia: p.dia, base: p.base, quantidade: p.quantidade, decimo: p.decimo,
       rendimentos: p.rendimentos, reajuste: p.reajuste, dataBase: p.dataBase }; }),

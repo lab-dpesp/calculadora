@@ -31,7 +31,7 @@ const doDia = t => new Date(t).toISOString().slice(0, 10);
 const mesDe = s => s.slice(0, 7);
 const mesSeg = m => { let [y, mm] = comp(m); mm++; if (mm > 12) { mm = 1; y++; } return y + '-' + pad(mm); };
 const r2 = x => { const s = x < 0 ? -1 : 1; return s * Math.round(Number((Math.abs(x) * 100).toFixed(6))) / 100; };
-const VIG = '2024-08-30', M1 = '2021-12-09';
+const VIG = '2024-08-29', M1 = '2021-12-09';
 
 /* Variação do mês m de cada índice (%), como fração. Para tabelas de fatores: fator(m+1) ÷ fator(m) − 1. */
 function variacao(ind, m) {
@@ -70,8 +70,23 @@ function mesesEDias(a, b) {
   const dias = Math.round((ts(b) - ts(iso(yy, mm, d1))) / 86400000);
   return { meses, dias };
 }
+/* Calendário comercial (30/360, método americano, como a DIAS360 do Excel e do LibreOffice): cada data vira
+ * ano × 360 + mês × 30 + dia, com o último dia de fevereiro e o dia 31 tratados como dia 30 (o 31 final só quando o
+ * dia inicial já é 30). */
+function n360(a, b) {
+  const ultimo = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+  let [y1, m1, d1] = comp(a), [y2, m2, d2] = comp(b);
+  const fev1 = m1 === 2 && d1 === ultimo(y1, 2), fev2 = m2 === 2 && d2 === ultimo(y2, 2);
+  if (fev1) { d1 = 30; if (fev2) d2 = 30; }
+  if (d1 === 31) d1 = 30;
+  if (d2 === 31 && d1 === 30) d2 = 30;
+  return (y2 * 360 + m2 * 30 + d2) - (y1 * 360 + m1 * 30 + d1);
+}
+let CONTAGEM = 'dias360';
 function jurosFixos(a, b, taxa, comp) {
-  const { meses, dias } = mesesEDias(a, b), n = meses + dias / 30;
+  let n;
+  if (CONTAGEM === 'corridos') { const { meses, dias } = mesesEDias(a, b); n = meses + dias / 30; }
+  else n = Math.max(0, n360(a, b)) / 30;
   return comp ? (Math.pow(1 + taxa / 100, n) - 1) * 100 : taxa * n;
 }
 function jurosPct(a, b, reg, o) {   // % de juros do regime entre a e b (sem Selic)
@@ -181,10 +196,12 @@ function casoCivel() {
   const ent = { tipo: 'particular', dataCalculo: calc, regime, taxaFixa: o.taxa, termoJuros: dataJuros ? 'data' : 'vencimento', dataJuros,
     jurosDuas, civel, parcelas, pagamentos: [], multa: rnd() < 0.4, honorarios: rnd() < 0.4, honorariosPct: escolha([10, 15, 20]) };
   if (rnd() < 0.3) civel.multaContratualPct = escolha([2, 10]);
+  if (rnd() < 0.3) ent.contagemDias = 'corridos';
   if (rnd() < 0.3) ent.sucumbencia = escolha([{ base: 'condenacao', pct: 10 }, { base: 'causa', pct: 10, valor: 20000, data: dataAleatoria(minData, calc) }, { base: 'fixo', valor: 1500, data: dataAleatoria(minData, calc) }]);
   return { ent, cor, o };
 }
 function esperadoCivel(c) {
+  CONTAGEM = c.ent.contagemDias === 'corridos' ? 'corridos' : 'dias360';
   const e = c.ent, linhas = e.parcelas.map(p => parcelaCivel(p, e.dataCalculo, { cor: c.cor, regime: e.regime, o: c.o, dataJuros: e.termoJuros === 'data' ? e.dataJuros : '' }));
   const cap = r2(linhas.reduce((s, l) => s + l.P, 0)), jur = r2(linhas.reduce((s, l) => s + l.J, 0));
   const sub = r2(linhas.reduce((s, l) => s + r2(l.P + l.J), 0));

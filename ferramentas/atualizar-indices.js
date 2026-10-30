@@ -65,7 +65,7 @@ async function buscarSerie(codigo) {
 const COMENTARIOS = {
   SALARIO_MINIMO: 'Salário mínimo nacional (SGS 1619): data de início de vigência e valor.',
   FATORES_TJSP: 'Tabela Prática do TJSP (Lei 14.905/2024): INPC até 08/2024, IPCA-15 desde 09/2024. Fator do mês m incorpora o índice de m-1.',
-  TAXA_LEGAL: 'Taxa legal mensal, % a.m. (art. 406 do CC; Res. CMN 5.171/2024). Antes de 09/2024, calculada pela mesma fórmula.',
+  TAXA_LEGAL: 'Taxa legal mensal, % a.m. (art. 406 do CC; Res. CMN 5.171/2024; SGS 29543, Selic menos IPCA-15). Antes de 08/2024, Selic do mês anterior menos a variação da Tabela Prática (fator em 4 casas, mínimo zero), como nas planilhas do TJSP.',
   FATORES_IPCAE: 'IPCA-E acumulado (Tabela EC 113/2021 do TJSP), mesma convenção de defasagem da Tabela Prática.',
   JUROS_POUPANCA: 'Juros da poupança, % a.m. (art. 1º-F da Lei 9.494/97, red. Lei 11.960/2009), sem TR.',
   SELIC: 'Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2008: EC 113/2021 na Fazenda e Selic como juros no débito cível.',
