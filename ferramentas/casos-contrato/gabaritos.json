@@ -1,0 +1,102 @@
+[
+  {
+    "name": "Price clássico, 10.000 a 1% em 12 meses",
+    "amortization": "PRICE",
+    "principalCents": 1000000,
+    "monthlyRate": 0.01,
+    "installments": 12,
+    "firstPaymentCents": 88849,
+    "lastPaymentCents": 88849,
+    "totalInterestCents": 66188
+  },
+  {
+    "name": "SAC clássico, 120.000 a 1% em 12 meses",
+    "amortization": "SAC",
+    "principalCents": 12000000,
+    "monthlyRate": 0.01,
+    "installments": 12,
+    "firstPaymentCents": 1120000,
+    "lastPaymentCents": 1010000,
+    "totalInterestCents": 780000
+  },
+  {
+    "name": "Price sem juros",
+    "amortization": "PRICE",
+    "principalCents": 1000000,
+    "monthlyRate": 0,
+    "installments": 12,
+    "firstPaymentCents": 83334,
+    "lastPaymentCents": 83333,
+    "totalInterestCents": 0
+  },
+  {
+    "name": "Price em uma parcela",
+    "amortization": "PRICE",
+    "principalCents": 100000,
+    "monthlyRate": 0.02,
+    "installments": 1,
+    "firstPaymentCents": 102000,
+    "lastPaymentCents": 102000,
+    "totalInterestCents": 2000
+  },
+  {
+    "name": "SAC em uma parcela",
+    "amortization": "SAC",
+    "principalCents": 100000,
+    "monthlyRate": 0.02,
+    "installments": 1,
+    "firstPaymentCents": 102000,
+    "lastPaymentCents": 102000,
+    "totalInterestCents": 2000
+  },
+  {
+    "name": "Price em 36 meses",
+    "amortization": "PRICE",
+    "principalCents": 2500000,
+    "monthlyRate": 0.0075,
+    "installments": 36,
+    "firstPaymentCents": 79499,
+    "lastPaymentCents": 79499,
+    "totalInterestCents": 361964
+  },
+  {
+    "name": "SAC em 24 meses",
+    "amortization": "SAC",
+    "principalCents": 3000000,
+    "monthlyRate": 0.012,
+    "installments": 24,
+    "firstPaymentCents": 161000,
+    "lastPaymentCents": 126500,
+    "totalInterestCents": 450000
+  },
+  {
+    "name": "Price em 60 meses",
+    "amortization": "PRICE",
+    "principalCents": 25000000,
+    "monthlyRate": 0.008,
+    "installments": 60,
+    "firstPaymentCents": 526269,
+    "lastPaymentCents": 526269,
+    "totalInterestCents": 6576140
+  },
+  {
+    "name": "SAC em 420 meses",
+    "amortization": "SAC",
+    "principalCents": 9000000,
+    "monthlyRate": 0.005,
+    "installments": 420,
+    "firstPaymentCents": 66429,
+    "lastPaymentCents": 21535,
+    "totalInterestCents": 9472396
+  },
+  {
+    "name": "Price em 420 meses",
+    "amortization": "PRICE",
+    "principalCents": 4200000,
+    "monthlyRate": 0.0001,
+    "installments": 420,
+    "firstPaymentCents": 10212,
+    "lastPaymentCents": 10212,
+    "totalInterestCents": 89040
+  }
+]
