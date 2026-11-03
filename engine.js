@@ -13,7 +13,7 @@
  * DÉBITOS ENTRE PARTICULARES E PENSÃO
  * - Correção: Tabela Prática do TJSP (Lei 14.905/2024). Índice = fator(mês final) ÷ fator(mês inicial).
  * - Juros simples sobre o capital corrigido (Res. CMN 5.171/2024, art. 7º), em um dos regimes:
- *   tjsp       1% a.m. até 28/08/2024 e taxa legal a partir de 29/08/2024;
+ *   tjsp       0,5% a.m. até 10/01/2003, 1% a.m. até 29/08/2024 e taxa legal a partir de 30/08/2024;
  *   taxalegal  taxa legal em todo o período (leitura do Tema 1368/STJ);
  *   fixa       taxa mensal informada;
  *   nenhum     sem juros.
@@ -58,16 +58,34 @@
 
   var DADOS = root.DADOS || (typeof require === 'function' ? require('./data.js') : null);
   var DIA = 86400000;
+  var PERFIL_CALCULO_HISTORICO = 1;
+  var PERFIL_CALCULO_ANTERIOR = 2;
+  var PERFIL_CALCULO_ATUAL = 3;
+  var VIGENCIA_LEI14905_HISTORICA = '2024-08-29';
 
+  function tem(obj, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k); }
   function erro(msg) { var e = new Error(msg); e.amigavel = true; return e; }
 
   /* ---------- Datas ---------- */
   function parse(iso) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) throw erro('Data inválida: ' + (iso || '(vazia)') + '.');
     var p = iso.split('-').map(Number);
-    var t = Date.UTC(p[0], p[1] - 1, p[2]);
-    if (new Date(t).getUTCDate() !== p[2]) throw erro('Data inexistente: ' + iso + '.');
+    var t = Date.UTC(p[0], p[1] - 1, p[2]), d = new Date(t);
+    // Mês 00/13 ou dia 31/02 não podem virar outra data em silêncio (Date.UTC "transborda" para o mês vizinho);
+    // anos de 0 a 99 seriam lidos como 1900 a 1999.
+    if (p[0] < 1000 || d.getUTCFullYear() !== p[0] || d.getUTCMonth() !== p[1] - 1 || d.getUTCDate() !== p[2]) {
+      throw erro('Data inexistente: ' + iso + '.');
+    }
     return t;
+  }
+  /* Valores monetários de entrada: número finito, positivo e até R$ 1 trilhão (Infinity ou 1e308 virariam "R$ ∞"). */
+  var MAX_VALOR = 1e12;
+  function valorValido(x) { var v = Number(x); return x !== '' && x != null && typeof x !== 'boolean' && isFinite(v) && v > 0 && v <= MAX_VALOR; }
+  /* Percentuais e taxas: número finito no intervalo (min exclusivo quando estrito). */
+  function pctValido(x, max, aceitaZero) {
+    if (x === '' || x == null || typeof x === 'boolean') return false;
+    var v = Number(x);
+    return isFinite(v) && (aceitaZero ? v >= 0 : v > 0) && v <= max;
   }
   function iso(t) { return new Date(t).toISOString().slice(0, 10); }
   function br(t) { var s = iso(t); return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4); }
@@ -140,7 +158,7 @@
     return c;
   }
   function fatorIndice(ind, m) {
-    var x = INDICES[ind];
+    var x = tem(INDICES, ind) ? INDICES[ind] : null;
     if (!x) throw erro('Índice de correção desconhecido.');
     if (x.tipo === 'nenhum') return 1;
     if (x.tipo === 'fator') return x.tab === 'FATORES_TJSP' ? fatorTJSP(m) : fatorIPCAE(m);
@@ -236,15 +254,17 @@
     return { pct: s.pct, texto: 'Taxa legal, ' + periodo(a, b) + ': ' + pctFmt(s.pct) + '%' };
   }
   /* opc (opcional): { composto, taxa1, ate (data, exclusive), depois: 'taxalegal' | 'fixa', taxa2 } para o regime 'duas'. */
-  function jurosParticular(a, b, regime, taxaFixa, opc, contagem) {
+  function jurosParticular(a, b, regime, taxaFixa, opc, contagem, vigenciaLei14905) {
     if (regime === 'nenhum' || a >= b) return { pct: 0, trechos: [] };
     opc = opc || {};
     var tr = [], comp = !!opc.composto;
     if (regime === 'fixa') tr.push(trechoFixo(a, b, taxaFixa, 'Juros de ' + pctFmt(taxaFixa, 2) + '% a.m.', comp, contagem));
     else if (regime === 'taxalegal') tr.push(trechoTaxaLegal(a, b));
     else if (regime === 'tjsp') {
-      var vig = parse(DADOS.vigenciaLei14905);
-      if (a < vig) tr.push(trechoFixo(a, Math.min(b, vig), 1, 'Juros de 1% a.m.', false, contagem));
+      var cc2002 = parse(DADOS.inicioCC2002);
+      var vig = parse(vigenciaLei14905 || DADOS.vigenciaLei14905);
+      if (a < cc2002) tr.push(trechoFixo(a, Math.min(b, cc2002), 0.5, 'Juros de 0,5% a.m. (CC/1916)', false, contagem));
+      if (b > cc2002 && a < vig) tr.push(trechoFixo(Math.max(a, cc2002), Math.min(b, vig), 1, 'Juros de 1% a.m.', false, contagem));
       if (b > vig) tr.push(trechoTaxaLegal(Math.max(a, vig), b));
     } else if (regime === 'duas') {
       if (a < opc.ate) tr.push(trechoFixo(a, Math.min(b, opc.ate), opc.taxa1, 'Juros de ' + pctFmt(opc.taxa1, 2) + '% a.m.', comp, contagem));
@@ -358,7 +378,7 @@
       if (!a || !/^(p:\d{4}-\d{2}|d:\d{4})$/.test(a.chave || '')) throw erro(rot + ': informe o mês da prestação.');
       var temV = a.valor != null && a.valor !== '', temR = a.rendimento != null && a.rendimento !== '';
       if (temV === temR) throw erro(rot + ' (' + rotuloChave(a.chave) + '): informe o valor da prestação ou o rendimento do mês, um dos dois.');
-      if (!((temV ? a.valor : a.rendimento) > 0)) throw erro(rot + ' (' + rotuloChave(a.chave) + '): informe um valor maior que zero.');
+      if (!valorValido(temV ? a.valor : a.rendimento)) throw erro(rot + ' (' + rotuloChave(a.chave) + '): informe um valor maior que zero (número finito, até R$ 1 trilhão).');
       if (mapaAj[a.chave]) throw erro('Há dois ajustes ' + naChave(a.chave) + '. Deixe só um.');
       mapaAj[a.chave] = a;
     });
@@ -383,12 +403,12 @@
       if (per.fim && per.fim < per.inicio) throw erro(rot + ': o mês final é anterior ao inicial.');
       var dia = Number(per.dia);
       if (!(dia >= 1 && dia <= 31) || dia % 1) throw erro(rot + ': o dia do vencimento deve estar entre 1 e 31.');
-      if (!BASES[per.base]) throw erro(rot + ': escolha a base de cálculo.');
-      if (!(per.quantidade > 0)) throw erro(rot + ': informe ' + (per.base === 'fixo' ? 'o valor mensal' : per.base === 'pct_sm' ? 'o percentual' : 'a quantidade de salários mínimos') + '.');
+      if (!tem(BASES, per.base)) throw erro(rot + ': escolha a base de cálculo.');
+      if (!valorValido(per.quantidade)) throw erro(rot + ': informe ' + (per.base === 'fixo' ? 'o valor mensal' : per.base === 'pct_sm' ? 'o percentual' : 'a quantidade de salários mínimos') + '.');
       if (per.base === 'pct_sm' && per.quantidade > 100) throw erro(rot + ': o percentual do salário mínimo passa de 100%. Para mais de um salário mínimo, use "salários mínimos".');
       if (per.base === 'pct_rend' && per.quantidade > 100) throw erro(rot + ': o percentual dos rendimentos passa de 100%.');
       per = Object.assign({}, per, { n: n, _reaj: null });
-      if (per.base !== 'fixo' || !NOMES_REAJUSTE[per.reajuste]) per.reajuste = '';
+      if (per.base !== 'fixo' || !tem(NOMES_REAJUSTE, per.reajuste)) per.reajuste = '';
       if (per.reajuste) {
         if (per.dataBase && !/^\d{4}-\d{2}$/.test(per.dataBase)) throw erro(rot + ': data-base do reajuste inválida.');
         if (per.dataBase && per.dataBase > per.inicio) throw erro(rot + ': a data-base do reajuste (' + mesBr(per.dataBase) + ') é posterior ao início do período. Use o mês em que o valor foi fixado.');
@@ -398,7 +418,7 @@
         if (!rs.length) throw erro(rot + ': informe o rendimento e o mês a partir do qual ele vale.');
         rs.forEach(function (r, j) {
           if (!/^\d{4}-\d{2}$/.test(r.desde || '')) throw erro(rot + ', rendimento ' + (j + 1) + ': informe o mês a partir do qual ele vale.');
-          if (!(r.valor > 0)) throw erro(rot + ', rendimento ' + (j + 1) + ': informe um valor maior que zero.');
+          if (!valorValido(r.valor)) throw erro(rot + ', rendimento ' + (j + 1) + ': informe um valor maior que zero.');
         });
         per.rendimentosOrd = rs.slice().sort(function (a, b) { return a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0; });
       }
@@ -442,7 +462,7 @@
     var avisosGer = lista.avisos || [];
     (e.parcelas || []).forEach(function (p, i) {
       lista.push({ chave: 'a:' + (i + 1), vencimento: p.vencimento, valor: p.valor, origem: 'avulsa', descricao: p.descricao || '', numAvulsa: i + 1,
-        correcaoDesde: p.correcaoDesde || '', jurosDesde: p.jurosDesde || '' });
+        correcaoDesde: p.correcaoDesde || '', jurosDesde: p.jurosDesde || '', obrigacao: p.obrigacao });
     });
     lista.forEach(function (p, i) { p.n = i + 1; });
     lista.avisos = avisosGer;
@@ -452,11 +472,54 @@
   /* ---------- Estado de cada parcela ---------- */
   function log(par, texto) { par.eventos.push(texto); }
 
-  /* Atualiza a parcela da data-base atual (par.b) até t. */
+  /* Atualiza a parcela da data-base atual (par.b) até t. Se t não passa do início da correção (data do cálculo ou
+   * de um pagamento igual ou anterior a ele), lança apenas os juros anteriores à correção até t (N05): sem isso,
+   * esses juros se perderiam (correção desde o cálculo) ou um pagamento seria imputado todo no capital (N29). */
   function atualizar(par, t, ctx) {
-    if (t <= par.b) return;
+    if (par.fracoes) {
+      atualizarObrigacao(par, t, ctx);
+      return;
+    }
+    if (t <= par.b) {
+      if (par.pre && par.jurosDe < t) jurosPre(par, t, ctx);
+      return;
+    }
     if (ctx.fazenda) atualizarFazenda(par, t, ctx); else atualizarParticular(par, t, ctx);
     par.b = t; par.pre = false;
+  }
+  /* Juros anteriores ao início da correção (termo próprio da parcela, ex.: Súmula 54/STJ), de par.jurosDe até
+   * ate (<= par.b), sobre o valor nominal (P sem correção). */
+  function jurosPre(par, ate, ctx) {
+    if (ctx.fazenda) jurosPreFazenda(par, ate, ctx); else jurosPreParticular(par, ate, ctx);
+    if (par.jurosDe < ate) par.jurosDe = ate;
+  }
+  function jurosPreParticular(par, ate, ctx) {
+    if (!(par.jurosDe < ate) || ctx.regime === 'nenhum' || !(par.P > 0)) return;
+    if (ctx.regime !== 'selic' && ctx.regime !== 'selic_tl') { jurosTrecho(par, par.jurosDe, ate, ctx); return; }
+    var vig = parse(ctx.vigenciaLei14905);
+    var cortePre = ctx.regime === 'selic_tl' ? Math.min(Math.max(vig, par.jurosDe), ate) : ate;
+    if (par.jurosDe < cortePre) trechoSelic(par, par.jurosDe, cortePre, ctx);
+    if (cortePre < ate) jurosTrecho(par, cortePre, ate, ctx, 'taxalegal');
+  }
+  function jurosPreFazenda(par, ate, ctx) {
+    if (!(par.jurosDe < ate) || !(par.P > 0)) return;
+    var p0 = par.jurosDe, p1 = Math.min(ate, ctx.M1);
+    if (p0 < p1) {
+      var sp = somaProRata(p0, p1, function (m) { return valorTab('JUROS_POUPANCA', m, 'os juros da poupança'); });
+      var vp = r2(par.P * sp.pct / 100);
+      par.J = r2(par.J + vp);
+      log(par, 'Juros da poupança, ' + periodo(p0, p1) + ': ' + pctFmt(sp.pct) + '% sobre ' + moedaFmt(par.P) + ' = ' + moedaFmt(vp) + '.');
+    }
+    var p2 = Math.max(p0, ctx.M1);
+    if (p2 < ate) {
+      var ss = somaProRata(p2, ate, function (m) { return DADOS.SELIC[m] == null ? null : DADOS.SELIC[m]; });
+      if (ss.ate < ate) ctx.selicLimitada = true;
+      if (ss.ate > p2) {
+        var base0 = r2(par.P + par.J), vs = r2(base0 * ss.pct / 100);
+        par.E = r2(par.E + vs);
+        log(par, 'Selic (EC 113/2021), ' + periodo(p2, ss.ate) + ': ' + pctFmt(ss.pct) + '% sobre ' + moedaFmt(base0) + ' = ' + moedaFmt(vs) + '.');
+      }
+    }
   }
 
   /* Aplica o fator de correção f à parcela. Tema 678/STJ: índices negativos (deflação) entram na conta, mas o
@@ -480,7 +543,7 @@
     if (piso) avisoPiso(par);
   }
   function jurosTrecho(par, a, b, ctx, regime) {
-    var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros, ctx.contagem);
+    var j = jurosParticular(a, b, regime || ctx.regime, ctx.taxaFixa, ctx.opcJuros, ctx.contagem, ctx.vigenciaLei14905);
     var v = r2(par.P * j.pct / 100);
     par.J = r2(par.J + v);
     j.trechos.forEach(function (x) { log(par, x.texto + '.'); });
@@ -504,17 +567,9 @@
 
   function atualizarParticular(par, t, ctx) {
     var selic = ctx.regime === 'selic' || ctx.regime === 'selic_tl';
-    var vig = parse(DADOS.vigenciaLei14905);
+    var vig = parse(ctx.vigenciaLei14905);
     // Juros anteriores ao início da correção (termo próprio da parcela, ex.: Súmula 54/STJ): sobre o valor nominal.
-    if (par.pre && par.jurosDe < par.b && ctx.regime !== 'nenhum' && par.P > 0) {
-      if (!selic) jurosTrecho(par, par.jurosDe, par.b, ctx);
-      else {
-        var cortePre = ctx.regime === 'selic_tl' ? Math.min(Math.max(vig, par.jurosDe), par.b) : par.b;
-        if (par.jurosDe < cortePre) trechoSelic(par, par.jurosDe, cortePre, ctx);
-        if (cortePre < par.b) jurosTrecho(par, cortePre, par.b, ctx, 'taxalegal');
-      }
-      par.jurosDe = par.b;
-    }
+    if (par.pre) jurosPre(par, par.b, ctx);
     if (!selic) {
       corrigirParcela(par, mes(par.b), mes(t), ctx);
       var a = Math.max(par.jurosDe, par.b);
@@ -540,23 +595,7 @@
 
   function atualizarFazenda(par, t, ctx) {
     // Juros anteriores ao início da correção (termo próprio da parcela): sobre o valor nominal.
-    if (par.pre && par.jurosDe < par.b && par.P > 0) {
-      var p0 = par.jurosDe, p1 = Math.min(par.b, ctx.M1);
-      if (p0 < p1) {
-        var sp = somaProRata(p0, p1, function (m) { return valorTab('JUROS_POUPANCA', m, 'os juros da poupança'); });
-        var vp = r2(par.P * sp.pct / 100);
-        par.J = r2(par.J + vp);
-        log(par, 'Juros da poupança, ' + periodo(p0, p1) + ': ' + pctFmt(sp.pct) + '% sobre ' + moedaFmt(par.P) + ' = ' + moedaFmt(vp) + '.');
-      }
-      var p2 = Math.max(p0, ctx.M1);
-      if (p2 < par.b) {
-        var ss = somaProRata(p2, par.b, function (m) { return DADOS.SELIC[m] == null ? null : DADOS.SELIC[m]; });
-        var base0 = r2(par.P + par.J), vs = r2(base0 * ss.pct / 100);
-        par.E = r2(par.E + vs);
-        log(par, 'Selic (EC 113/2021), ' + periodo(p2, ss.ate) + ': ' + pctFmt(ss.pct) + '% sobre ' + moedaFmt(base0) + ' = ' + moedaFmt(vs) + '.');
-      }
-      par.jurosDe = par.b;
-    }
+    if (par.pre) jurosPre(par, par.b, ctx);
     var x = par.b;
     // Segmento 1: antes do início da Selic. Correção IPCA-E; juros da poupança até 08/12/2021.
     if (x < par.selicDe) {
@@ -597,9 +636,12 @@
         rot = 'Selic (EC 113/2021)';
       }
       if (s2.ate > x && base > 0) {
-        var v2 = r2(base * s2.pct / 100);
+        var v2 = r2(base * s2.pct / 100), nota = '';
+        // EC 136 (N26): mês de IPCA negativo entra na soma simples e pode reduzir o encargo já acumulado, mas o
+        // encargo não fica negativo (não reduz capital e juros; analogia ao piso do Tema 678, N07).
+        if (v2 < 0 && v2 < -par.E) { v2 = -par.E; nota = ' (limitado ao encargo acumulado: o encargo não fica negativo)'; }
         par.E = r2(par.E + v2);
-        log(par, rot + ', ' + periodo(x, s2.ate) + ': ' + pctFmt(s2.pct) + '% sobre ' + moedaFmt(base) + ' = ' + moedaFmt(v2) + '.');
+        log(par, rot + ', ' + periodo(x, s2.ate) + ': ' + pctFmt(s2.pct) + '% sobre ' + moedaFmt(base) + ' = ' + moedaFmt(v2) + nota + '.');
       }
       if (s2.ate < fim) { ctx.selicLimitada = true; break; }
       x = fim;
@@ -609,25 +651,104 @@
   /* ---------- Imputação de pagamento ---------- */
   function saldo(par) { return r2(par.P + par.J + par.E); }
 
+  /* Rateio em centavos pelo maior resto; empates seguem a ordem das linhas. */
+  function ratear(total, pesos) {
+    var soma = pesos.reduce(function (s, p) { return s + p; }, 0);
+    if (!(soma > 0)) return pesos.map(function () { return 0; });
+    var centavos = Math.round(total * 100);
+    var partes = pesos.map(function (p, i) {
+      var exato = centavos * p / soma, inteiro = Math.floor(exato);
+      return { i: i, valor: inteiro, resto: exato - inteiro };
+    });
+    var faltam = centavos - partes.reduce(function (s, p) { return s + p.valor; }, 0);
+    partes.slice().sort(function (a, b) { return b.resto - a.resto || a.i - b.i; })
+      .forEach(function (p, i) { if (i < faltam) p.valor++; });
+    return partes.map(function (p) { return p.valor / 100; });
+  }
+
+  function atualizarObrigacao(par, t, ctx) {
+    var linhas = par.fracoes, anterior = { P: par.P, J: par.J, E: par.E, indice: par.indice };
+    var inicio = par.eventos.length;
+    // O agregado é a unidade de atualização; as linhas são apenas sua demonstração.
+    par.fracoes = null;
+    atualizar(par, t, ctx);
+    par.fracoes = linhas;
+    var f = par.indice / anterior.indice, novoJ = par.J - anterior.J * f, novoE = par.E - anterior.E;
+    var capitais = ratear(par.P, linhas.map(function (p) { return p.P; }));
+    var juros = ratear(par.J, linhas.map(function (p) {
+      return Math.max(0, p.J * f + (anterior.P > 0 ? novoJ * p.P / anterior.P : 0));
+    }));
+    var encargos = ratear(par.E, linhas.map(function (p) {
+      return Math.max(0, p.E + (anterior.P + anterior.J > 0 ? novoE * (p.P + p.J) / (anterior.P + anterior.J) : 0));
+    }));
+    linhas.forEach(function (p, i) {
+      p.P = capitais[i]; p.J = juros[i]; p.E = encargos[i];
+      p.indice = par.indice; p.indiceReal = par.indiceReal;
+      par.eventos.slice(inicio).forEach(function (texto) { log(p, 'Obrigação ' + par.obrigacao + ' (conjunto): ' + texto); });
+      if (par.eventos.length > inicio) log(p, 'Distribuição da obrigação ' + par.obrigacao + ' nesta linha: ' +
+        moedaFmt(p.P) + ' de capital, ' + moedaFmt(p.J) + ' de juros e ' + moedaFmt(p.E) + ' de encargos.');
+    });
+  }
+
+  function agruparObrigacoes(pars) {
+    var grupos = new Map(), unidades = [];
+    pars.forEach(function (p) {
+      if (!p.obrigacao) { unidades.push(p); return; }
+      var grupo = grupos.get(p.obrigacao);
+      if (!grupo) {
+        grupo = Object.assign({}, p, { fracoes: [], eventos: [], imputacoes: [], P: 0, valor: 0 });
+        grupos.set(p.obrigacao, grupo); unidades.push(grupo);
+      }
+      if (p.vencimento !== grupo.vencimento || p.inicioCorrecao !== grupo.inicioCorrecao ||
+          p.inicioJuros !== grupo.inicioJuros || p.origem !== grupo.origem) {
+        throw erro('Obrigação ' + p.obrigacao + ': as frações devem ter o mesmo vencimento e os mesmos termos de correção e juros.');
+      }
+      grupo.fracoes.push(p);
+      grupo.P = r2(grupo.P + p.P); grupo.valor = r2(grupo.valor + p.valor);
+    });
+    return unidades;
+  }
+
   function imputar(pag, pars, ctx) {
     var t = pag.t, resto = r2(pag.valor);
-    pars.forEach(function (par) { if (par.vencimento <= t) atualizar(par, t, ctx); });
+    // Saldos para ordenar são prévias: pagamento alheio não cria evento de arredondamento.
+    var saldos = new Map();
+    pars.forEach(function (par) {
+      var previa = Object.assign({}, par, { fracoes: null, eventos: [], imputacoes: [] });
+      if (par.vencimento <= t) atualizar(previa, t, ctx);
+      saldos.set(par, saldo(previa));
+      if (ctx.eventosHistoricos && par.vencimento <= t) atualizar(par, t, ctx);
+    });
 
-    var vencidas = pars.filter(function (p) { return p.vencimento <= t && saldo(p) > 0; })
-      .sort(function (a, b) { return a.vencimento - b.vencimento || saldo(b) - saldo(a) || a.n - b.n; });
-    var aVencer = pars.filter(function (p) { return p.vencimento > t && saldo(p) > 0; })
+    var vencidas = pars.filter(function (p) { return p.vencimento <= t && saldos.get(p) > 0; })
+      .sort(function (a, b) { return a.vencimento - b.vencimento || saldos.get(b) - saldos.get(a) || a.n - b.n; });
+    var aVencer = pars.filter(function (p) { return p.vencimento > t && saldos.get(p) > 0; })
       .sort(function (a, b) { return a.vencimento - b.vencimento || a.n - b.n; });
     var ordem = vencidas.concat(aVencer);
-    if (pag.alvo) ordem = [pag.alvo].concat(ordem.filter(function (p) { return p !== pag.alvo; }));
+    var alvo = pag.alvo && pars.find(function (p) { return p === pag.alvo || (p.fracoes && p.fracoes.indexOf(pag.alvo) >= 0); });
+    if (alvo) ordem = [alvo].concat(ordem.filter(function (p) { return p !== alvo; }));
 
     var aplicacoes = [];
-    ordem.forEach(function (par) {
+    ordem.forEach(function (unidade) {
       if (resto <= 0) return;
-      var j = Math.min(resto, par.J); par.J = r2(par.J - j); resto = r2(resto - j);
-      var e = Math.min(resto, par.E); par.E = r2(par.E - e); resto = r2(resto - e);
-      var c = Math.min(resto, par.P); par.P = r2(par.P - c); resto = r2(resto - c);
-      if (j + e + c > 0) {
+      if (unidade.vencimento <= t) atualizar(unidade, t, ctx);
+      var linhas = unidade.fracoes ? unidade.fracoes.slice() : [unidade];
+      if (pag.alvo && linhas.indexOf(pag.alvo) >= 0) linhas = [pag.alvo].concat(linhas.filter(function (p) { return p !== pag.alvo; }));
+      var lancamentos = new Map();
+      ['J', 'E', 'P'].forEach(function (k) {
+        linhas.forEach(function (par) {
+          var v = Math.min(resto, par[k]);
+          par[k] = r2(par[k] - v); resto = r2(resto - v);
+          if (unidade.fracoes) unidade[k] = r2(unidade[k] - v);
+          if (!lancamentos.has(par)) lancamentos.set(par, { J: 0, E: 0, P: 0 });
+          lancamentos.get(par)[k] = v;
+        });
+      });
+      linhas.forEach(function (par) {
+        var l = lancamentos.get(par), j = l.J, e = l.E, c = l.P;
+        if (!(j + e + c > 0)) return;
         var ap = { pagamento: pag.n, data: iso(t), parcela: par.n, juros: r2(j), encargos: r2(e), capital: r2(c), quitou: saldo(par) === 0 };
+        if (unidade.obrigacao) ap.obrigacao = unidade.obrigacao;
         aplicacoes.push(ap);
         par.imputacoes.push(ap);
         var partes = [];
@@ -635,7 +756,7 @@
         if (e) partes.push(moedaFmt(e) + ' em encargos');
         if (c) partes.push(moedaFmt(c) + ' em capital');
         log(par, 'Pagamento ' + pag.n + ' (' + br(t) + '): ' + partes.join(', ') + (ap.quitou ? '. Parcela quitada.' : '.'));
-      }
+      });
     });
     return { aplicacoes: aplicacoes, sobra: resto };
   }
@@ -678,34 +799,38 @@
   function prevMes(m) { var p = m.split('-').map(Number); return p[1] === 1 ? (p[0] - 1) + '-12' : p[0] + '-' + String(p[1] - 1).padStart(2, '0'); }
 
   /* ---------- Cálculo ---------- */
+  var TIPOS = { pensao: 1, particular: 1, fazenda: 1 };
   function calcular(e) {
+    if (!e || !tem(TIPOS, e.tipo)) throw erro('Tipo de débito desconhecido. Use pensão, débito cível (particular) ou Fazenda Pública.');
     var fazenda = e.tipo === 'fazenda', pensao = e.tipo === 'pensao';
     var calc = parse(e.dataCalculo);
     var civel = e.tipo === 'particular' ? (e.civel || {}) : {};
     var cor = COR_PADRAO;
     if (e.tipo === 'particular' && civel.indice && (civel.indice !== 'tjsp' || civel.indice2)) {
-      if (!INDICES[civel.indice]) throw erro('Escolha o índice de correção.');
+      if (!tem(INDICES, civel.indice)) throw erro('Escolha o índice de correção.');
       cor = { indice: civel.indice };
       if (civel.indice2) {
-        if (!INDICES[civel.indice2]) throw erro('Escolha o segundo índice de correção.');
+        if (!tem(INDICES, civel.indice2)) throw erro('Escolha o segundo índice de correção.');
         if (!/^\d{4}-\d{2}$/.test(civel.indice2Desde || '')) throw erro('Informe o mês a partir do qual vale o segundo índice de correção.');
         if (civel.indice2 !== civel.indice) { cor.indice2 = civel.indice2; cor.desde = civel.indice2Desde; }
       }
     }
     var ctx = {
       fazenda: fazenda, regime: e.regime, taxaFixa: e.taxaFixa, posEC136: e.posEC136 || 'selic', cor: cor,
+      vigenciaLei14905: e.perfilCalculo === PERFIL_CALCULO_HISTORICO ? VIGENCIA_LEI14905_HISTORICA : DADOS.vigenciaLei14905,
       M1: parse(DADOS.inicioEC113), M2: parse(DADOS.inicioEC136), selicLimitada: false, opcJuros: null,
       contagem: e.contagemDias === 'corridos' ? 'corridos' : 'dias360'
     };
-    if (!fazenda && !REGIMES[e.regime]) throw erro('Regime de juros desconhecido.');
+    ctx.eventosHistoricos = e.perfilCalculo === PERFIL_CALCULO_HISTORICO || e.perfilCalculo === PERFIL_CALCULO_ANTERIOR;
+    if (!fazenda && !tem(REGIMES, e.regime)) throw erro('Regime de juros desconhecido.');
     if (fazenda) fatorIPCAE(mes(calc)); else checarIndice(cor, mes(calc));
-    if (!fazenda && e.regime === 'fixa' && !(e.taxaFixa > 0)) throw erro('Informe a taxa de juros mensal.');
+    if (!fazenda && e.regime === 'fixa' && !pctValido(e.taxaFixa, 1000)) throw erro('Informe a taxa de juros mensal (maior que zero e até 1000% a.m.).');
     if (!fazenda && (e.regime === 'fixa' || e.regime === 'duas')) ctx.opcJuros = { composto: !!civel.jurosCompostos && e.tipo === 'particular' };
     if (!fazenda && e.regime === 'duas') {
       var dj = e.jurosDuas || {};
-      if (!(dj.taxa1 >= 0) || dj.taxa1 === '' || dj.taxa1 == null) throw erro('Informe a primeira taxa de juros (% a.m.).');
+      if (!pctValido(dj.taxa1, 1000, true)) throw erro('Informe a primeira taxa de juros (% a.m., de 0 a 1000).');
       var ateT = parse(dj.ate);
-      if (dj.depois === 'fixa' && !(dj.taxa2 >= 0)) throw erro('Informe a segunda taxa de juros (% a.m.).');
+      if (dj.depois === 'fixa' && !pctValido(dj.taxa2, 1000, true)) throw erro('Informe a segunda taxa de juros (% a.m., de 0 a 1000).');
       ctx.opcJuros.taxa1 = Number(dj.taxa1); ctx.opcJuros.ate = ateT + DIA;
       ctx.opcJuros.depois = dj.depois === 'fixa' ? 'fixa' : 'taxalegal'; ctx.opcJuros.taxa2 = Number(dj.taxa2) || 0;
     }
@@ -728,7 +853,7 @@
     var porChave = {};
     var pars = lista.map(function (p) {
       var rot = p.origem === 'avulsa' ? (pensao ? 'Parcela avulsa ' + p.numAvulsa : 'Parcela ' + p.n) : 'Prestação ' + p.n;
-      if (!(p.valor > 0)) throw erro(rot + ': informe um valor maior que zero.');
+      if (!valorValido(p.valor)) throw erro(rot + ': ' + (isFinite(Number(p.valor)) && Number(p.valor) > MAX_VALOR ? 'valor acima de R$ 1 trilhão; confira a digitação.' : 'informe um valor maior que zero, como 1.234,56.'));
       var venc = parse(p.vencimento);
       if (venc > calc) throw erro(rot + ': o vencimento (' + br(venc) + ') é posterior à data do cálculo.');
       if (fazenda && venc < minFaz) {
@@ -743,6 +868,7 @@
       }
       if (p.jurosDesde) {
         ij = parse(p.jurosDesde);
+        if (!semJuros && ij > calc) throw erro(rot + ': o início dos juros (' + br(ij) + ') é posterior à data do cálculo.');
         if (fazenda && ij < minFaz) throw erro(rot + ': contra a Fazenda Pública, os juros só são tratados a partir de 01/07/2009.');
       }
       if (!fazenda) checarIndice(ctx.cor, mes(b0)); else fatorIPCAE(mes(b0));
@@ -751,6 +877,13 @@
         n: p.n, chave: p.chave, origem: p.origem, descricao: p.descricao, vencimento: venc, valor: r2(p.valor), inicioJuros: ij,
         inicioCorrecao: b0, b: b0, pre: ij < b0, P: r2(p.valor), J: 0, E: 0, jurosDe: ij, indice: 1, indiceReal: 1, eventos: (p.detalhes || []).slice(), imputacoes: []
       };
+      if (p.obrigacao != null && p.obrigacao !== '') {
+        if (typeof p.obrigacao !== 'string' || p.obrigacao.trim().length > 80 || !p.obrigacao.trim()) {
+          throw erro(rot + ': o identificador da obrigação deve ser um texto de 1 a 80 caracteres.');
+        }
+        par.obrigacao = p.obrigacao.trim();
+        par.eventos.push('Fração da obrigação ' + par.obrigacao + ': atualização e imputação sobre o conjunto das linhas com este ID.');
+      }
       if (p.correcaoDesde || p.jurosDesde) {
         par.eventos.push('Termos próprios desta parcela: correção desde ' + br(b0) + (semJuros ? '' : '; juros desde ' + br(ij)) + '.');
       }
@@ -758,10 +891,11 @@
       porChave[p.chave] = par;
       return par;
     });
+    var unidades = agruparObrigacoes(pars);
 
     var pagamentos = (e.pagamentos || []).map(function (p, i) {
       var n = i + 1;
-      if (!(p.valor > 0)) throw erro('Pagamento ' + n + ': informe um valor maior que zero.');
+      if (!valorValido(p.valor)) throw erro('Pagamento ' + n + ': ' + (isFinite(Number(p.valor)) && Number(p.valor) > MAX_VALOR ? 'valor acima de R$ 1 trilhão; confira a digitação.' : 'informe um valor maior que zero, como 1.234,56.'));
       var t = parse(p.data);
       if (t > calc) throw erro('Pagamento ' + n + ': a data (' + br(t) + ') é posterior à data do cálculo.');
       var alvo = null;
@@ -774,12 +908,12 @@
 
     var sobra = 0;
     pagamentos.forEach(function (pg) {
-      var r = imputar(pg, pars, ctx);
+      var r = imputar(pg, unidades, ctx);
       pg.aplicacoes = r.aplicacoes; pg.sobra = r.sobra;
       sobra = r2(sobra + r.sobra);
     });
 
-    pars.forEach(function (par) { atualizar(par, calc, ctx); });
+    unidades.forEach(function (par) { atualizar(par, calc, ctx); });
 
     // Rito da execução de alimentos (art. 528, § 7º, do CPC).
     var ritoAtivo = !!ajuiz;
@@ -793,7 +927,7 @@
 
     var linhas = pars.map(function (par) {
       return {
-        n: par.n, chave: par.chave, origem: par.origem, descricao: par.descricao, rito: par.rito || null,
+        n: par.n, chave: par.chave, origem: par.origem, descricao: par.descricao, obrigacao: par.obrigacao || '', rito: par.rito || null,
         vencimento: iso(par.vencimento), valor: par.valor, indice: par.indice,
         inicioJuros: iso(par.inicioJuros), inicioCorrecao: iso(par.inicioCorrecao), capital: r2(par.P), juros: r2(par.J), encargos: r2(par.E),
         total: saldo(par), quitada: saldo(par) === 0 && par.imputacoes.length > 0,
@@ -813,21 +947,25 @@
       t.penhora = soma('total', function (l) { return l.rito === 'penhora'; });
     }
     // Multa contratual ou moratória do título (opção avançada do débito cível): sobre o capital corrigido.
-    t.multaContratualPct = !pensao && !fazenda && civel.multaContratualPct > 0 ? Number(civel.multaContratualPct) : 0;
+    var mcp = civel.multaContratualPct;
+    if (!pensao && !fazenda && mcp != null && mcp !== '' && mcp !== 0 && mcp !== false && !pctValido(mcp, 100)) {
+      throw erro('Informe o percentual da multa contratual (maior que zero e até 100%), ou desmarque a multa.');
+    }
+    t.multaContratualPct = !pensao && !fazenda && pctValido(mcp, 100) ? Number(mcp) : 0;
     t.multaContratual = t.multaContratualPct ? r2(t.capital * t.multaContratualPct / 100) : 0;
     // Honorários de sucumbência fixados no título (opção avançada).
     t.sucumbencia = 0; t.sucumbenciaTexto = ''; var avisosSuc = [];
     var sc = !pensao && e.sucumbencia && e.sucumbencia.base ? e.sucumbencia : null;
     if (sc) {
       if (sc.base === 'condenacao') {
-        if (!(sc.pct > 0)) throw erro('Informe o percentual dos honorários de sucumbência.');
+        if (!pctValido(sc.pct, 100)) throw erro('Informe o percentual dos honorários de sucumbência (maior que zero e até 100%).');
         var bc = r2(t.subtotal + t.multaContratual);
         t.sucumbencia = r2(bc * sc.pct / 100);
         t.sucumbenciaTexto = 'Honorários de sucumbência: ' + pctFmt(Number(sc.pct), 2) + '% sobre a condenação (' + moedaFmt(bc) + ') = ' + moedaFmt(t.sucumbencia) + '.';
       } else if (sc.base === 'causa' || sc.base === 'fixo') {
         if (fazenda) throw erro('Contra a Fazenda Pública, informe os honorários de sucumbência em percentual sobre a condenação.');
-        if (!(sc.valor > 0)) throw erro(sc.base === 'causa' ? 'Informe o valor da causa.' : 'Informe o valor dos honorários de sucumbência.');
-        if (sc.base === 'causa' && !(sc.pct > 0)) throw erro('Informe o percentual dos honorários sobre o valor da causa.');
+        if (!valorValido(sc.valor)) throw erro(sc.base === 'causa' ? 'Informe o valor da causa.' : 'Informe o valor dos honorários de sucumbência.');
+        if (sc.base === 'causa' && !pctValido(sc.pct, 100)) throw erro('Informe o percentual dos honorários sobre o valor da causa (maior que zero e até 100%).');
         var db = parse(sc.data);
         if (db > calc) throw erro('A data-base dos honorários de sucumbência é posterior à data do cálculo.');
         checarIndice(cor, mes(db));
@@ -863,25 +1001,29 @@
     var baseEncargos = ritoAtivo ? t.penhora : t.debito;
     // Art. 523, § 2º: o pagamento parcial só reduz a base da multa e dos honorários se feito dentro do prazo.
     // Pagamentos posteriores ao prazo continuam abatendo o débito, mas não a base desses encargos.
-    var avisos523 = [], encargos523 = (!fazenda && e.multa) || e.honorarios, prazo = e.prazo523 ? parse(e.prazo523) : null;
-    t.base523 = null; t.tardios523 = 0;
-    if (encargos523 && prazo) {
-      var tardios = pagamentos.filter(function (p) { return p.t > prazo; });
-      if (tardios.length) {
-        var e2 = Object.assign({}, e, { prazo523: '', multa: false, honorarios: false,
-          pagamentos: (e.pagamentos || []).filter(function (p) { return parse(p.data) <= prazo; }) });
-        var t2 = calcular(e2).totais;
-        baseEncargos = ritoAtivo ? t2.penhora : t2.debito;
-        t.base523 = baseEncargos;
-        t.tardios523 = tardios.length;
-      }
-      if (prazo > calc) avisos523.push('O prazo para pagamento voluntário (art. 523 do CPC) termina depois da data do cálculo: a multa e os honorários só serão devidos se não houver pagamento até ' + br(prazo) + '.');
-    } else if (encargos523 && pagamentos.length) {
-      avisos523.push('Pelo art. 523, § 2º, do CPC, o pagamento parcial só reduz a base da multa e dos honorários se feito dentro do prazo de 15 dias. Informe o fim do prazo para a calculadora conferir; sem ele, todos os pagamentos reduzem a base.');
+    var avisos523 = [], encargos523 = !fazenda && (e.multa || e.honorarios), prazo = e.prazo523 ? parse(e.prazo523) : null;
+    t.base523 = null; t.tardios523 = 0; t.multaProjetada = 0; t.honorariosProjetados = 0;
+    if (encargos523 && e.honorarios && !pctValido(e.honorariosPct, 100)) {
+      throw erro('Informe o percentual dos honorários do art. 523 (maior que zero e até 100%), ou desmarque os honorários.');
     }
-    t.multa = (!fazenda && e.multa) ? r2(baseEncargos * 0.10) : 0;
+    if (encargos523 && !prazo) throw erro('Informe a data final confirmada do prazo do art. 523 para incluir multa ou honorários.');
+    if (encargos523 && pagamentos.some(function (p) { return p.t > prazo; })) {
+      throw erro('Há pagamento posterior ao prazo do art. 523 com encargos selecionados. Este fluxo ainda não recompõe os saldos dos encargos constituídos; confira o pagamento e o saldo manualmente antes de emitir a memória.');
+    }
+    if (encargos523 && prazo) {
+      if (prazo >= calc) {
+        t.multaProjetada = (!fazenda && e.multa) ? r2(baseEncargos * 0.10) : 0;
+        t.honorariosProjetados = e.honorarios ? r2(baseEncargos * (Number(e.honorariosPct) || 0) / 100) : 0;
+        avisos523.push('O prazo do art. 523 termina em ' + br(prazo) + '. Os encargos não integram o total exigível nesta data; a projeção condicional está separada.');
+      } else {
+        t.base523 = baseEncargos;
+      }
+    }
+    var prazoVencido = !encargos523 || prazo < calc;
+    t.multa = prazoVencido && !fazenda && e.multa ? r2(baseEncargos * 0.10) : 0;
     t.honorariosPct = e.honorarios ? Number(e.honorariosPct) || 0 : 0;
-    t.honorarios = e.honorarios ? r2(baseEncargos * t.honorariosPct / 100) : 0;
+    t.honorarios = prazoVencido && e.honorarios ? r2(baseEncargos * t.honorariosPct / 100) : 0;
+    t.totalProjetado523 = r2(t.debito + t.multaProjetada + t.honorariosProjetados);
     t.total = r2(t.debito + t.multa + t.honorarios);
     if (ritoAtivo) t.totalPenhora = r2(t.penhora + t.multa + t.honorarios);
 
@@ -901,6 +1043,7 @@
 
   var api = {
     calcular: calcular, juros: juros, gerarPensao: gerarPensao, listarParcelas: listarParcelas, salarioMinimo: function (isoData) { return salarioMinimo(parse(isoData)); },
+    perfilCalculoHistorico: PERFIL_CALCULO_HISTORICO, perfilCalculoAnterior: PERFIL_CALCULO_ANTERIOR, perfilCalculoAtual: PERFIL_CALCULO_ATUAL,
     descreverBase: descreverBase,
     valorFixoNoMes: function (per, m) { return fixoReajustado(Object.assign({}, per, { _reaj: null, n: per.n || 1 }), m, []); },
     indices: INDICES, correcao: function (cfg, mi, mf) { return correcao(cfg, mi, mf); },

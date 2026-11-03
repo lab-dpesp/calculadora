@@ -9,6 +9,7 @@ const legal = require('../contrato/regras.js');
 const bacen = require('../contrato/bacen.js');
 const snapshot = require('../contrato/series-bacen.js');
 const copilot = require('../contrato/copilot-contrato.js');
+const catalog = require('../contrato/catalogo-bacen.js');
 const ROOT = path.resolve(__dirname, '..');
 let passed = 0;
 
@@ -21,15 +22,20 @@ function close(actual, expected, tolerance, message) {
   assert.ok(Math.abs(actual - expected) <= tolerance, message || (actual + ' != ' + expected));
 }
 
-test('T1 Price, taxa implícita, simulação e TAC por vigência', function () {
+test('T1 Price, taxa implícita, simulação e tarifas TAC/TEC', function () {
   close(financial.solvePeriodicRate(104100, 10000, 30), 0.0885199927, 1e-9);
   close(financial.solvePeriodicRate(100000, 10000, 30), 0.0930733977, 1e-9);
   close(financial.annualEffective(financial.solvePeriodicRate(100000, 10000, 30)), 1.9093227, 1e-6);
   close(financial.pricePayment(100000, 0.0743, 30) / 100, 84.09496076, 0.005);
   close(financial.pricePayment(104100, 0.0743, 30) / 100, 87.54285415, 0.005);
   assert.strictEqual(financial.parseMoney('100,00') * 30 / 100, 3000);
-  assert.strictEqual(legal.evaluate({ contractDate: '2026-08-10', charges: [{ kind: 'TAC', amountCents: 4000 }] }).some((item) => item.id === 'JUR_003'), true);
-  assert.strictEqual(legal.evaluate({ contractDate: '2007-08-10', charges: [{ kind: 'TAC', amountCents: 4000 }] }).some((item) => item.id === 'JUR_003'), false);
+  ['TAC', 'TEC'].forEach((kind) => {
+    const hasFinding = (contractDate) => legal.evaluate({ contractDate, charges: [{ kind, amountCents: 4000 }] })
+      .some((item) => item.id === 'JUR_003');
+    assert.strictEqual(hasFinding('2008-04-29'), false);
+    assert.strictEqual(hasFinding('2008-04-30'), true);
+    assert.strictEqual(hasFinding('2008-05-01'), true);
+  });
   snapshot.observations['25464'] = [{ month: '2026-08', value: 7.43 }];
   snapshot.consultedAt = '2026-10-30T00:00:00.000Z';
   const comparison = bacen.compareRates(0.093, bacen.observation('personal_unsecured', '2026-08'));
@@ -95,7 +101,7 @@ test('T10 taxa ausente é sinalizada sem ser preenchida', function () {
 test('T11 BACEN sem observação mantém comparação indisponível', function () {
   const observation = bacen.observation('personal_unsecured', '9999-12');
   assert.strictEqual(observation.available, false);
-  assert.match(observation.reason, /Sem observação BACEN exata/);
+  assert.match(observation.reason, /Sem observação BACEN exata|Médias BACEN não carregadas|ainda não foi divulgada/);
 });
 test('T12 modalidade fora do catálogo não recebe série substituta', function () {
   assert.strictEqual(bacen.observation('overdraft', '2020-01').available, false);
@@ -108,6 +114,38 @@ test('T13 IOF não gera conclusão automática de cobrança indevida', function 
 test('T14 seguro com facultatividade desconhecida exige prova', function () {
   const findings = legal.evaluate({ charges: [{ kind: 'insurance', amountCents: 100 }] });
   assert.ok(findings.some((item) => item.id === 'JUR_009' && item.status === 'NEEDS_EVIDENCE'));
+});
+test('T14b correspondente e pré-gravame incluem 25/02/2011 no corte compartilhado', function () {
+  [
+    { kind: 'correspondent', id: 'JUR_006', status: 'NEEDS_EVIDENCE' },
+    { kind: 'pre_lien', id: 'JUR_008', status: 'POTENTIAL_ISSUE' }
+  ].forEach(({ kind, id, status }) => {
+    ['2011-02-24', '2011-02-25', '2011-02-26'].forEach((contractDate) => {
+      const findings = legal.evaluate({ monthlyRate: 0.01, contractDate, charges: [{ kind, amountCents: 100 }] });
+      const finding = findings.find((item) => item.id === id);
+      assert.strictEqual(Boolean(finding), contractDate !== '2011-02-24', kind + ' em ' + contractDate);
+      assert.strictEqual(findings.filter((item) => item.id === 'JUR_013').length, 1,
+        'alerta geral independe do corte: ' + kind + ' em ' + contractDate);
+      if (finding) {
+        assert.strictEqual(finding.status, status);
+        assert.strictEqual(finding.approvalStatus, 'PENDING_HUMAN_REVIEW');
+        assert.strictEqual(finding.lastReviewedAt, null);
+        assert.match(finding.message, /a partir de 25\/02\/2011/);
+        assert.match(finding.legalSource, /Resolução CMN 3\.954\/2011/);
+      }
+    });
+  });
+});
+test('T14c alerta geral não exige data, mas encargos não positivos não geram alertas', function () {
+  ['correspondent', 'pre_lien'].forEach((kind) => {
+    const findings = legal.evaluate({ monthlyRate: 0.01, charges: [{ kind, amountCents: 100 }] });
+    assert.deepStrictEqual(findings.map((item) => item.id), ['JUR_013']);
+    [0, -100, NaN].forEach((amountCents) => {
+      assert.deepStrictEqual(legal.evaluate({
+        monthlyRate: 0.01, contractDate: '2011-02-25', charges: [{ kind, amountCents }]
+      }), []);
+    });
+  });
 });
 test('T15 valor zero difere de campo ausente', function () {
   assert.strictEqual(financial.parseMoney('0,00'), 0);
@@ -138,6 +176,10 @@ test('T20 dados inválidos, taxa infinita, inteiro excessivo e data impossível 
   assert.throws(() => financial.validateInput(input));
   assert.throws(() => financial.annualEffective(Infinity));
   assert.throws(() => financial.validateInput(Object.assign({}, input, { installments: 30, charges: Array(101).fill({ kind: 'TAC', paymentMode: 'financed', amountCents: 1 }) })));
+  assert.doesNotThrow(() => financial.validateInput({
+    modality: 'personal_unsecured', amortization: 'PRICE', installments: 1, financedAmount: 10000,
+    installmentAmount: 10000, charges: [{ kind: 'TEC', amountCents: 1000, paymentMode: 'upfront' }]
+  }));
   assert.ok(legal.evaluate({ statedCet: 0.1, calculatedCet: 0.12 }).some((item) => item.id === 'JUR_011'));
   assert.throws(() => financial.datedRate(1000, '2025-02-30', [{ date: '2026-01-01', amountCents: 1100 }]));
   assert.throws(() => JSON.parse('{"text":"<script>'));
@@ -164,6 +206,7 @@ test('T22 semáforo: verde, amarelo, vermelho e cinza', function () {
   assert.strictEqual(legal.trafficLight(comparison(9, 6)).state, 'yellow');
   assert.strictEqual(legal.trafficLight(comparison(12, 6.18)).state, 'red');
   assert.strictEqual(legal.trafficLight(comparison(9.1, 6)).state, 'red');
+  assert.strictEqual(legal.trafficLight(comparison(7.8, 6)).label, 'Até 1,3× da média');
   assert.strictEqual(legal.trafficLight({ available: false }).state, 'gray');
   assert.strictEqual(legal.trafficLight({ available: true, ratio: null }).state, 'gray');
   assert.ok(legal.trafficLight({ available: false }).icon && legal.trafficLight({ available: false }).label);
@@ -172,13 +215,23 @@ test('T23 níveis de cor nos pontos de atenção', function () {
   const items = legal.evaluate({ contractDate: '2026-08-10', charges: [{ kind: 'TAC', amountCents: 4000 }, { kind: 'cadastro', amountCents: 1000 }] });
   assert.strictEqual(items.find((item) => item.id === 'JUR_003').level, 'red');
   assert.strictEqual(items.find((item) => item.id === 'JUR_004').level, 'yellow');
+  const greenBandIssue = legal.evaluate({
+    monthlyRate: 0.014, comparison: { available: true, ratio: 1.1, differencePercentagePoints: 0.001 }
+  }).find((item) => item.id === 'JUR_001');
+  assert.strictEqual(greenBandIssue.level, 'yellow');
+  assert.match(legal.trafficLight({ available: true, ratio: 1.1 }).label, /média/);
 });
-test('T24 Price preserva parcelas constantes e recusa arredondamento incompatível', function () {
+test('T24 Price preserva parcelas regulares e explicita o ajuste final', function () {
   const rows = financial.schedulePrice(104100, 0.0885, 30);
-  assert.ok(rows.every((row) => row.installmentCents === rows[0].installmentCents));
+  assert.ok(rows.slice(0, -1).every((row) => row.installmentCents === rows[0].installmentCents));
   assert.strictEqual(rows.reduce((sum, row) => sum + row.principalCents, 0), 104100);
   assert.strictEqual(rows.at(-1).balanceCents, 0);
-  assert.throws(() => financial.schedulePrice(45509597, 0.13356062220409512, 123), /arredondamento em centavos/);
+  assert.strictEqual(rows.at(-1).adjustmentCents, rows.at(-1).installmentCents - rows[0].installmentCents);
+  const fixture = financial.schedulePrice(10000, 0.01, 3);
+  assert.deepStrictEqual(fixture.map((row) => [row.installmentCents, row.interestCents, row.principalCents, row.balanceCents]),
+    [[3400, 100, 3300, 6700], [3400, 67, 3333, 3367], [3401, 34, 3367, 0]]);
+  assert.strictEqual(fixture.at(-1).adjustmentCents, 1);
+  assert.throws(() => financial.schedulePrice(1, 0.000001, 2), /arredondamento em centavos/);
   const zeroRate = financial.schedulePrice(10000, 0, 3);
   assert.ok(zeroRate.every((row) => row.interestCents === 0));
   assert.ok(Math.max(...zeroRate.map((row) => row.installmentCents)) -
@@ -244,7 +297,7 @@ test('T27 início e fim da série vêm das observações carregadas, sem extrapo
     else snapshot.observations['25464'] = original;
   }
 });
-test('T28 consignado não identificado escolhe a maior média e preserva todas as candidatas', function () {
+test('T28 consignado não identificado exige seleção manual e preserva todas as candidatas', function () {
   const keys = ['25466', '25467', '25468'];
   const previous = keys.map((key) => snapshot.observations[key]);
   snapshot.observations['25466'] = [{ month: '2025-01', value: 3.2 }];
@@ -254,13 +307,17 @@ test('T28 consignado não identificado escolhe a maior média e preserva todas a
     const result = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
     assert.strictEqual(result.ambiguous, true);
     assert.strictEqual(result.candidates.length, 3);
-    assert.strictEqual(result.selected.key, 'payroll_public');
-    close(result.comparison.bacenPercent, 4.1, 1e-12);
-    close(result.comparison.ratio, 6 / 4.1, 1e-12);
+    assert.strictEqual(result.selected, null);
+    assert.strictEqual(result.comparison.available, false);
+    assert.match(result.comparison.reason, /Selecione manualmente/);
+    const manual = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01', 'payroll_public');
+    assert.strictEqual(manual.selected.key, 'payroll_public');
+    close(manual.comparison.bacenPercent, 4.1, 1e-12);
+    close(manual.comparison.ratio, 6 / 4.1, 1e-12);
     assert.deepStrictEqual(bacen.candidateKeys('payroll', 'inss'), ['payroll_inss']);
     assert.deepStrictEqual(bacen.candidateKeys('personal_or_vehicle'), ['personal_unsecured', 'vehicle_finance']);
     delete snapshot.observations['25467'];
-    const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+    const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01', 'payroll_private');
     assert.strictEqual(partial.selected.key, 'payroll_private');
     assert.strictEqual(partial.candidates.find((item) => item.key === 'payroll_public').observation.available, false);
     ['25466', '25468'].forEach((key) => { delete snapshot.observations[key]; });
@@ -279,9 +336,9 @@ test('T29 leitor Copilot aceita dados e pendências e recusa malformado, malicio
     formato: 'contrato-copilot', versao: 1,
     modalidade: { valor: 'consignado', origem: 'Cláusula 2, p. 3' },
     subtipoConsignado: { valor: 'nao_sei', origem: 'Informado pelo usuário' },
-    contratacaoReconhecida: { valor: 'unknown', origem: 'Informado pelo usuário' },
-    questaoPrincipal: { valor: 'Conferir valores', origem: 'Informado pelo usuário' },
-    origemPrincipalInformacoes: { valor: 'contract', origem: 'Contrato anexado' },
+    contratacaoReconhecida: { valor: 'sim', origem: 'Informado pelo usuário' },
+    questaoPrincipal: { valor: 'Outro', origem: '' },
+    origemPrincipalInformacoes: { valor: 'unknown', origem: '' },
     dataContrato: { valor: '2025-03-10', origem: 'Cláusula 1' },
     dataLiberacao: { valor: null, origem: '' },
     dataPrimeiroVencimento: { valor: '2025-04-10', origem: 'Quadro 4' },
@@ -293,28 +350,297 @@ test('T29 leitor Copilot aceita dados e pendências e recusa malformado, malicio
     cetAnualPct: { valor: null, origem: '' },
     sistemaAmortizacao: { valor: 'PRICE', origem: 'Cláusula 5' },
     capitalizacao: { valor: null, origem: '' },
-    encargos: [{ tipo: 'insurance', valor: 100, formaPagamento: 'financed',
-      descricao: '<img src=x onerror=alert(1)>', origem: 'Quadro 4' }],
+    encargos: [
+      { tipo: 'insurance', valor: 100, formaPagamento: 'financed',
+        descricao: '<img src=x onerror=alert(1)>', origem: 'Quadro 4' },
+      { tipo: 'TEC', valor: 25, formaPagamento: 'upfront', descricao: 'Emissão de carnê', origem: 'Quadro 4' }
+    ],
     pendencias: ['Confirmar se há seguro facultativo']
   };
   const valid = copilot.ler('```json\n' + JSON.stringify(block) + '\n```');
   assert.deepStrictEqual(valid.erros, []);
-  assert.deepStrictEqual(valid.dados.pending, ['Confirmar se há seguro facultativo']);
+  assert.strictEqual(valid.dados.recognitionStatus, 'sim');
+  assert.strictEqual(valid.dados.recognitionSource, 'Informado pelo usuário');
+  assert.ok(valid.dados.rows.some((row) => row.item === 'Reconhecimento da contratação' &&
+    row.value === 'Sim' && row.source === 'Informado pelo usuário'));
+  assert.ok(valid.avisos.some((warning) => /Questão principal: origem não informada/.test(warning)));
+  assert.deepStrictEqual(valid.dados.pending, [{
+    codigo: 'legado', campo: null, mensagem: 'Confirmar se há seguro facultativo',
+    severidade: 'advertencia', requerAcao: true
+  }]);
   assert.strictEqual(copilot.toInput(valid.dados).modality, 'payroll');
   assert.strictEqual(copilot.toInput(valid.dados).payrollSubtype, 'nao_sei');
+  assert.strictEqual(copilot.toInput(valid.dados).problem, 'Outro');
+  assert.strictEqual(copilot.toInput(valid.dados).evidenceSource, '');
+  assert.strictEqual(copilot.toInput(valid.dados).recognitionStatus, 'sim');
+  assert.strictEqual(copilot.toInput(valid.dados).recognitionSource, 'Informado pelo usuário');
   assert.strictEqual(valid.dados.rows.find((row) => row.item.indexOf('Encargo:') === 0).value,
     '100 · financed');
+  assert.ok(valid.dados.rows.some((row) => row.item === 'Encargo: Emissão de carnê'));
+  const typed = JSON.parse(JSON.stringify(block));
+  typed.dataLiberacao = { valor: null, origem: '' };
+  typed.sistemaAmortizacao = { valor: null, origem: '' };
+  typed.encargos = [
+    { tipo: 'juros_mora', valor: 1, unidade: 'percentual', periodicidade: 'mensal', origem: 'Cláusula V.1, p. 2' },
+    { tipo: 'multa_moratoria', valor: 2, unidade: 'percentual', periodicidade: 'evento_unico', origem: 'Cláusula V.1, p. 2' }
+  ];
+  typed.pendencias = [
+    { codigo: 'data_liberacao_ausente', campo: 'dataLiberacao',
+      mensagem: 'Data efetiva da liberação não localizada.', severidade: 'informativa', requerAcao: false },
+    { codigo: 'divergencia_extrato', campo: 'valorParcela',
+      mensagem: 'Contrato e extrato apresentam valores diferentes.', severidade: 'bloqueante', requerAcao: true }
+  ];
+  const typedResult = copilot.ler(typed);
+  assert.deepStrictEqual(typedResult.erros, []);
+  assert.strictEqual(typedResult.dados.pending[0].requerAcao, false);
+  assert.strictEqual(typedResult.dados.pending[1].requerAcao, true);
+  assert.ok(typedResult.dados.information.some((item) => item.campo === 'dataLiberacao'));
+  const typedInput = copilot.toInput(typedResult.dados);
+  assert.strictEqual(typedInput.amortization, 'unknown');
+  assert.deepStrictEqual(typedInput.charges, []);
+  assert.deepStrictEqual(typedInput.lateCharges, typed.encargos);
+  const unknownLateType = JSON.parse(JSON.stringify(typed));
+  unknownLateType.encargos[0].tipo = 'juros_atraso';
+  assert.match(copilot.ler(unknownLateType).erros.join(' '), /tipo "juros_atraso" não reconhecido/);
+  const percentWithSuffix = JSON.parse(JSON.stringify(typed));
+  percentWithSuffix.encargos[0].valor = '1%';
+  assert.match(copilot.ler(percentWithSuffix).erros.join(' '), /valor numérico/);
+  const unknownPeriod = JSON.parse(JSON.stringify(typed));
+  unknownPeriod.encargos[0].periodicidade = 'por_mes';
+  assert.match(copilot.ler(unknownPeriod).erros.join(' '), /periodicidade.*inválidos/);
+  const missingChargeSource = JSON.parse(JSON.stringify(typed));
+  missingChargeSource.encargos[1].origem = '';
+  assert.match(copilot.ler(missingChargeSource).erros.join(' '), /origem inválidos/);
   assert.strictEqual(copilot.ler('texto sem objeto').dados, null);
-  assert.match(copilot.ler(Object.assign({}, block, { versao: 2 })).erros.join(' '), /versão.*não suportada/i);
+  assert.match(copilot.ler(Object.assign({}, block, { versao: 3 })).erros.join(' '), /versão.*não suportada/i);
   const badType = JSON.parse(JSON.stringify(block));
-  badType.numeroParcelas.valor = [24];
+  badType.valorFinanciado.valor = 'texto';
   assert.match(copilot.ler(badType).erros.join(' '), /tipo de dado inválido/);
   const missingOrigin = JSON.parse(JSON.stringify(block));
   missingOrigin.valorParcela.origem = '';
-  assert.match(copilot.ler(missingOrigin).erros.join(' '), /informe a origem do dado/);
+  assert.deepStrictEqual(copilot.ler(missingOrigin).erros, []);
+  assert.ok(copilot.ler(missingOrigin).avisos.some((warning) => /Valor da parcela: origem não informada/.test(warning)));
   const badDate = JSON.parse(JSON.stringify(block));
   badDate.dataContrato.valor = '2025-02-30';
-  assert.match(copilot.ler(badDate).erros.join(' '), /data inexistente/);
+  assert.deepStrictEqual(copilot.ler(badDate).erros, []);
+  assert.ok(copilot.ler(badDate).avisos.some((warning) => /Data do contrato: data inexistente/.test(warning)));
+  const badDateResult = copilot.ler(badDate);
+  assert.strictEqual(badDateResult.dados.values.dataContrato, null);
+  assert.ok(badDateResult.dados.pending.some((pending) =>
+    pending.campo === 'dataContrato' && pending.requerAcao));
+  const missingRequired = JSON.parse(JSON.stringify(block));
+  missingRequired.valorParcela = { valor: null, origem: '' };
+  missingRequired.pendencias = [];
+  const missingRequiredResult = copilot.ler(missingRequired);
+  assert.deepStrictEqual(missingRequiredResult.erros, []);
+  assert.ok(missingRequiredResult.dados.pending.some((pending) =>
+    pending.campo === 'valorParcela' && pending.requerAcao && pending.severidade === 'bloqueante'));
+
+  const nullable = JSON.parse(JSON.stringify(block));
+  ['subtipoConsignado', 'questaoPrincipal', 'origemPrincipalInformacoes', 'dataContrato',
+    'dataLiberacao', 'dataPrimeiroVencimento', 'valorLiquidoDisponibilizado', 'cetAnualPct',
+    'sistemaAmortizacao', 'capitalizacao'].forEach((key) => { nullable[key] = { valor: null, origem: '' }; });
+  const nullResult = copilot.ler(nullable);
+  assert.deepStrictEqual(nullResult.erros, []);
+  assert.ok(nullResult.avisos.length);
+  assert.ok(!nullResult.avisos.some((warning) => /Sistema de amortização/.test(warning)));
+  assert.ok(nullResult.dados.rows.some((row) =>
+    row.item === 'Data da liberação' && /Desconhecido/.test(row.value)));
+  assert.ok(nullResult.dados.rows.some((row) =>
+    row.item === 'Sistema de amortização' && /Desconhecido/.test(row.value)));
+  const nullInput = copilot.toInput(nullResult.dados);
+  assert.strictEqual(nullInput.contractDate, '');
+  assert.strictEqual(nullInput.amortization, 'unknown');
+  assert.strictEqual(nullResult.dados.amortizationUnidentified, true);
+  assert.strictEqual(nullInput.capitalization, '');
+  assert.strictEqual(nullResult.dados.pending.length, 2);
+  assert.strictEqual(nullResult.dados.pending[0].requerAcao, true);
+  assert.ok(nullResult.dados.information.some((item) => item.campo === 'dataLiberacao'));
+  assert.doesNotThrow(() => financial.validateInput(Object.assign({}, nullInput, {
+    installments: 24, financedAmount: '10000', installmentAmount: '600'
+  })));
+
+  const personal = JSON.parse(JSON.stringify(block));
+  personal.modalidade.valor = 'credito_pessoal_nao_consignado';
+  personal.subtipoConsignado.valor = null;
+  personal.origemPrincipalInformacoes.valor = null;
+  personal.dataLiberacao.valor = null;
+  personal.sistemaAmortizacao = { valor: null, origem: '' };
+  const personalResult = copilot.ler(personal);
+  assert.deepStrictEqual(personalResult.erros, []);
+  assert.ok(!personalResult.avisos.some((warning) => /Subtipo do consignado|Origem principal das informações|Data da liberação/.test(warning)));
+  assert.ok(!personalResult.avisos.some((warning) => /Sistema de amortização/.test(warning)));
+  assert.strictEqual(copilot.toInput(personalResult.dados).disbursementDate, '');
+  personal.origemPrincipalInformacoes.valor = 'contrato';
+  const contractSource = copilot.ler(personal);
+  assert.deepStrictEqual(contractSource.erros, []);
+  assert.strictEqual(copilot.toInput(contractSource.dados).evidenceSource, 'contrato');
+  personal.origemPrincipalInformacoes.valor = 'contract';
+  assert.strictEqual(copilot.toInput(copilot.ler(personal).dados).evidenceSource, 'contrato');
+  personal.origemPrincipalInformacoes.valor = 'Contrato';
+  assert.ok(copilot.ler(personal).avisos.some((warning) => /Origem principal das informações: opção desconhecida/.test(warning)));
+  const omittedOptional = JSON.parse(JSON.stringify(personal));
+  delete omittedOptional.dataLiberacao;
+  delete omittedOptional.origemPrincipalInformacoes;
+  assert.ok(!copilot.ler(omittedOptional).avisos.some((warning) => /Data da liberação|Origem principal das informações/.test(warning)));
+
+  ['veiculo', 'nao_sei_cdc'].forEach((modality) => {
+    const notPayroll = JSON.parse(JSON.stringify(personal));
+    notPayroll.modalidade.valor = modality;
+    notPayroll.subtipoConsignado.valor = null;
+    assert.ok(!copilot.ler(notPayroll).avisos.some((warning) => /Subtipo do consignado/.test(warning)));
+  });
+  const payrollMissingSubtype = JSON.parse(JSON.stringify(block));
+  payrollMissingSubtype.subtipoConsignado.valor = null;
+  assert.ok(copilot.ler(payrollMissingSubtype).avisos.some((warning) =>
+    /Subtipo do consignado não identificado/.test(warning)));
+  const payrollUnknownSubtype = JSON.parse(JSON.stringify(block));
+  payrollUnknownSubtype.subtipoConsignado.valor = 'outro';
+  assert.ok(copilot.ler(payrollUnknownSubtype).avisos.some((warning) =>
+    /Subtipo do consignado não reconhecido/.test(warning)));
+
+  const unknownOption = JSON.parse(JSON.stringify(block));
+  unknownOption.questaoPrincipal.valor = 'Dúvida';
+  const unknownResult = copilot.ler(unknownOption);
+  assert.deepStrictEqual(unknownResult.erros, []);
+  assert.ok(unknownResult.avisos.some((warning) => /opção desconhecida/.test(warning)));
+  assert.strictEqual(copilot.toInput(unknownResult.dados).problem, '');
+  unknownOption.sistemaAmortizacao.valor = 'desconhecido';
+  const unknownAmortization = copilot.ler(unknownOption);
+  assert.deepStrictEqual(unknownAmortization.erros, []);
+  assert.strictEqual(copilot.toInput(unknownAmortization.dados).amortization, 'unknown');
+  assert.strictEqual(unknownAmortization.dados.amortizationUnidentified, true);
+  ['PRICE', 'SAC'].forEach((system) => {
+    unknownOption.sistemaAmortizacao.valor = system;
+    const identified = copilot.ler(unknownOption);
+    assert.deepStrictEqual(identified.erros, []);
+    assert.strictEqual(copilot.toInput(identified.dados).amortization, system);
+    assert.strictEqual(identified.dados.amortizationUnidentified, false);
+  });
+
+  const outOfScope = JSON.parse(JSON.stringify(block));
+  outOfScope.modalidade = { valor: 'fora_do_escopo', origem: 'Extrato: Modalidade 1022-CAPITAL DE GIRO' };
+  const outOfScopeResult = copilot.ler(outOfScope);
+  assert.deepStrictEqual(outOfScopeResult.erros, []);
+  const outOfScopeInput = copilot.toInput(outOfScopeResult.dados);
+  assert.strictEqual(outOfScopeInput.modality, 'fora_do_escopo');
+  assert.doesNotThrow(() => financial.validateInput(Object.assign({}, outOfScopeInput, {
+    amortization: 'PRICE', installments: 24, financedAmount: '10000', installmentAmount: '600'
+  })));
+  const noComparison = bacen.compareCandidates(0.025, outOfScopeInput.modality, '', '');
+  assert.strictEqual(noComparison.comparison.available, false);
+  assert.match(noComparison.comparison.reason, /Modalidade sem média de pessoa física comparável/);
+
+  const versionTwo = {
+    formato: 'contrato-copilot', versao: 2,
+    classificacaoCredito: {
+      tipoPessoa: { valor: 'PJ', origem: 'Qualificação da contratante', confianca: 'alta' },
+      familia: { valor: 'capital_giro', origem: 'Modalidade 1022', confianca: 'alta' },
+      subtipo: { valor: 'desconhecido', origem: '', confianca: 'baixa' },
+      naturezaTaxa: { valor: 'prefixada', origem: 'Cláusula 5', confianca: 'media' },
+      indexador: { valor: 'nenhum', origem: 'Cláusula 5', confianca: 'media' },
+      prazoDias: { valor: 1095, origem: 'Prazo', confianca: 'alta' },
+      possuiGarantia: { valor: null, origem: '', confianca: 'baixa' },
+      tipoGarantia: { valor: null, origem: '', confianca: 'baixa' }
+    },
+    modalidadeTextoOriginal: { valor: '1022-CAPITAL DE GIRO', origem: 'Extrato' },
+    valorFinanciado: { valor: 10000, origem: 'Quadro 4' },
+    numeroParcelas: { valor: 24, origem: 'Quadro 4' },
+    valorParcela: { valor: 600, origem: 'Quadro 4' },
+    encargos: [], pendencias: []
+  };
+  const v2 = copilot.ler(versionTwo);
+  assert.deepStrictEqual(v2.erros, []);
+  const v2Input = copilot.toInput(v2.dados);
+  assert.strictEqual(v2Input.modality, 'fora_do_escopo');
+  assert.strictEqual(v2Input.modalidadeTextoOriginal.valor, '1022-CAPITAL DE GIRO');
+  assert.strictEqual(v2.dados.classification.tipoPessoa.valor, 'PJ');
+  const resolution = bacen.resolveModality(v2.dados.classification);
+  assert.strictEqual(resolution.status, 'exata');
+  assert.strictEqual(resolution.modalidadeBacenId, 'pj_capital_giro_acima_365');
+  assert.strictEqual(resolution.serieValidada, false);
+  assert.strictEqual(bacen.resolveModality({
+    tipoPessoa: { valor: 'PF' }, familia: { valor: 'capital_giro' }
+  }).status, 'nao_encontrada');
+  assert.strictEqual(bacen.resolveModality({
+    tipoPessoa: { valor: 'PJ' }, familia: { valor: 'capital_giro' },
+    naturezaTaxa: { valor: 'prefixada' }, indexador: { valor: 'nenhum' }
+  }).status, 'ambigua');
+  assert.strictEqual(bacen.resolveModality({
+    tipoPessoa: { valor: 'PF' }, familia: { valor: 'aquisicao_bens' }
+  }).status, 'provavel');
+  assert.strictEqual(bacen.resolveModality({
+    tipoPessoa: { valor: 'PF' }, familia: { valor: 'imobiliario' },
+    subtipo: { valor: 'imobiliario_mercado' }, naturezaTaxa: { valor: 'pos_fixada' },
+    indexador: { valor: 'TR' }
+  }).modalidadeBacenId, 'pf_imobiliario_mercado_tr');
+  assert.strictEqual(bacen.resolveModality({}, { naoComparavelMotivo: 'Renegociação multicontratos' }).status,
+    'nao_comparavel');
+  assert.strictEqual(catalog.modalities.length, 29);
+  assert.ok(catalog.modalities.every((item) => item.tipoPessoa && item.naturezaTaxa && item.indexador));
+  assert.ok(catalog.modalities.every((item) => item.ativo && item.fonte &&
+    Object.prototype.hasOwnProperty.call(item, 'inicioVigencia') &&
+    Object.prototype.hasOwnProperty.call(item, 'fimVigencia')));
+  assert.ok(catalog.modalities.filter((item) => !item.serieValidada)
+    .every((item) => item.codigoSerie === null && item.unidade === null));
+  catalog.modalities.forEach((item) => {
+    const prazoDias = item.prazoMinDias != null ? item.prazoMinDias : item.prazoMaxDias;
+    const exact = bacen.resolveModality({
+      tipoPessoa: { valor: item.tipoPessoa }, familia: { valor: item.familia },
+      subtipo: { valor: item.subtipo }, naturezaTaxa: { valor: item.naturezaTaxa },
+      indexador: { valor: item.indexador },
+      prazoDias: { valor: prazoDias }
+    });
+    assert.strictEqual(exact.status, 'exata', item.id);
+    assert.strictEqual(exact.modalidadeBacenId, item.id, item.id);
+  });
+
+  const agent = fs.readFileSync(path.join(ROOT, 'agente-copilot-contrato.txt'), 'utf8');
+  assert.ok(agent.length < 8000);
+  assert.match(agent, /classificacaoCredito/);
+  assert.match(agent, /A versão 1 continua aceita/);
+  const schema = JSON.parse(fs.readFileSync(path.join(ROOT, 'contrato/contrato-copilot-v1.schema.json'), 'utf8'));
+  const example = JSON.parse(fs.readFileSync(path.join(ROOT, 'contrato/exemplo-contrato-copilot-v1.json'), 'utf8'));
+  const readme = fs.readFileSync(path.join(ROOT, 'LEIA-ME.md'), 'utf8');
+  const documentedSources = schema.$defs.origemPrincipalInformacoes.allOf[1].properties.valor.enum;
+  assert.strictEqual(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');
+  assert.strictEqual(schema.properties.subtipoConsignado['x-applicableWhen'], "modalidade.valor == 'consignado'");
+  copilot.origens.forEach((source) => {
+    assert.ok(documentedSources.includes(source.value), source.value + ' ausente do schema');
+    assert.ok(agent.includes('"' + source.value + '"'), source.value + ' ausente das instruções');
+    assert.ok(readme.includes('`' + source.value + '`'), source.value + ' ausente da documentação');
+  });
+  assert.ok(schema.allOf.some((rule) => rule.then && Array.isArray(rule.then.required) &&
+    rule.then.required.includes('subtipoConsignado')));
+  assert.strictEqual(schema.properties.sistemaAmortizacao['x-blocksCalculation'], false);
+  assert.strictEqual(schema.properties.pendencias.items.oneOf.length, 2);
+  assert.deepStrictEqual(schema.$defs.encargoInadimplencia.required,
+    ['tipo', 'valor', 'unidade', 'periodicidade', 'origem']);
+  assert.deepStrictEqual(schema.$defs.encargoInadimplencia.properties.tipo.enum,
+    ['juros_mora', 'multa_moratoria', 'comissao_permanencia',
+      'juros_remuneratorios_inadimplencia', 'outro']);
+  assert.deepStrictEqual(schema.$defs.encargoInadimplencia.properties.unidade.enum,
+    ['percentual', 'valor_monetario']);
+  assert.deepStrictEqual(schema.$defs.encargoInadimplencia.properties.periodicidade.enum,
+    ['ao_dia', 'mensal', 'anual', 'evento_unico', 'nao_informada']);
+  assert.match(schema.properties.contratacaoReconhecida.description, /preservados na prévia e no JSON/);
+  assert.ok(schema.$defs.encargoInadimplencia.allOf.some((rule) =>
+    rule.if && rule.if.properties && rule.if.properties.unidade &&
+    rule.then && rule.then.properties && rule.then.properties.valor.maximum === 1000));
+  assert.deepStrictEqual(copilot.ler(example).erros, []);
+  assert.deepStrictEqual(copilot.ler(example).avisos, []);
+  assert.ok(agent.includes('"contrato"'));
+});
+
+test('T30 acesso às regras fica após conteúdo e resultados nas duas calculadoras', function () {
+  const calculator = fs.readFileSync(path.join(ROOT, 'calc.html'), 'utf8');
+  const contract = fs.readFileSync(path.join(ROOT, 'contrato.html'), 'utf8');
+  const calculatorLink = calculator.indexOf('>Regras de negócio</a>');
+  const contractLink = contract.indexOf('>Regras de negócio</a>');
+  assert.ok(calculatorLink > calculator.indexOf('id="painelIndices"'));
+  assert.ok(contractLink > contract.indexOf('id="resultado"'));
+  assert.ok(!calculator.slice(0, calculator.indexOf('<main')).includes('Regras de negócio'));
+  assert.ok(!contract.slice(0, contract.indexOf('<main')).includes('Regras de negócio'));
 });
 
 console.log('Todos os ' + passed + ' testes de contrato passaram.');

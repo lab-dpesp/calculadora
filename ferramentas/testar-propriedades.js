@@ -3,9 +3,11 @@
  * precisar saber qual é o valor certo. Cada propriedade compara o motor com ele mesmo, numa entrada alterada de um
  * jeito cujo efeito no total é conhecido.
  *
- * Obrigatórias (falha = erro do motor; o script termina com erro): data, ordem, metades (sem pagamentos), escala,
- * pagto-div, nominal, avulsas, prestacoes (inclui o 13º de dezembro vencido em 20/12), rito, aceita, indicada, avisos.
- * A decidir (relatadas, sem falhar; dependem de regra a confirmar com o contador): metades-pag, pagto-div-emp,
+ * Obrigatórias (falha = erro do motor; o script termina com erro): data, ordem, metades (sem pagamentos), metades-pag
+ * (frações explicitamente identificadas como uma obrigação), escala,
+ * pagto-div, nominal, avulsas, prestacoes (inclui o 13º de dezembro vencido em 20/12), rito, aceita, indicada, avisos,
+ * copilot-json (a mesma entrada manual importada em JSON com variações de formato).
+ * A decidir (relatadas, sem falhar; dependem de regra a confirmar com o contador): pagto-div-emp,
  * antecipar, centavo.
  *
  * node ferramentas/testar-propriedades.js [quantidade=500] [semente=1] [--estrito] [--detalhes]
@@ -15,6 +17,7 @@ const path = require('path');
 const RAIZ = path.resolve(__dirname, '..');
 globalThis.DADOS = require(path.join(RAIZ, 'data.js'));
 const E = require(path.join(RAIZ, 'engine.js'));
+const C = require(path.join(RAIZ, 'copilot.js'));
 
 const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const N = Number(args[0]) || 500;
@@ -39,12 +42,16 @@ function pagamentos(de, ate, max) {
   for (let i = 0, n = inteiro(0, 3); i < n && de < ate; i++) ps.push({ data: data(de, ate), valor: r2(inteiro(1000, max) / 100) });
   return ps;
 }
+function prazo523(calc, ps) {
+  return ps.reduce((fim, p) => p.data > fim ? p.data : fim, somaDias(calc, -1));
+}
 function casoParticular() {
   const calc = data('2014-01-01', ULTIMA), parcelas = [];
   for (let i = 0, n = inteiro(1, 4); i < n; i++) parcelas.push({ vencimento: data('2010-01-01', calc), valor: r2(inteiro(10000, 3000000) / 100) });
   const prim = parcelas.map(p => p.vencimento).sort()[0];
+  const pags = pagamentos(prim, somaDias(calc, -1), 1500000);
   return { tipo: 'particular', dataCalculo: calc, regime: escolha(REGS), taxaFixa: escolha([0.5, 1, 2]), termoJuros: 'vencimento', dataJuros: '',
-    civel: { indice: escolha(INDS) }, parcelas, pagamentos: pagamentos(prim, calc, 1500000), multa: rnd() < 0.3, honorarios: rnd() < 0.3, honorariosPct: 10 };
+    civel: { indice: escolha(INDS) }, parcelas, pagamentos: pags, prazo523: prazo523(calc, pags), multa: rnd() < 0.3, honorarios: rnd() < 0.3, honorariosPct: 10 };
 }
 function casoFazenda() {
   const calc = data('2012-01-01', ULTIMA), parcelas = [];
@@ -65,13 +72,111 @@ function casoPensao() {
     periodos.push({ inicio: E.util.proxMes(per.fim), fim: '', dia: per.dia, base: 'pct_sm', quantidade: 30, decimo: per.decimo });
   }
   const e = { tipo: 'pensao', dataCalculo: calc, regime: escolha(['tjsp', 'tjsp', 'taxalegal', 'nenhum']), termoJuros: 'vencimento', dataJuros: '',
-    periodos, ajustes: [], parcelas: [], pagamentos: pagamentos(inicio + '-01', calc, 300000), multa: rnd() < 0.3, honorarios: rnd() < 0.3, honorariosPct: 10 };
+    periodos, ajustes: [], parcelas: [], pagamentos: pagamentos(inicio + '-01', somaDias(calc, -1), 300000), multa: rnd() < 0.3, honorarios: rnd() < 0.3, honorariosPct: 10 };
+  e.prazo523 = prazo523(calc, e.pagamentos);
   if (rnd() < 0.4) e.dataAjuizamento = data(inicio + '-01', calc);
   return e;
 }
 function caso() { const x = rnd(); return x < 0.45 ? casoParticular() : x < 0.65 ? casoFazenda() : casoPensao(); }
 
 function total(e) { return E.calcular(copia(e)).totais.total; }
+function dinheiroCopilot(valor, variacao) {
+  if (!variacao) return valor;
+  const formatado = Number(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return variacao === 1 ? formatado : 'R$ ' + formatado;
+}
+function dataCopilot(valor, variacao) {
+  return variacao ? valor.slice(8, 10) + '/' + valor.slice(5, 7) + '/' + valor.slice(0, 4) : valor;
+}
+function jsonCopilot(e, indice) {
+  const localizar = indice % 3, estilo = Math.floor(indice / 3) % 3;
+  const meses = indice % 4 === 3;
+  const bases = {
+    pct_sm: 'percentual do salário mínimo',
+    qtd_sm: 'quantidade de salários mínimos',
+    pct_rend: 'percentual dos rendimentos',
+    fixo: 'valor fixo'
+  };
+  const objeto = {
+    formato: 'calcjur-copilot',
+    versao: 1,
+    tipo: e.tipo,
+    juros: {
+      regime: e.regime || 'tjsp',
+      taxaMensal: e.taxaFixa,
+      termoInicial: e.termoJuros || 'vencimento',
+      data: e.dataJuros || '',
+      contagemDias: e.contagemDias,
+      duasTaxas: e.jurosDuas
+    },
+    periodos: (e.periodos || []).map((p) => ({
+      inicio: meses ? p.inicio.slice(5, 7) + '/' + p.inicio.slice(0, 4) : p.inicio,
+      fim: p.fim ? (meses ? p.fim.slice(5, 7) + '/' + p.fim.slice(0, 4) : p.fim) : null,
+      diaVencimento: p.dia,
+      base: bases[p.base] || p.base,
+      valor: dinheiroCopilot(p.quantidade, localizar),
+      incide13: p.decimo,
+      rendimentos: (p.rendimentos || []).map((r) => ({
+        desde: meses ? r.desde.slice(5, 7) + '/' + r.desde.slice(0, 4) : r.desde,
+        valor: dinheiroCopilot(r.valor, localizar)
+      })),
+      reajuste: p.reajuste,
+      dataBase: p.dataBase
+    })),
+    outrasParcelas: (e.parcelas || []).map((p) => ({
+      vencimento: dataCopilot(p.vencimento, localizar),
+      valor: dinheiroCopilot(p.valor, localizar),
+      obrigacao: p.obrigacao,
+      correcaoDesde: p.correcaoDesde ? dataCopilot(p.correcaoDesde, localizar) : '',
+      jurosDesde: p.jurosDesde ? dataCopilot(p.jurosDesde, localizar) : ''
+    })),
+    pagamentos: (e.pagamentos || []).map((p) => ({
+      data: dataCopilot(p.data, localizar),
+      valor: dinheiroCopilot(p.valor, localizar)
+    })),
+    dataAjuizamento: e.dataAjuizamento ? { data: dataCopilot(e.dataAjuizamento, localizar) } : null,
+    civel: e.civel,
+    fazenda: e.posEC136 ? { posEC136: e.posEC136 } : undefined,
+    sucumbencia: e.sucumbencia,
+    encargos: {
+      multa523: !!e.multa,
+      honorariosPct: e.honorarios ? e.honorariosPct : null,
+      prazo523: e.prazo523 ? dataCopilot(e.prazo523, localizar) : ''
+    }
+  };
+  let texto = JSON.stringify(objeto);
+  if (estilo === 1) texto = 'Dados extraídos:\n```json\n' + texto + '\n```';
+  if (estilo === 2) texto = texto.replace(/"/g, '“').replace(/([}\]])/g, ',$1');
+  return texto;
+}
+function entradaCopilot(d, original) {
+  const juros = d.juros || {}, encargos = d.encargos || {};
+  return {
+    tipo: d.tipo,
+    dataCalculo: original.dataCalculo,
+    regime: juros.regime || 'tjsp',
+    taxaFixa: juros.taxaMensal,
+    contagemDias: juros.contagemDias,
+    termoJuros: juros.termo || 'vencimento',
+    dataJuros: juros.data || '',
+    posEC136: d.posEC136 || 'selic',
+    periodos: d.periodos.map((p) => ({
+      inicio: p.inicio, fim: p.fim, dia: p.dia, base: p.base, quantidade: p.quantidade,
+      decimo: p.decimo, rendimentos: p.rendimentos, reajuste: p.reajuste, dataBase: p.dataBase
+    })),
+    ajustes: d.ajustes,
+    dataAjuizamento: d.ajuizamento ? d.ajuizamento.data : '',
+    parcelas: d.parcelas,
+    pagamentos: d.pagamentos,
+    multa: !!encargos.multa,
+    honorarios: !!encargos.honorariosPct,
+    honorariosPct: encargos.honorariosPct || original.honorariosPct,
+    prazo523: encargos.prazo523 || '',
+    civel: d.civel,
+    jurosDuas: juros.duas,
+    sucumbencia: d.sucumbencia
+  };
+}
 let recusas = [];
 function tenta(f, e) {
   try { return f(); } catch (x) {
@@ -93,20 +198,27 @@ function fatorCaso(e, m1, m2) {
 function embaralhar(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 const PROPS = {};
-['data', 'ordem', 'metades', 'escala', 'pagto-div', 'nominal', 'avulsas', 'prestacoes', 'rito', 'aceita', 'indicada', 'avisos'].forEach(k => { PROPS[k] = { obrig: true, f: 0, n: 0, ex: [] }; });
-['pagto-div-emp', 'metades-pag', 'antecipar', 'centavo'].forEach(k => { PROPS[k] = { obrig: false, f: 0, n: 0, ex: [] }; });
+['data', 'ordem', 'metades', 'metades-pag', 'escala', 'pagto-div', 'nominal', 'avulsas', 'prestacoes', 'rito', 'aceita', 'indicada', 'avisos', 'copilot-json'].forEach(k => { PROPS[k] = { obrig: true, f: 0, n: 0, ex: [] }; });
+['pagto-div-emp', 'antecipar', 'centavo'].forEach(k => { PROPS[k] = { obrig: false, f: 0, n: 0, ex: [] }; });
 function confere(nome, ok, msg, e) {
   const p = PROPS[nome]; p.n++;
   if (!ok) { p.f++; if (p.ex.length < 3) p.ex.push(msg + (DETALHES ? '\n ' + JSON.stringify(e) : '')); }
 }
 
-function testarCaso(e) {
+function testarCaso(e, indiceCaso) {
   const nRec = recusas.length;
   const r0 = tenta(() => E.calcular(copia(e)), e);
   confere('aceita', recusas.length === nRec, recusas[recusas.length - 1], e);
   if (!r0) return false;
   const T = r0.totais.total;
   const nParc = (e.parcelas || []).length;
+
+  const importacao = C.ler(jsonCopilot(e, indiceCaso));
+  const importado = importacao.dados && !importacao.erros.length
+    ? tenta(() => total(entradaCopilot(importacao.dados, e)), e)
+    : undefined;
+  confere('copilot-json', importado !== undefined && Math.abs(importado - T) <= 0.01,
+    'Entrada manual ' + T + '; importada ' + importado + '; erros: ' + (importacao.erros || []).join('; '), e);
 
   const d2 = somaDias(e.dataCalculo, inteiro(1, 200));
   if (d2 <= ULTIMA) {
@@ -124,9 +236,11 @@ function testarCaso(e) {
   if (nParc) {
     const nome = (e.pagamentos || []).length ? 'metades-pag' : 'metades';
     const e2 = copia(e), i = inteiro(0, nParc - 1), p = e2.parcelas[i], a = r2(p.valor / 2);
+    if (nome === 'metades-pag') p.obrigacao = 'fracionada';
     e2.parcelas.splice(i, 1, Object.assign({}, p, { valor: a }), Object.assign({}, p, { valor: r2(p.valor - a) }));
     const T2 = total(e2);
-    confere(nome, Math.abs(T2 - T) <= 0.05, 'Inteira ' + T + '; em duas metades ' + T2 + ' (' + e.tipo + ', ' + e.regime + ')', e);
+    confere(nome, Math.abs(T2 - T) <= (nome === 'metades-pag' ? 0.001 : 0.05),
+      'Inteira ' + T + '; em duas metades ' + T2 + ' (' + e.tipo + ', ' + e.regime + ')', e);
   }
   if (e.tipo !== 'pensao') {
     const e2 = copia(e);
@@ -212,9 +326,10 @@ function testarCaso(e) {
     }
   }
   const prim = r0.linhas.map(l => l.vencimento).sort()[0];
-  if (prim < e.dataCalculo && T > 1) {
-    const dc = data(prim, e.dataCalculo);
+  if (prim < somaDias(e.dataCalculo, -1) && T > 1) {
+    const dc = data(prim, somaDias(e.dataCalculo, -1));
     const e2 = copia(e); e2.pagamentos = (e2.pagamentos || []).concat([{ data: dc, valor: 0.01 }]);
+    if (e2.prazo523) e2.prazo523 = prazo523(e2.dataCalculo, e2.pagamentos);
     const T2 = total(e2);
     confere('centavo', Math.abs(T - T2 - 0.01) <= 0.03, 'Sem o centavo ' + T + '; pagando R$ 0,01 em ' + dc + ': ' + T2 + ' (diferença de ' + r2(T - T2).toFixed(2) + '; ' + e.tipo + ', ' + (e.regime || '') + ')', e);
   }
@@ -222,7 +337,7 @@ function testarCaso(e) {
 }
 
 let feitos = 0, pulados = 0;
-for (let i = 0; i < N; i++) { if (testarCaso(caso())) feitos++; else pulados++; }
+for (let i = 0; i < N; i++) { if (testarCaso(caso(), i)) feitos++; else pulados++; }
 console.log('Casos: ' + feitos + ' (pulados por falta de índice: ' + pulados + ').');
 let falhas = 0, abertas = 0;
 Object.keys(PROPS).forEach(k => {

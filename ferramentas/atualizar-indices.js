@@ -74,7 +74,7 @@ const COMENTARIOS = {
   IGPM: 'IGP-M mensal, % a.m. (SGS 189, FGV): correção de débito cível quando o título manda usar o IGP-M.'
 };
 const ORDEM_TABELAS = ['SALARIO_MINIMO', 'FATORES_TJSP', 'TAXA_LEGAL', 'FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'INPC', 'IPCA', 'IGPM'];
-const ORDEM_CAMPOS = ['ultimoMes', 'ultimoMesSelic', 'indicesEmbutidosEm', 'vigenciaLei14905', 'inicioEC113', 'inicioEC136', 'inicioFazenda'];
+const ORDEM_CAMPOS = ['ultimoMes', 'ultimoMesSelic', 'indicesEmbutidosEm', 'inicioCC2002', 'vigenciaLei14905', 'inicioEC113', 'inicioEC136', 'inicioFazenda'];
 
 function tabela(nome, obj) {
   const ks = Object.keys(obj).sort();

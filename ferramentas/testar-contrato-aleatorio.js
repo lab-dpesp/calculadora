@@ -53,6 +53,7 @@ function checkSchedule(rows, amortization, principal) {
     ['installmentCents', 'interestCents', 'principalCents', 'balanceCents'].forEach(function (key) {
       assertFiniteNonnegative(row[key], key + ' inválido');
     });
+    assert.ok(Number.isSafeInteger(row.adjustmentCents), 'ajuste Price inválido');
     if (index) {
       if (amortization === 'SAC') {
         assert.ok(rows[index - 1].principalCents >= row.principalCents &&
@@ -61,8 +62,13 @@ function checkSchedule(rows, amortization, principal) {
         assert.ok(rows[index].installmentCents <= rows[index - 1].installmentCents,
           'parcela SAC aumentou');
       } else {
-        assert.ok(Math.abs(row.installmentCents - rows[0].installmentCents) <= 1,
-          'parcelas Price variam mais de um centavo');
+        if (index < rows.length - 1) {
+          assert.strictEqual(row.installmentCents, rows[0].installmentCents,
+            'parcelas Price regulares devem ser constantes');
+        } else {
+          assert.strictEqual(row.adjustmentCents, row.installmentCents - rows[0].installmentCents,
+            'ajuste da última Price não reconcilia com a prestação regular');
+        }
       }
     }
   });
@@ -79,7 +85,7 @@ function testCase(index) {
   const contractDate = randomDate();
   const firstDueDate = addMonths(contractDate, 1);
   const charge = random() < 0.35 ? {
-    kind: ['iof', 'TAC', 'insurance', 'other'][integer(0, 3)],
+    kind: ['iof', 'TAC', 'TEC', 'insurance', 'other'][integer(0, 4)],
     amountCents: integer(1, Math.max(1, Math.floor(principalCents / 20))),
     paymentMode: ['financed', 'upfront', 'deducted', 'recurring', 'unknown'][integer(0, 4)]
   } : null;
@@ -137,8 +143,10 @@ function testCase(index) {
   const cet = financial.calculateCet(principalCents - financedCharge, contractDate, payments, charges);
   assert.ok(Number.isFinite(cet.annualRate), 'CET não finito');
   if (financedCharge && monthlyRate > 0) {
-    assert.ok(cet.annualRate + 1e-8 >= financial.annualEffective(monthlyRate),
-      'CET menor que a taxa anualizada com encargo financiado');
+    const cetWithoutFinancedCharge = financial.calculateCet(principalCents, contractDate, payments,
+      charges.filter((item) => item.paymentMode !== 'financed'));
+    assert.ok(cet.annualRate + 1e-8 >= cetWithoutFinancedCharge.annualRate,
+      'CET com encargo financiado menor que o mesmo fluxo sem esse encargo');
   }
   if (monthlyRate === 0) {
     assert.ok(schedule.every((row) => row.installmentCents !== Infinity && row.interestCents === 0),

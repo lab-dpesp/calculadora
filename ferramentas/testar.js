@@ -11,6 +11,12 @@
 const fs = require('fs'), path = require('path');
 const RAIZ = path.resolve(__dirname, '..'), CASOS = path.join(__dirname, 'casos');
 globalThis.DADOS = require(path.join(RAIZ, 'data.js'));
+// Tabelas como estavam quando os totais esperados foram gravados: a rotina diária acrescenta meses novos
+// (ex.: a Selic de outubro, publicada no fim do mês), o que mudaria o total na data fixa sem ser erro.
+// Revisões de meses passados continuam sendo detectadas.
+const CORTE = { SELIC: '2026-09', INPC: '2026-09', IPCA: '2026-09', IGPM: '2026-09', FATORES_TJSP: '2026-10', TAXA_LEGAL: '2026-10', FATORES_IPCAE: '2026-10' };
+Object.keys(CORTE).forEach(function (t) { Object.keys(DADOS[t]).forEach(function (m) { if (m > CORTE[t]) delete DADOS[t][m]; }); });
+DADOS.ultimoMes = CORTE.FATORES_TJSP; DADOS.ultimoMesSelic = CORTE.SELIC;
 const C = require(path.join(RAIZ, 'copilot.js')), E = require(path.join(RAIZ, 'engine.js'));
 const DATA = '2026-10-23';
 const arqEsperado = path.join(CASOS, 'esperado.json');
@@ -19,7 +25,8 @@ const gravar = process.argv.includes('--gravar');
 
 function entrada(d) {
   const j = d.juros || {};
-  return { tipo: d.tipo, dataCalculo: DATA, regime: j.regime || 'tjsp', taxaFixa: j.taxaMensal, contagemDias: j.contagemDias, termoJuros: j.termo || 'vencimento', dataJuros: j.data || '',
+  // Estes gabaritos foram gravados no perfil 2, com arredondamento inclusive em pagamentos alheios à linha.
+  return { tipo: d.tipo, perfilCalculo: E.perfilCalculoAnterior, dataCalculo: DATA, regime: j.regime || 'tjsp', taxaFixa: j.taxaMensal, contagemDias: j.contagemDias, termoJuros: j.termo || 'vencimento', dataJuros: j.data || '',
     posEC136: d.posEC136 || 'selic',
     periodos: d.periodos.map(function (p) { return { inicio: p.inicio, fim: p.fim, dia: p.dia, base: p.base, quantidade: p.quantidade, decimo: p.decimo,
       rendimentos: p.rendimentos, reajuste: p.reajuste, dataBase: p.dataBase }; }),

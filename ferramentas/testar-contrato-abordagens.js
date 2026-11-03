@@ -150,10 +150,13 @@ snapshot.observations['25468'] = [{ month: '2025-01', value: 2.8 }];
 try {
   const ambiguous = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
   assert.strictEqual(ambiguous.ambiguous, true);
-  assert.strictEqual(ambiguous.selected.key, 'payroll_public');
-  assert.strictEqual(ambiguous.comparison.bacenPercent, 4.1);
+  assert.strictEqual(ambiguous.selected, null);
+  assert.strictEqual(ambiguous.comparison.available, false);
+  const manual = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01', 'payroll_public');
+  assert.strictEqual(manual.selected.key, 'payroll_public');
+  assert.strictEqual(manual.comparison.bacenPercent, 4.1);
   delete snapshot.observations['25467'];
-  const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01');
+  const partial = bacen.compareCandidates(0.06, 'payroll', 'nao_sei', '2025-01', 'payroll_private');
   assert.strictEqual(partial.selected.key, 'payroll_private');
   assert.strictEqual(partial.candidates.find((item) => item.key === 'payroll_public').observation.available, false);
 } finally {
@@ -163,4 +166,4 @@ try {
   });
 }
 
-console.log('Propriedades metamórficas, datas (29/30/31, fevereiro, ano e bissexto), período BACEN e maior média entre candidatas passaram.');
+console.log('Propriedades metamórficas, datas (29/30/31, fevereiro, ano e bissexto), período BACEN e seleção manual de candidatas passaram.');

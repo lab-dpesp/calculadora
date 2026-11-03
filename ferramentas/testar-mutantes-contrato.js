@@ -10,9 +10,12 @@ const { spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'mutantes-contrato-'));
 const files = [
-  'contrato.html',
+  'contrato.html', 'calc.html',
+  'agente-copilot-contrato.txt',
+  'LEIA-ME.md',
   'contrato/financeiro.js', 'contrato/regras.js', 'contrato/bacen.js',
   'contrato/catalogo-bacen.js', 'contrato/series-bacen.js', 'contrato/copilot-contrato.js',
+  'contrato/contrato-copilot-v1.schema.json', 'contrato/exemplo-contrato-copilot-v1.json',
   'ferramentas/testar-contrato.js', 'ferramentas/testar-contrato-abordagens.js',
   'ferramentas/casos-contrato/gabaritos.json'
 ];

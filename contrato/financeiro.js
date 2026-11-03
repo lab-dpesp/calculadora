@@ -39,6 +39,9 @@
   }
 
   function validateCount(count) {
+    if (Number.isFinite(count) && !Number.isInteger(count)) {
+      throw new Error('O número de parcelas deve ser inteiro (sem casas decimais).');
+    }
     if (!Number.isInteger(count) || count < 1 || count > MAX_PARCELAS) throw new Error('Informe de 1 a 1.200 parcelas.');
   }
 
@@ -69,6 +72,7 @@
           period: zeroPeriod,
           installmentCents: zeroAmortization,
           interestCents: 0,
+          adjustmentCents: 0,
           principalCents: zeroAmortization,
           balanceCents: balance
         });
@@ -79,19 +83,19 @@
       var interest = Math.round(balance * rate);
       var installment = payment;
       var amortization = installment - interest;
+      var adjustment = 0;
       if (period === count) {
         amortization = balance;
-        interest = installment - amortization;
-        if (interest < 0) {
-          throw new Error('O arredondamento em centavos impede parcelas Price constantes; confira valor, taxa e prazo.');
-        }
+        installment = amortization + interest;
+        adjustment = installment - payment;
       }
       if (amortization <= 0 && balance > 0) throw new Error('A prestação não amortiza o saldo; verifique os dados.');
       if (period < count && amortization >= balance) {
         throw new Error('O arredondamento em centavos impede parcelas Price constantes; confira valor, taxa e prazo.');
       }
       balance = Math.max(0, balance - amortization);
-      rows.push({ period: period, installmentCents: installment, interestCents: interest, principalCents: amortization, balanceCents: balance });
+      rows.push({ period: period, installmentCents: installment, interestCents: interest, adjustmentCents: adjustment,
+        principalCents: amortization, balanceCents: balance });
     }
     return rows;
   }
@@ -109,7 +113,8 @@
       var interest = Math.round(balance * rate);
       var installment = amortization + interest;
       balance -= amortization;
-      rows.push({ period: period, installmentCents: installment, interestCents: interest, principalCents: amortization, balanceCents: balance });
+      rows.push({ period: period, installmentCents: installment, interestCents: interest, adjustmentCents: 0,
+        principalCents: amortization, balanceCents: balance });
     }
     return rows;
   }
@@ -119,6 +124,8 @@
     if (!Number.isSafeInteger(principalCents) || principalCents <= 0 ||
         !Number.isSafeInteger(paymentCents) || paymentCents <= 0) throw new Error('Informe valores positivos para identificar a taxa.');
     if (paymentCents * count < principalCents) throw new Error('Os pagamentos não liquidam o principal informado.');
+    // Fluxo sem juros: a bisseção devolveria um resíduo positivo minúsculo (centavos de juros fictícios).
+    if (paymentCents * count === principalCents) return 0;
     var presentValue = function (rate) {
       if (Math.abs(rate) < 1e-14) return paymentCents * count;
       return paymentCents * (1 - Math.pow(1 + rate, -count)) / rate;
@@ -219,8 +226,8 @@
 
   function validateInput(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Análise inválida.');
-    if (!['personal_unsecured', 'payroll', 'vehicle_finance', 'personal_or_vehicle'].includes(input.modality)) throw new Error('Modalidade fora do MVP.');
-    if (!['PRICE', 'SAC'].includes(input.amortization)) throw new Error('Selecione Price ou SAC.');
+    if (!['personal_unsecured', 'payroll', 'vehicle_finance', 'personal_or_vehicle', 'fora_do_escopo'].includes(input.modality)) throw new Error('Modalidade fora do MVP.');
+    if (!['PRICE', 'SAC', 'unknown'].includes(input.amortization)) throw new Error('Selecione Price, SAC ou mantenha o sistema desconhecido.');
     validateCount(input.installments);
     var principal = parseMoney(input.financedAmount);
     if (principal === null || principal <= 0) throw new Error('Informe o valor financiado.');
@@ -236,7 +243,7 @@
       validateRate(input.statedCet);
     }
     if (input.charges !== undefined) {
-      var allowedKinds = ['iof', 'TAC', 'cadastro', 'third_party', 'correspondent', 'evaluation', 'registration', 'pre_lien', 'insurance', 'other'];
+      var allowedKinds = ['iof', 'TAC', 'TEC', 'cadastro', 'third_party', 'correspondent', 'evaluation', 'registration', 'pre_lien', 'insurance', 'other'];
       var allowedModes = ['financed', 'upfront', 'deducted', 'recurring', 'unknown'];
       if (!Array.isArray(input.charges) || input.charges.length > 100) throw new Error('Informe no máximo 100 encargos.');
       var chargeTotal = 0;

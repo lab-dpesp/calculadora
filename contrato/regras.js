@@ -1,16 +1,16 @@
 (function (root) {
   'use strict';
   var VERSION = '1.0.0';
-  var TAC_CUTOFF = '2008-05-01';
-  var CORRESPONDENT_CUTOFF = '2011-02-26';
+  var TAC_TEC_CUTOFF = '2008-04-30';
+  var CORRESPONDENT_CUTOFF = '2011-02-25';
   // Limites do semáforo: razão entre a taxa contratada e a média BACEN da competência.
   // Até 1,3x = verde; acima de 1,3x e até 1,5x = amarelo; acima de 1,5x = vermelho
   // (1,5x é parâmetro usado com frequência pelo STJ). Altere apenas aqui.
   var TRAFFIC_LIMITS = { yellow: 1.3, red: 1.5 };
   var TRAFFIC_LIGHTS = {
-    green: { state: 'green', icon: '✔', label: 'Dentro do esperado' },
-    yellow: { state: 'yellow', icon: '⚠', label: 'Atenção' },
-    red: { state: 'red', icon: '✖', label: 'Indício forte de abusividade' },
+    green: { state: 'green', icon: '✔', label: 'Até 1,3× da média' },
+    yellow: { state: 'yellow', icon: '⚠', label: 'Acima de 1,3× até 1,5×' },
+    red: { state: 'red', icon: '✖', label: 'Acima de 1,5× da média' },
     gray: { state: 'gray', icon: '?', label: 'Sem comparação possível' }
   };
 
@@ -23,6 +23,20 @@
     var light = ratio > TRAFFIC_LIMITS.red ? TRAFFIC_LIGHTS.red
       : ratio > TRAFFIC_LIMITS.yellow ? TRAFFIC_LIGHTS.yellow : TRAFFIC_LIGHTS.green;
     return Object.assign({}, light, { ratio: comparison.ratio });
+  }
+
+  // Motivos da estimativa incompleta do CET, na ordem em que aparecem na mensagem.
+  var CET_INCOMPLETE_REASONS = {
+    simulated_installments: 'as prestações usadas no fluxo foram simuladas pelo cronograma, não informadas individualmente',
+    unknown_charge_mode: 'há encargo sem forma de pagamento definida'
+  };
+  function cetIncompleteMessage(reasons) {
+    var list = Array.isArray(reasons) ? reasons : [];
+    var texts = Object.keys(CET_INCOMPLETE_REASONS).filter(function (reason) {
+      return list.indexOf(reason) !== -1;
+    }).map(function (reason) { return CET_INCOMPLETE_REASONS[reason]; });
+    if (!texts.length) return 'Faltam fluxos para estimar o CET.';
+    return (texts.length === 1 ? 'Motivo: ' + texts[0] : 'Motivos: ' + texts.join('; e ')) + '.';
   }
 
   function evaluate(input) {
@@ -42,11 +56,6 @@
         approvalStatus: 'PENDING_HUMAN_REVIEW'
       });
     }
-    if (input.recognition === 'no') {
-      add('JUR_014', 'Contratação não reconhecida', 'NEEDS_EVIDENCE',
-        'Encaminhar para verificação da contratação e da autenticidade dos documentos; este cálculo não conclui fraude.',
-        'STJ Tema 1.061 — conferir vigência e aplicação ao caso.', ['contrato integral', 'comprovantes de liberação']);
-    }
     if (!Number.isFinite(input.monthlyRate)) {
       add('JUR_002', 'Taxa contratual não informada', 'NEEDS_EVIDENCE',
         'A taxa não foi informada. Não foi presumida uma taxa contratual; confira o instrumento e a taxa média da mesma espécie.',
@@ -61,7 +70,7 @@
     }
     if (input.statedCet !== null && Number.isFinite(input.statedCet) && input.cetIncomplete) {
       add('JUR_011', 'CET estimado com dados incompletos', 'NEEDS_EVIDENCE',
-        'Há encargo sem forma de pagamento definida. A estimativa não permite conferir a divergência com segurança.',
+        cetIncompleteMessage(input.cetIncompleteReasons) + ' A estimativa não permite conferir a divergência com segurança.',
         'Resolução CMN 4.881/2020 — confirmar norma aplicável ao período.', ['contrato', 'demonstrativo de CET', 'fluxos completos']);
     } else if (input.statedCet !== null && Number.isFinite(input.statedCet) &&
         Number.isFinite(input.calculatedCet) && Math.abs(input.statedCet - input.calculatedCet) > 0.001) {
@@ -82,9 +91,9 @@
     charges.forEach(function (charge) {
       var amount = Number(charge.amountCents);
       if (!Number.isFinite(amount) || amount <= 0) return;
-      if (charge.kind === 'TAC' && input.contractDate && input.contractDate >= TAC_CUTOFF) {
-        add('JUR_003', 'Cobrança identificada como TAC', 'POTENTIAL_ISSUE',
-          'Há cobrança identificada como TAC em contrato posterior a 30/04/2008. Confira a natureza material e a documentação; não é uma conclusão automática.',
+      if ((charge.kind === 'TAC' || charge.kind === 'TEC') && input.contractDate && input.contractDate >= TAC_TEC_CUTOFF) {
+        add('JUR_003', 'Cobrança identificada como ' + charge.kind, 'POTENTIAL_ISSUE',
+          'Há cobrança identificada como ' + charge.kind + ' em contrato a partir de 30/04/2008. Confira a natureza material e a documentação; não é uma conclusão automática.',
           'STJ Tema 618 e Súmula 565 — revisar contexto.', ['contrato integral', 'discriminação da cobrança']);
       }
       if (charge.kind === 'cadastro') {
@@ -99,13 +108,13 @@
       }
       if (charge.kind === 'correspondent' && input.contractDate && input.contractDate >= CORRESPONDENT_CUTOFF) {
         add('JUR_006', 'Comissão de correspondente', 'NEEDS_EVIDENCE',
-          'Confira a data, a natureza do serviço e quem o prestou. A cobrança não é automaticamente indevida.',
-          'STJ Tema 958 — análise específica necessária.', ['contrato', 'comprovante do serviço']);
+          'Há cobrança de comissão de correspondente em contrato a partir de 25/02/2011. Confira a data, a natureza do serviço e quem o prestou. A cobrança não é automaticamente indevida.',
+          'STJ Tema 958 e Resolução CMN 3.954/2011 — análise específica necessária.', ['contrato', 'comprovante do serviço']);
       }
       if (charge.kind === 'pre_lien' && input.contractDate && input.contractDate >= CORRESPONDENT_CUTOFF) {
         add('JUR_008', 'Cobrança identificada como pré-gravame', 'POTENTIAL_ISSUE',
-          'Confira a natureza efetiva da cobrança, a data e a documentação; não conclua irregularidade sem revisar o caso.',
-          'STJ Tema 972 — revisão humana necessária.', ['contrato', 'documentos do veículo']);
+          'Há cobrança identificada como pré-gravame em contrato a partir de 25/02/2011. Confira a natureza efetiva da cobrança, a data e a documentação; não conclua irregularidade sem revisar o caso.',
+          'STJ Tema 972 e Resolução CMN 3.954/2011 — revisão humana necessária.', ['contrato', 'documentos do veículo']);
       }
       if (charge.kind === 'evaluation' || charge.kind === 'registration') {
         add('JUR_007', 'Avaliação ou registro', charge.serviceVerified === false ? 'POTENTIAL_ISSUE' : 'NEEDS_EVIDENCE',
@@ -131,7 +140,8 @@
     return findings;
   }
 
-  var api = { version: VERSION, TRAFFIC_LIMITS: TRAFFIC_LIMITS, trafficLight: trafficLight, evaluate: evaluate };
+  var api = { version: VERSION, TRAFFIC_LIMITS: TRAFFIC_LIMITS, CET_INCOMPLETE_REASONS: CET_INCOMPLETE_REASONS,
+    trafficLight: trafficLight, evaluate: evaluate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ContratoRegras = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -13,6 +13,7 @@
  *              "termoInicial": "vencimento" | "data", "data": "AAAA-MM-DD", "origem": "...",
  *              "contagemDias": "dias360" | "corridos",   (juros fixos: mês comercial, padrão, ou dias corridos)
  *              "duasTaxas": { "taxa1": 1, "ate": "AAAA-MM-DD", "depois": "taxalegal" | "fixa", "taxa2": 0.5 } },   (opcional)
+ *       tjsp      0,5% a.m. até 10/01/2003, 1% até 29/08/2024 e taxa legal depois;
  *       duas      taxa1 até a data "ate" (inclusive) e, depois, taxa legal ou taxa2;
  *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 28/08/2024, depois índice + taxa legal.
  *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
@@ -29,17 +30,22 @@
  *                                                                      de uma prestação no lugar do apurado pela base)
  *   "dataAjuizamento": { "data": "AAAA-MM-DD", "origem": "..." },    (pensão, opcional)
  *   "outrasParcelas": [ { "vencimento": "AAAA-MM-DD", "valor": 0, "descricao": "...", "origem": "...",
- *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD" } ],   (termos próprios, opcionais)
+ *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD",
+ *                         "obrigacao": "ID opcional, até 80 caracteres" } ],
+ *       O mesmo ID identifica frações de uma obrigação; sem ID, as linhas são dívidas autônomas.
  *   "pagamentos": [ { "data": "AAAA-MM-DD", "valor": 0, "origem": "..." } ],
  *   "fazenda": { "posEC136": "selic" | "ipca2" },                     (opcional)
- *   "encargos": { "multa523": false, "honorariosPct": null, "prazo523": "AAAA-MM-DD" },   (opcional; prazo523 = fim do
- *                                                                      prazo de 15 dias, para o art. 523, § 2º)
+ *   "encargos": { "multa523": false, "honorariosPct": null, "prazo523": "AAAA-MM-DD" },   (prazo523 = data final
+ *                                                                      confirmada, exigida para encargos do art. 523
+ *                                                                      fora da Fazenda; a calculadora não conta prazo)
  *   "pendencias": [ "..." ],
  *   "observacoes": "...",
  *   "calculoAnterior": { "dataCalculo": "AAAA-MM-DD", "total": 0, "totalPrisao": 0, "totalPenhora": 0, "origem": "..." }   (opcional)
  * }
  *
- * O arquivo "Salvar cálculo" (.calcjur) usa este mesmo formato, com mais alguns campos opcionais: "partes"
+ * O arquivo "Salvar cálculo" (.calcjur) usa este mesmo formato, com mais alguns campos opcionais: "perfilCalculo"
+ * (1 = corte histórico em 29/08/2024; 2 = corte em 30/08/2024, com eventos antigos;
+ * 3 = corte em 30/08/2024, sem atualizações incidentais de outras obrigações), "partes"
  * { exequente, executado }, "revisado" (true quando a importação do Copilot já foi revisada), "historico"
  * [ { dataCalculo, total } ] dos cálculos anteriores, "indices" (os índices usados, para conferir se mudaram
  * quando o arquivo for reaberto) e "parcela" em cada pagamento (imputação indicada:
@@ -63,6 +69,12 @@
   };
   var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1, duas: 1, selic: 1, selic_tl: 1 };
   var INDICES = { tjsp: 1, ipca: 1, inpc: 1, ipcae: 1, igpm: 1, nenhum: 1 };
+
+  var SUCUMBENCIAS = { condenacao: 1, causa: 1, fixo: 1 };
+  /* Só chaves próprias: "constructor" ou "hasOwnProperty" existem em todo objeto e não podem passar por opção válida. */
+  function tem(obj, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k); }
+  /* Limites de tamanho: um bloco absurdo (milhares de itens ou megabytes de texto) travaria a tela. */
+  var MAX_TEXTO = 2000000, MAX_ITENS = 1000, MAX_PENDENCIAS = 100, MAX_TAXA = 1000;
 
   function semAcento(s) { return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
   function texto(v) { return v == null ? '' : String(v).trim(); }
@@ -103,6 +115,8 @@
     if (/^-?\d{1,3}(,\d{3})+\.\d+$/.test(s)) s = s.replace(/,/g, '');
     else if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
     else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    // Sem notação científica, hexadecimal ou "Infinity": "1e3" e "0x10" mudariam o valor em silêncio.
+    if (!/^-?(\d+(\.\d*)?|\.\d+)$/.test(s)) return NaN;
     var n = Number(s);
     return isFinite(n) ? n : NaN;
   }
@@ -112,7 +126,7 @@
   }
   function data(v) {
     var s = texto(v), m;
-    if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) { if (dataValida(+m[1], +m[2], +m[3])) return m[1] + '-' + m[2] + '-' + m[3]; return null; }
+    if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/))) { if (dataValida(+m[1], +m[2], +m[3])) return m[1] + '-' + m[2] + '-' + m[3]; return null; }
     if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))) {
       if (dataValida(+m[3], +m[2], +m[1])) return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
     }
@@ -127,9 +141,21 @@
 
   function ler(bruto) {
     var erros = [], avisos = [];
+    if (typeof bruto === 'string' && bruto.length > MAX_TEXTO) {
+      return { dados: null, erros: ['O texto colado é grande demais (mais de ' + (MAX_TEXTO / 1000000) + ' milhões de caracteres). Cole só a resposta do Copilot com o bloco de dados.'], avisos: [] };
+    }
     var o = typeof bruto === 'string' ? extrairJson(bruto) : bruto;
     if (!o || typeof o !== 'object' || Array.isArray(o)) {
       return { dados: null, erros: ['Não encontrei o bloco de dados na resposta. Copie a resposta inteira do Copilot, incluindo o trecho entre chaves { }.'], avisos: [] };
+    }
+    var grandes = ['periodos', 'outrasParcelas', 'parcelas', 'pagamentos', 'ajustes', 'historico'].filter(function (k) {
+      return Array.isArray(o[k]) && o[k].length > MAX_ITENS;
+    });
+    (Array.isArray(o.periodos) ? o.periodos : []).forEach(function (p, i) {
+      if (p && Array.isArray(p.rendimentos) && p.rendimentos.length > MAX_ITENS) grandes.push('periodos[' + (i + 1) + '].rendimentos');
+    });
+    if (grandes.length) {
+      return { dados: null, erros: ['Lista grande demais em ' + grandes.join(', ') + ' (limite de ' + MAX_ITENS + ' itens). Confira o bloco ou divida o cálculo.'], avisos: [] };
     }
     if (o.formato !== 'calcjur-copilot') avisos.push('O bloco não se identifica como "calcjur-copilot". Confira se veio do agente da calculadora.');
     if (o.versao != null && Number(o.versao) !== 1) avisos.push('Versão ' + o.versao + ' do formato; esta calculadora lê a versão 1.');
@@ -144,7 +170,7 @@
 
     var tipo = semAcento(o.tipo || '');
     if (tipo === 'pensao' || tipo === 'pensao alimenticia' || tipo === 'alimentos') d.tipo = 'pensao';
-    else if (TIPOS[tipo]) d.tipo = tipo;
+    else if (tem(TIPOS, tipo)) d.tipo = tipo;
     else if (tipo === 'civel' || tipo === 'debito civel') d.tipo = 'particular';
     else if (!o.tipo && Array.isArray(o.periodos) && o.periodos.length) { d.tipo = 'pensao'; avisos.push('Tipo de débito não informado; considerei pensão alimentícia porque há períodos.'); }
     else erros.push('Tipo de débito ausente ou inválido ("' + texto(o.tipo) + '"). Use pensao, particular ou fazenda.');
@@ -152,17 +178,19 @@
     if (o.juros && typeof o.juros === 'object') {
       var j = o.juros, jr = { regime: null, taxaMensal: null, termo: 'vencimento', data: '', origem: texto(j.origem) };
       if (j.regime != null) {
-        if (REGIMES[j.regime]) jr.regime = j.regime; else erros.push('Regime de juros desconhecido: "' + texto(j.regime) + '".');
+        if (tem(REGIMES, j.regime)) jr.regime = j.regime; else erros.push('Regime de juros desconhecido: "' + texto(j.regime) + '".');
       }
       if (jr.regime === 'fixa') {
         jr.taxaMensal = numero(j.taxaMensal);
         if (!(jr.taxaMensal > 0)) erros.push('Juros fixos sem taxa mensal válida.');
+        else if (jr.taxaMensal > MAX_TAXA) erros.push('Taxa de juros fixa acima de ' + MAX_TAXA + '% ao mês ("' + texto(j.taxaMensal) + '"). Confira o título.');
       }
       if (jr.regime === 'duas') {
         var dt2 = j.duasTaxas || {};
         jr.duas = { taxa1: numero(dt2.taxa1), ate: data(dt2.ate), depois: dt2.depois === 'fixa' ? 'fixa' : 'taxalegal', taxa2: numero(dt2.taxa2) };
         if (!(jr.duas.taxa1 >= 0) || !jr.duas.ate) erros.push('Juros em duas taxas sem a primeira taxa ou sem a data da troca.');
         if (jr.duas.depois === 'fixa' && !(jr.duas.taxa2 >= 0)) erros.push('Juros em duas taxas sem a segunda taxa.');
+        if (jr.duas.taxa1 > MAX_TAXA || jr.duas.taxa2 > MAX_TAXA) erros.push('Juros em duas taxas com taxa acima de ' + MAX_TAXA + '% ao mês. Confira o título.');
       }
       if (j.contagemDias === 'corridos') jr.contagemDias = 'corridos';
       if (j.termoInicial === 'data') {
@@ -174,19 +202,21 @@
     if (o.fazenda && (o.fazenda.posEC136 === 'selic' || o.fazenda.posEC136 === 'ipca2')) d.posEC136 = o.fazenda.posEC136;
     if (o.civel && typeof o.civel === 'object') {
       var cv = o.civel, c = {};
-      if (cv.indice != null && cv.indice !== '') { if (INDICES[cv.indice]) c.indice = cv.indice; else erros.push('Índice de correção desconhecido: "' + texto(cv.indice) + '".'); }
+      if (cv.indice != null && cv.indice !== '') { if (tem(INDICES, cv.indice)) c.indice = cv.indice; else erros.push('Índice de correção desconhecido: "' + texto(cv.indice) + '".'); }
       if (cv.indice2 != null && cv.indice2 !== '') {
-        if (!INDICES[cv.indice2]) erros.push('Segundo índice de correção desconhecido: "' + texto(cv.indice2) + '".');
+        if (!tem(INDICES, cv.indice2)) erros.push('Segundo índice de correção desconhecido: "' + texto(cv.indice2) + '".');
         else if (!mes(cv.indice2Desde)) erros.push('Segundo índice de correção sem o mês de início.');
         else { c.indice2 = cv.indice2; c.indice2Desde = mes(cv.indice2Desde); }
       }
       if (cv.jurosCompostos === true) c.jurosCompostos = true;
       var mcp = numero(cv.multaContratualPct);
-      if (mcp > 0) c.multaContratualPct = mcp;
+      if (mcp > 100) erros.push('Multa contratual acima de 100% ("' + texto(cv.multaContratualPct) + '"). Confira o título.');
+      else if (mcp > 0) c.multaContratualPct = mcp;
+      else if (cv.multaContratualPct != null && cv.multaContratualPct !== '' && cv.multaContratualPct !== 0) erros.push('Percentual da multa contratual inválido ("' + texto(cv.multaContratualPct) + '").');
       d.civel = c;
     }
     if (o.sucumbencia && typeof o.sucumbencia === 'object' && o.sucumbencia.base) {
-      var su = o.sucumbencia, sb = { condenacao: 1, causa: 1, fixo: 1 }[su.base] ? su.base : null;
+      var su = o.sucumbencia, sb = tem(SUCUMBENCIAS, su.base) ? su.base : null;
       if (!sb) erros.push('Base dos honorários de sucumbência desconhecida: "' + texto(su.base) + '".');
       else d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '', transito: data(su.transito) || '' };
     }
@@ -203,7 +233,7 @@
       per.dia = Number(dia);
       if (dia == null || dia === '') { per.dia = 10; avisos.push(r + ': dia de vencimento não informado; usei o dia 10. Confira no título.'); }
       else if (!(per.dia >= 1 && per.dia <= 31) || per.dia % 1) erros.push(r + ': dia de vencimento inválido ("' + texto(dia) + '").');
-      var b = BASES[p.base] ? p.base : SINONIMOS_BASE[semAcento(p.base || '')];
+      var sin = semAcento(p.base || ''), b = tem(BASES, p.base) ? p.base : (tem(SINONIMOS_BASE, sin) ? SINONIMOS_BASE[sin] : null);
       if (!b) erros.push(r + ': base de cálculo desconhecida ("' + texto(p.base) + '").');
       per.base = b || 'pct_sm';
       per.quantidade = numero(p.valor != null ? p.valor : p.quantidade);
@@ -257,7 +287,13 @@
       if (!v || !(val > 0)) { erros.push('Parcela ' + (i + 1) + ': vencimento ou valor inválido.'); return; }
       var cd = p.correcaoDesde ? data(p.correcaoDesde) : '', jd = p.jurosDesde ? data(p.jurosDesde) : '';
       if (cd === null || jd === null) { erros.push('Parcela ' + (i + 1) + ': data de início da correção ou dos juros inválida.'); return; }
-      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem), correcaoDesde: cd || '', jurosDesde: jd || '' });
+      var obrigacao = '';
+      if (Object.prototype.hasOwnProperty.call(p, 'obrigacao')) {
+        if (typeof p.obrigacao !== 'string') { erros.push('Parcela ' + (i + 1) + ': obrigação (ID) deve ser texto.'); return; }
+        obrigacao = p.obrigacao.trim();
+        if (obrigacao.length > 80) { erros.push('Parcela ' + (i + 1) + ': obrigação (ID) deve ter até 80 caracteres.'); return; }
+      }
+      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem), correcaoDesde: cd || '', jurosDesde: jd || '', obrigacao: obrigacao });
     });
     var vistos = {};
     (Array.isArray(o.pagamentos) ? o.pagamentos : []).forEach(function (p, i) {
@@ -283,9 +319,15 @@
 
     if (o.encargos && typeof o.encargos === 'object') {
       var hp = o.encargos.honorariosPct == null || o.encargos.honorariosPct === '' ? null : numero(o.encargos.honorariosPct);
-      d.encargos = { multa: o.encargos.multa523 === true, honorariosPct: hp > 0 ? hp : null, prazo523: data(o.encargos.prazo523) || '' };
+      if (hp != null && hp !== 0 && !(hp > 0 && hp <= 100)) erros.push('Percentual dos honorários do art. 523 inválido ("' + texto(o.encargos.honorariosPct) + '"). Use um número maior que zero e até 100.');
+      d.encargos = { multa: o.encargos.multa523 === true, honorariosPct: hp > 0 && hp <= 100 ? hp : null, prazo523: data(o.encargos.prazo523) || '' };
     }
-    d.pendencias = (Array.isArray(o.pendencias) ? o.pendencias : (o.pendencias ? [o.pendencias] : [])).map(textoPendencia).filter(Boolean);
+    var pend = Array.isArray(o.pendencias) ? o.pendencias : (o.pendencias ? [o.pendencias] : []);
+    if (pend.length > MAX_PENDENCIAS) {
+      avisos.push('O bloco trouxe ' + pend.length + ' pendências; só as ' + MAX_PENDENCIAS + ' primeiras são exibidas. Confira o restante na conversa com o Copilot.');
+      pend = pend.slice(0, MAX_PENDENCIAS);
+    }
+    d.pendencias = pend.map(textoPendencia).filter(Boolean);
 
     /* Campos do arquivo de cálculo salvo (e do agente de atualização), todos opcionais. */
     var ca = o.calculoAnterior;
@@ -298,6 +340,13 @@
       } else if (ca.dataCalculo || ca.total != null) {
         avisos.push('Cálculo anterior com data ou total ilegível ("' + texto(ca.dataCalculo) + '", "' + texto(ca.total) + '"). A comparação não será feita.');
       }
+    }
+    if (o.perfilCalculo != null) {
+      var perfil = Number(o.perfilCalculo);
+      if (perfil === 1 || perfil === 2 || perfil === 3) d.perfilCalculo = perfil;
+      else erros.push('Perfil de cálculo desconhecido: "' + texto(o.perfilCalculo) + '".');
+    } else {
+      d.perfilCalculo = d.calculoAnterior ? 1 : 3;
     }
     d.historico = (Array.isArray(o.historico) ? o.historico : []).map(function (h) {
       return h && { dataCalculo: data(h.dataCalculo), total: numero(h.total) };

@@ -59,11 +59,10 @@ body { margin: 0; color: var(--text); background: var(--background); font-size: 
 button, input, select { font: inherit; color: inherit; }
 button, .importar { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 24px max(20px, calc((100% - 1040px) / 2)); border-bottom: 1px solid var(--border); }
-.topo h1 { margin: 10px 0 0; font-size: clamp(24px, 4vw, 34px); line-height: 1.2; }
-.voltar { color: var(--green); text-decoration: none; }
+.topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 24px max(20px, calc((100% - 1040px) / 2)) 12px; }
+.nav-calc { --nav-recuo: max(20px, calc((100% - 1040px) / 2)); margin-bottom: 0; }
 .subtitulo, .nota, .versao { color: var(--muted); font-size: 13px; }
-.subtitulo { margin: 6px 0 0; }
+.subtitulo { margin: 8px 0 0; }
 .pagina { width: min(100% - 32px, 1040px); margin: 24px auto 64px; }
 .aviso, .painel { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; background: var(--surface); }
 .aviso { display: grid; gap: 4px; background: color-mix(in srgb, var(--green) 8%, var(--background)); }
@@ -81,7 +80,13 @@ textarea { width: 100%; resize: vertical; }
 .primario, .secundario { min-height: 40px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--green); font-weight: 600; }
 .primario { color: var(--accent-text); background: var(--accent); }
 .secundario { background: transparent; color: var(--green); }
+.secundario:disabled { opacity: 1; color: var(--muted); border-color: var(--border); cursor: not-allowed; }
 .erro { border: 1px solid var(--danger); border-radius: 6px; color: var(--danger); padding: 10px; margin: 12px 0; }
+select[aria-invalid="true"] { border: 2px solid var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--field)); }
+.erro-amortizacao { color: var(--danger); font-weight: 600; }
+dialog { width: min(100% - 32px, 520px); max-height: calc(100% - 32px); overflow-y: auto; padding: 24px; border: 2px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); }
+dialog::backdrop { background: rgb(0 0 0 / 60%); }
+dialog h2 { margin-top: 0; font-size: 20px; }
 .acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; align-items: center; }
 .importar { display: inline-flex; align-items: center; }
 .resultado { border-top: 4px solid var(--green); }
@@ -133,15 +138,14 @@ summary { cursor: pointer; font-weight: 600; }
 .btn-info { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
 .ajuda { display: none; }
 .ajuda.aberta { display: block; color: var(--muted); font-size: 13px; margin: 6px 0; }
-.painel-copilot summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.painel-copilot summary strong { margin-right: auto; }
-.copilot-acoes { margin: 8px 0; }
 .campo-origem { display: block; min-height: 1em; color: var(--muted); font-size: 12px; font-weight: 400; }
 .revisao { border-left: 5px solid var(--amarelo-borda); }
 .revisao p { margin-bottom: 0; }
 .tabela-series { margin: 10px 0 16px; }
+.tabela-series button[data-series-key] { color: var(--text); border-color: var(--border); }
 .tabela-series tr[aria-label="Série que definiu o semáforo"] { font-weight: 700; background: color-mix(in srgb, var(--green) 10%, var(--surface)); }
 .pendente-revisao { border-left: 5px solid var(--amarelo-borda); }
+.resultado-desatualizado { border-left: 5px solid var(--danger); padding-left: 10px; font-weight: 600; }
 .aviso-escuro { background: var(--surface); }
 @media (max-width: 640px) {
   .encargo { grid-template-columns: 1fr; }
@@ -152,6 +156,7 @@ summary { cursor: pointer; font-weight: 600; }
   :root { color-scheme: light; --text: #000; --muted: #333; --border: #aaa; --background: #fff; --surface: #fff; --field: #fff; --accent: #2e6f24; --accent-text: #fff; --danger: #b71c1c; }
   .topo, #formContrato, .metodologia, .acoes, .versao { display: none !important; }
   .semaforo-icone { background: #fff; color: #000; border: 2px solid #000; }
+  .resultado.desatualizado > :not(#resultadoDesatualizado) { display: none !important; }
   body { font-size: 11pt; }
   .pagina { width: 100%; margin: 0; }
   .painel { break-inside: avoid; border-color: #999; }

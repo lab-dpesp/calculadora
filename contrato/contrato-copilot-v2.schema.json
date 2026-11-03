@@ -1,0 +1,853 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contrato-copilot-v2.schema.json",
+  "title": "contrato-copilot",
+  "version": 2,
+  "description": "Contrato de importação v2, gerado pelo agente (agente-copilot-contrato.txt). Igual à v1, com a classificação da operação (classificacaoCredito) e o texto original da modalidade (modalidadeTextoOriginal). Na v2 a modalidade legada é opcional: a calculadora faz a correspondência com a classificação. Valor financiado, número de parcelas e valor da parcela são necessários para calcular e podem ser completados na tela. Valores monetários têm no máximo duas casas decimais.",
+  "type": "object",
+  "required": [
+    "formato",
+    "versao"
+  ],
+  "properties": {
+    "formato": {
+      "const": "contrato-copilot"
+    },
+    "versao": {
+      "const": 2
+    },
+    "classificacaoCredito": {
+      "$ref": "#/$defs/classificacaoCredito"
+    },
+    "modalidadeTextoOriginal": {
+      "$ref": "#/$defs/modalidadeTextoOriginal"
+    },
+    "modalidade": {
+      "$ref": "#/$defs/modalidade",
+      "description": "Opcional na v2; a classificação prevalece."
+    },
+    "subtipoConsignado": {
+      "$ref": "#/$defs/subtipoConsignado",
+      "x-applicableWhen": "modalidade.valor == 'consignado'",
+      "x-requiredWhen": "modalidade.valor == 'consignado'"
+    },
+    "questaoPrincipal": {
+      "$ref": "#/$defs/questaoPrincipal"
+    },
+    "origemPrincipalInformacoes": {
+      "$ref": "#/$defs/origemPrincipalInformacoes"
+    },
+    "dataContrato": {
+      "$ref": "#/$defs/data"
+    },
+    "dataLiberacao": {
+      "$ref": "#/$defs/data",
+      "description": "Opcional; ausência não é pendência."
+    },
+    "dataPrimeiroVencimento": {
+      "$ref": "#/$defs/data"
+    },
+    "valorFinanciado": {
+      "$ref": "#/$defs/valorMonetario",
+      "description": "Valor em reais, sem símbolo monetário. Necessário para calcular.",
+      "x-blocksCalculation": true
+    },
+    "valorLiquidoDisponibilizado": {
+      "$ref": "#/$defs/valorMonetario"
+    },
+    "numeroParcelas": {
+      "$ref": "#/$defs/quantidade",
+      "description": "Quantidade inteira de parcelas. Necessária para calcular.",
+      "x-blocksCalculation": true
+    },
+    "valorParcela": {
+      "$ref": "#/$defs/valorMonetario",
+      "description": "Valor em reais, sem símbolo monetário. Necessário para calcular.",
+      "x-blocksCalculation": true
+    },
+    "jurosMensaisPct": {
+      "$ref": "#/$defs/percentual"
+    },
+    "cetAnualPct": {
+      "$ref": "#/$defs/percentual"
+    },
+    "sistemaAmortizacao": {
+      "$ref": "#/$defs/amortizacao",
+      "description": "PRICE, SAC ou desconhecido. null/desconhecido é preservado sem presumir um sistema; sem sistema identificado, o cronograma não é calculado.",
+      "x-requiredForCalculation": false,
+      "x-blocksCalculation": false
+    },
+    "capitalizacao": {
+      "$ref": "#/$defs/capitalizacao"
+    },
+    "encargos": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/encargo"
+      },
+      "default": []
+    },
+    "pendencias": {
+      "type": "array",
+      "description": "Aceita strings legadas (interpretadas como acionáveis) ou objetos tipados; somente requerAcao=true exige confirmação.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "maxLength": 1000
+          },
+          {
+            "$ref": "#/$defs/pendencia"
+          }
+        ]
+      },
+      "default": []
+    },
+    "contratacaoReconhecida": {
+      "$ref": "#/$defs/campo",
+      "description": "Status e origem são preservados na prévia e no JSON da análise como metadados; não criam pergunta nem bloqueio de cálculo."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "modalidade": {
+            "properties": {
+              "valor": {
+                "const": "consignado"
+              }
+            },
+            "required": [
+              "valor"
+            ]
+          }
+        },
+        "required": [
+          "modalidade"
+        ]
+      },
+      "then": {
+        "required": [
+          "subtipoConsignado"
+        ]
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "campo": {
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "modalidade": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/campo"
+        },
+        {
+          "properties": {
+            "valor": {
+              "enum": [
+                "credito_pessoal_nao_consignado",
+                "consignado",
+                "veiculo",
+                "nao_sei_cdc",
+                "fora_do_escopo",
+                null
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Modalidades aceitas na versão 1."
+    },
+    "subtipoConsignado": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/campo"
+        },
+        {
+          "properties": {
+            "valor": {
+              "enum": [
+                "inss",
+                "servidor_publico",
+                "setor_privado",
+                "nao_sei",
+                null
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Aplicável somente à modalidade consignado; se ausente, o importador solicita conferência."
+    },
+    "questaoPrincipal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/campo"
+        },
+        {
+          "properties": {
+            "valor": {
+              "enum": [
+                "Conferir valores",
+                "Juros altos",
+                "Tarifa ou seguro",
+                "Saldo que não diminui",
+                "Outro",
+                null
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "origemPrincipalInformacoes": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/campo"
+        },
+        {
+          "properties": {
+            "valor": {
+              "enum": [
+                "contrato",
+                "ccb",
+                "extrato",
+                "comprovante",
+                "informado_pelo_usuario",
+                "multiplas_fontes",
+                "inferida",
+                "desconhecida",
+                "contract",
+                "statement",
+                "consumer",
+                "inferred",
+                "unknown",
+                null
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Enum canônico: contrato, ccb, extrato, comprovante, informado_pelo_usuario, multiplas_fontes, inferida ou desconhecida. Os valores legados contract, statement, consumer, inferred e unknown também são aceitos."
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "valorMonetario": {
+      "description": "Número em reais, sem prefixo R$, com no máximo duas casas decimais (600.99, não 600.999).",
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000000
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "percentual": {
+      "description": "Número em pontos percentuais, sem sufixo % (por exemplo, 2.5 representa 2,5%).",
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "quantidade": {
+      "description": "Quantidade numérica inteira, entre 1 e 1200.",
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 1200
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "amortizacao": {
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "enum": [
+            "PRICE",
+            "SAC",
+            "desconhecido",
+            "unknown",
+            null
+          ]
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "capitalizacao": {
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "enum": [
+            "unknown",
+            "monthly",
+            "annual",
+            null
+          ]
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "encargo": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/encargoLegado"
+        },
+        {
+          "$ref": "#/$defs/encargoInadimplencia"
+        }
+      ]
+    },
+    "encargoLegado": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "valor",
+        "formaPagamento"
+      ],
+      "properties": {
+        "tipo": {
+          "enum": [
+            "iof",
+            "TAC",
+            "TEC",
+            "cadastro",
+            "third_party",
+            "correspondent",
+            "evaluation",
+            "registration",
+            "pre_lien",
+            "insurance",
+            "other"
+          ]
+        },
+        "valor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000000,
+          "description": "Valor em reais, sem símbolo monetário."
+        },
+        "formaPagamento": {
+          "enum": [
+            "financed",
+            "upfront",
+            "deducted",
+            "recurring",
+            "unknown"
+          ]
+        },
+        "descricao": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    },
+    "encargoInadimplencia": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "valor",
+        "unidade",
+        "periodicidade",
+        "origem"
+      ],
+      "properties": {
+        "tipo": {
+          "enum": [
+            "juros_mora",
+            "multa_moratoria",
+            "comissao_permanencia",
+            "juros_remuneratorios_inadimplencia",
+            "outro"
+          ]
+        },
+        "valor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000000,
+          "description": "Valor numérico, sem símbolo monetário nem sufixo %. Não é calculado nem convertido."
+        },
+        "unidade": {
+          "enum": [
+            "percentual",
+            "valor_monetario"
+          ]
+        },
+        "periodicidade": {
+          "enum": [
+            "ao_dia",
+            "mensal",
+            "anual",
+            "evento_unico",
+            "nao_informada"
+          ]
+        },
+        "origem": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unidade": {
+                "const": "percentual"
+              }
+            },
+            "required": [
+              "unidade"
+            ]
+          },
+          "then": {
+            "properties": {
+              "valor": {
+                "maximum": 1000
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "juros_mora"
+              }
+            },
+            "required": [
+              "tipo"
+            ]
+          },
+          "then": {
+            "properties": {
+              "periodicidade": {
+                "enum": [
+                  "ao_dia",
+                  "mensal",
+                  "anual",
+                  "nao_informada"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "pendencia": {
+      "type": "object",
+      "required": [
+        "codigo",
+        "mensagem",
+        "severidade",
+        "requerAcao"
+      ],
+      "properties": {
+        "codigo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "campo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100
+        },
+        "mensagem": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "severidade": {
+          "enum": [
+            "informativa",
+            "advertencia",
+            "bloqueante"
+          ]
+        },
+        "requerAcao": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "classificacaoCredito": {
+      "type": "object",
+      "properties": {
+        "tipoPessoa": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "enum": [
+                "PF",
+                "PJ",
+                "desconhecido"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "familia": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "enum": [
+                "credito_pessoal",
+                "consignado",
+                "cartao_credito",
+                "cheque_especial",
+                "aquisicao_bens",
+                "veiculo",
+                "imobiliario",
+                "leasing",
+                "capital_giro",
+                "conta_garantida",
+                "antecipacao_recebiveis",
+                "desconto_cheques",
+                "desconto_duplicatas",
+                "vendor",
+                "cambio",
+                "outro",
+                "desconhecido"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "subtipo": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "enum": [
+                "nao_consignado",
+                "consignado_inss",
+                "consignado_publico",
+                "consignado_privado",
+                "cartao_rotativo",
+                "cartao_parcelado",
+                "parcelamento_fatura",
+                "aquisicao_outros_bens",
+                "financiamento_veiculo",
+                "leasing_veiculo",
+                "imobiliario_mercado",
+                "imobiliario_regulado",
+                "antecipacao_fatura_cartao",
+                "adiantamento_contrato_cambio",
+                "outro",
+                "desconhecido"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "naturezaTaxa": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "enum": [
+                "prefixada",
+                "pos_fixada",
+                "mista",
+                "desconhecida"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "indexador": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "enum": [
+                "TR",
+                "IPCA",
+                "CDI",
+                "SELIC",
+                "juros_flutuantes",
+                "moeda_estrangeira",
+                "outro",
+                "nenhum",
+                "desconhecido"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "prazoDias": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 36500
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "possuiGarantia": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "tipoGarantia": {
+          "type": "object",
+          "required": [
+            "valor"
+          ],
+          "properties": {
+            "valor": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "origem": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "confianca": {
+              "enum": [
+                "alta",
+                "media",
+                "baixa"
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true,
+      "description": "Valores fora das listas viram desconhecido no importador, com aviso."
+    },
+    "modalidadeTextoOriginal": {
+      "type": "object",
+      "required": [
+        "valor"
+      ],
+      "properties": {
+        "valor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "origem": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

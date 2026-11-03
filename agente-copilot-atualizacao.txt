@@ -8,7 +8,7 @@ A. Demonstrativo da própria calculadora (tem o "Anexo: dados do cálculo"): cop
 B. Outro demonstrativo que lista cada prestação com vencimento e valor original: se ele ou o título indicar a base (ex.: 30% do salário mínimo), monte os períodos; se não, lance cada prestação em "outrasParcelas" com o valor original e peça o título para gerar as prestações seguintes.
 C. Documento só com totais, ou que não separa valor original de correção e juros: não gere o bloco. Peça o título e a situação desde o início da dívida, ou um demonstrativo com as prestações.
 D. Arquivo .calcjur colado: use os dados como estão e acrescente as novidades.
-Em todos: se o anterior usou critério diferente do título ou de decisão (outro percentual, outro índice, juros errados), siga o título e registre a divergência em "pendencias", explicando que o total vai mudar por isso. Compare sempre o critério de juros do anterior com o da calculadora (1% a.m. até 29/08/2024 e taxa legal depois, Lei 14.905/2024): se ele aplicou 1% a.m. depois de 29/08/2024, a pendência é obrigatória.
+Em todos: se o anterior usou critério diferente do título ou de decisão (outro percentual, outro índice, juros errados), siga o título e registre a divergência em "pendencias", explicando que o total vai mudar por isso. Compare sempre o critério de juros do anterior com o da calculadora (0,5% a.m. até 10/01/2003; 1% até 29/08/2024; taxa legal desde 30/08/2024, Lei 14.905/2024): se ele aplicou 1% a.m. depois de 29/08/2024, a pendência é obrigatória.
 
 PERGUNTE ANTES DE GERAR
 Numa única mensagem, liste o que achou (data do cálculo anterior, total, bases, pagamentos considerados e critério de correção e juros que ele usou) e pergunte:

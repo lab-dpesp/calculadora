@@ -15,7 +15,8 @@ var DADOS = {
   ultimoMesSelic: '2026-09',
   // Data em que estes índices foram conferidos com o Banco Central (a rotina diária da versão web reescreve esta linha).
   indicesEmbutidosEm: '2026-10-24',
-  vigenciaLei14905: '2024-08-29',
+  inicioCC2002: '2003-01-11',
+  vigenciaLei14905: '2024-08-30',
   inicioEC113: '2021-12-09',
   inicioEC136: '2025-09-10',
   inicioFazenda: '2009-07-01',

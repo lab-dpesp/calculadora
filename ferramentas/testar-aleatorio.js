@@ -31,7 +31,7 @@ const doDia = t => new Date(t).toISOString().slice(0, 10);
 const mesDe = s => s.slice(0, 7);
 const mesSeg = m => { let [y, mm] = comp(m); mm++; if (mm > 12) { mm = 1; y++; } return y + '-' + pad(mm); };
 const r2 = x => { const s = x < 0 ? -1 : 1; return s * Math.round(Number((Math.abs(x) * 100).toFixed(6))) / 100; };
-const VIG = '2024-08-29', M1 = '2021-12-09';
+const VIG = '2024-08-30', M1 = '2021-12-09';
 
 /* Variação do mês m de cada índice (%), como fração. Para tabelas de fatores: fator(m+1) ÷ fator(m) − 1. */
 function variacao(ind, m) {
@@ -170,6 +170,7 @@ function dataAleatoria(de, ate) {   // dia entre 1 e 28
   const [y1] = comp(de), [y2] = comp(ate);
   for (;;) { const s = iso(inteiro(y1, y2), inteiro(1, 12), inteiro(1, 28)); if (s >= de && s <= ate) return s; }
 }
+function diaAnterior(s) { return new Date(Date.parse(s + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10); }
 const INDS = ['tjsp', 'tjsp', 'tjsp', 'ipca', 'inpc', 'ipcae', 'igpm', 'nenhum'];
 const REGS = ['tjsp', 'tjsp', 'taxalegal', 'fixa', 'nenhum', 'duas', 'selic', 'selic_tl'];
 
@@ -194,7 +195,7 @@ function casoCivel() {
     parcelas.push(p);
   }
   const ent = { tipo: 'particular', dataCalculo: calc, regime, taxaFixa: o.taxa, termoJuros: dataJuros ? 'data' : 'vencimento', dataJuros,
-    jurosDuas, civel, parcelas, pagamentos: [], multa: rnd() < 0.4, honorarios: rnd() < 0.4, honorariosPct: escolha([10, 15, 20]) };
+    jurosDuas, civel, parcelas, pagamentos: [], prazo523: diaAnterior(calc), multa: rnd() < 0.4, honorarios: rnd() < 0.4, honorariosPct: escolha([10, 15, 20]) };
   if (rnd() < 0.3) civel.multaContratualPct = escolha([2, 10]);
   if (rnd() < 0.3) ent.contagemDias = 'corridos';
   if (rnd() < 0.3) ent.sucumbencia = escolha([{ base: 'condenacao', pct: 10 }, { base: 'causa', pct: 10, valor: 20000, data: dataAleatoria(minData, calc) }, { base: 'fixo', valor: 1500, data: dataAleatoria(minData, calc) }]);

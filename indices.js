@@ -35,6 +35,8 @@
   var VALIDADE_MS = 12 * 3600 * 1000;
 
   var NA_EXTENSAO = !!(root.chrome && root.chrome.runtime && root.chrome.runtime.id);
+  /* estado.fonte é a forma de obtenção dos índices em uso: 'sgs' (consulta direta ao Banco Central), 'arquivo'
+   * (pacote importado) ou 'embutida' (tabela que veio com a página). estado.origem é a fonte declarada nos dados. */
   var estado = { fonte: 'embutida', atualizadoEm: null, conferidos: 0, divergencias: [], erro: null, mesesNovos: 0, web: !NA_EXTENSAO };
 
   /* ---------- Armazenamento local (chrome.storage na extensão; localStorage fora dela) ---------- */
@@ -163,9 +165,10 @@
     return Promise.all(nomes.map(function (k) { return buscarSerie(SERIES[k]); })).then(function (res) {
       var series = {};
       nomes.forEach(function (k, i) { series[k] = res[i]; });
-      var pacote = { formato: 'calcjur-indices', versao: 1, quando: new Date().toISOString(), origem: 'Banco Central (SGS)', series: series };
+      var pacote = { formato: 'calcjur-indices', versao: 1, quando: new Date().toISOString(), origem: 'Banco Central (SGS)',
+        obtencao: 'sgs', series: series };
       aplicar(series);
-      estado.fonte = 'online'; estado.atualizadoEm = pacote.quando; estado.erro = null; estado.origem = pacote.origem;
+      estado.fonte = 'sgs'; estado.atualizadoEm = pacote.quando; estado.erro = null; estado.origem = pacote.origem; estado.importadoEm = null;
       return gravar(pacote).then(function () { return estado; });
     }).catch(function (err) {
       estado.erro = 'Não foi possível consultar o Banco Central (' + (err && err.name === 'AbortError' ? 'tempo esgotado' : (err && err.message) || 'sem conexão') + ').';
@@ -178,7 +181,10 @@
     return ler().then(function (pacote) {
       if (pacote && pacote.series) {
         aplicar(pacote.series);
-        estado.fonte = 'online'; estado.atualizadoEm = pacote.quando; estado.origem = pacote.origem || 'Banco Central (SGS)';
+        var legado = declarada(pacote.origem);
+        estado.fonte = pacote.obtencao === 'arquivo' || legado.arquivo ? 'arquivo' : 'sgs';
+        estado.atualizadoEm = pacote.quando; estado.importadoEm = pacote.importadoEm || null;
+        estado.origem = legado.origem || (estado.fonte === 'sgs' ? 'Banco Central (SGS)' : null);
       } else {
         aplicar(null);
       }
@@ -194,26 +200,70 @@
   function exportar() {
     return ler().then(function (pacote) { return pacote && pacote.series ? pacote : null; });
   }
+  /* Versões anteriores gravavam a importação como origem "Arquivo importado (<origem declarada>)". */
+  function declarada(origem) {
+    var m = typeof origem === 'string' ? /^Arquivo importado \((.*)\)$/.exec(origem) : null;
+    if (m) return { arquivo: true, origem: m[1] === 'origem não informada' ? null : m[1] };
+    return { arquivo: false, origem: typeof origem === 'string' && origem.trim() ? origem.trim().slice(0, 200) : null };
+  }
+  var NUMERO = /^-?\d+(?:[.,]\d+)?$/;
+  /* Confere o pacote inteiro antes de usar: nada muda nas tabelas em uso se algum registro for recusado. */
+  function validarPacote(pacote) {
+    if (!pacote || typeof pacote !== 'object' || pacote.formato !== 'calcjur-indices' || !pacote.series || typeof pacote.series !== 'object') {
+      return 'O arquivo não é um pacote de índices desta calculadora.';
+    }
+    if (pacote.versao !== 1) return 'Versão ' + JSON.stringify(pacote.versao) + ' do pacote de índices não é compatível; esta calculadora lê a versão 1.';
+    var faltam = Object.keys(SERIES).filter(function (k) { return !OPCIONAIS[k] && !Array.isArray(pacote.series[k]); });
+    if (faltam.length) return 'Faltam séries no arquivo: ' + faltam.join(', ') + '.';
+    var nomes = Object.keys(SERIES);
+    for (var i = 0; i < nomes.length; i++) {
+      var k = nomes[i], lista = pacote.series[k], rotulo = 'Série ' + k + ' (SGS ' + SERIES[k] + ')';
+      if (lista == null && OPCIONAIS[k]) continue;
+      if (!Array.isArray(lista)) return rotulo + ': não é uma lista de registros.';
+      if (!lista.length && !OPCIONAIS[k]) return rotulo + ': está vazia.';
+      var vistos = {};
+      for (var j = 0; j < lista.length; j++) {
+        var x = lista[j], reg = rotulo + ', registro ' + (j + 1);
+        if (!x || typeof x !== 'object' || typeof x.data !== 'string' || !/^\d{2}\/\d{2}\/\d{4}$/.test(x.data)) {
+          return reg + ': data ausente ou fora do formato DD/MM/AAAA.';
+        }
+        var texto = typeof x.valor === 'number' ? String(x.valor) : typeof x.valor === 'string' ? x.valor.trim() : '';
+        if (!NUMERO.test(texto) || !isFinite(Number(texto.replace(',', '.')))) {
+          return reg + ' (' + x.data + '): valor não numérico (' + JSON.stringify(x.valor === undefined ? null : x.valor) + ').';
+        }
+        var v = Number(texto.replace(',', '.')), m = mesDe(x.data);
+        if (Object.prototype.hasOwnProperty.call(vistos, m) && vistos[m] !== v) {
+          return reg + ': competência ' + m.slice(5) + '/' + m.slice(0, 4) + ' duplicada com valores diferentes (' + vistos[m] + ' e ' + v + ').';
+        }
+        vistos[m] = v;
+      }
+    }
+    return null;
+  }
   function importar(texto) {
     var pacote;
-    try { pacote = JSON.parse(texto); } catch (_) { return Promise.reject(new Error('O arquivo não é um JSON válido.')); }
-    if (!pacote || pacote.formato !== 'calcjur-indices' || !pacote.series) return Promise.reject(new Error('O arquivo não é um pacote de índices desta calculadora.'));
-    var faltam = Object.keys(SERIES).filter(function (k) { return !OPCIONAIS[k] && !Array.isArray(pacote.series[k]); });
-    if (faltam.length) return Promise.reject(new Error('Faltam séries no arquivo: ' + faltam.join(', ') + '.'));
-    pacote.origem = 'Arquivo importado (' + (pacote.origem || 'origem não informada') + ')';
+    try { pacote = JSON.parse(texto); } catch (_) { return Promise.reject(new Error('O arquivo não é um JSON válido (pode estar incompleto ou truncado).')); }
+    var erro = validarPacote(pacote);
+    if (erro) return Promise.reject(new Error(erro + ' Os índices em uso não foram alterados.'));
+    var legado = declarada(pacote.origem);
+    pacote.origem = legado.origem;
+    pacote.obtencao = 'arquivo';
+    pacote.importadoEm = new Date().toISOString();
     aplicar(pacote.series);
-    estado.fonte = 'online'; estado.atualizadoEm = pacote.quando || new Date().toISOString(); estado.origem = pacote.origem; estado.erro = null;
+    if (typeof pacote.quando !== 'string' || !isFinite(Date.parse(pacote.quando))) pacote.quando = null;
+    estado.fonte = 'arquivo'; estado.atualizadoEm = pacote.quando; estado.importadoEm = pacote.importadoEm;
+    estado.origem = pacote.origem; estado.erro = null;
     return gravar(pacote).then(function () { return estado; });
   }
   function voltarEmbutidos() {
     aplicar(null);
-    estado.fonte = 'embutida'; estado.atualizadoEm = null; estado.erro = null; estado.origem = null;
+    estado.fonte = 'embutida'; estado.atualizadoEm = null; estado.erro = null; estado.origem = null; estado.importadoEm = null;
     return gravar(null).then(function () { return estado; });
   }
 
   root.Indices = {
     iniciar: iniciar, atualizarAgora: atualizarAgora, exportar: exportar, importar: importar,
     voltarEmbutidos: voltarEmbutidos, estado: function () { return estado; }, SERIES: SERIES,
-    _aplicar: aplicar, _porMes: porMes
+    _aplicar: aplicar, _porMes: porMes, _validarPacote: validarPacote
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

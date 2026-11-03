@@ -28,7 +28,8 @@
  ],
  "encargos": {
   "multa523": true,
-  "honorariosPct": 10
+  "honorariosPct": 10,
+  "prazo523": "2025-01-10"
  },
  "pendencias": []
 }

@@ -1,0 +1,88 @@
+{
+  "formato": "contrato-copilot",
+  "versao": 1,
+  "modalidade": {
+    "valor": "credito_pessoal_nao_consignado",
+    "origem": "Quadro-resumo"
+  },
+  "subtipoConsignado": {
+    "valor": null,
+    "origem": ""
+  },
+  "questaoPrincipal": {
+    "valor": "Conferir valores",
+    "origem": "Informado pelo usuário"
+  },
+  "origemPrincipalInformacoes": {
+    "valor": "contrato",
+    "origem": "Quadro-resumo, demonstrativo do CET e anexos"
+  },
+  "dataContrato": {
+    "valor": "2025-03-10",
+    "origem": "Cláusula 1"
+  },
+  "dataLiberacao": {
+    "valor": null,
+    "origem": ""
+  },
+  "dataPrimeiroVencimento": {
+    "valor": "2025-04-10",
+    "origem": "Quadro 4"
+  },
+  "valorFinanciado": {
+    "valor": 10000,
+    "origem": "Quadro 4"
+  },
+  "valorLiquidoDisponibilizado": {
+    "valor": 9800,
+    "origem": "Quadro 4"
+  },
+  "numeroParcelas": {
+    "valor": 24,
+    "origem": "Quadro 4"
+  },
+  "valorParcela": {
+    "valor": 600,
+    "origem": "Quadro 4"
+  },
+  "jurosMensaisPct": {
+    "valor": 2.5,
+    "origem": "Cláusula 5"
+  },
+  "cetAnualPct": {
+    "valor": 34.49,
+    "origem": "Demonstrativo do CET"
+  },
+  "sistemaAmortizacao": {
+    "valor": "PRICE",
+    "origem": "Cláusula 5"
+  },
+  "capitalizacao": {
+    "valor": null,
+    "origem": ""
+  },
+  "encargos": [
+    {
+      "tipo": "insurance",
+      "valor": 100,
+      "formaPagamento": "financed",
+      "descricao": "Seguro",
+      "origem": "Quadro 4"
+    },
+    {
+      "tipo": "juros_mora",
+      "valor": 1,
+      "unidade": "percentual",
+      "periodicidade": "mensal",
+      "origem": "Cláusula V.1, p. 2"
+    },
+    {
+      "tipo": "multa_moratoria",
+      "valor": 2,
+      "unidade": "percentual",
+      "periodicidade": "evento_unico",
+      "origem": "Cláusula V.1, p. 2"
+    }
+  ],
+  "pendencias": []
+}

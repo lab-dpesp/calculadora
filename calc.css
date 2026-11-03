@@ -110,7 +110,6 @@ button, input, select { font: inherit; color: inherit; }
   display: flex; justify-content: space-between; align-items: flex-start; gap: 12px 24px; flex-wrap: wrap;
   padding: 20px 32px 14px;
 }
-.topo h1 { font-size: 24px; font-weight: 700; line-height: 1.25; }
 .topo-dir { display: flex; align-items: center; gap: 10px; padding-top: 6px; }
 
 .pagina { padding: 0 32px 48px; }
@@ -209,7 +208,7 @@ button, input, select { font: inherit; color: inherit; }
   font-size: 12px; line-height: 16px; color: #fff; background: var(--texto-3); white-space: nowrap;
 }
 .badge-ok { background: var(--sucesso); }
-.badge-alerta { background: var(--alerta); }
+.badge-alerta { background: var(--alerta); color: #2B2100; }
 .badge-neutro { background: var(--badge-neutro); }
 
 /* Resultado */
@@ -292,17 +291,27 @@ button, input, select { font: inherit; color: inherit; }
 /* Períodos da pensão */
 .periodos { gap: 10px; }
 .item-periodo {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 10px;
-  border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px 8px 12px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--borda); border-radius: var(--raio); padding: 8px 8px 12px 12px;
 }
-.item-periodo .num-item { width: 20px; align-self: center; }
-.q-campo-mes { flex: 1 1 150px; min-width: 140px; }
+.pe-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.pe-num { font-size: 12px; font-weight: 600; color: var(--texto-2); white-space: nowrap; }
+.periodo-unico .pe-num { display: none; }
+.pe-bases { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 18px; flex: 1 1 auto; min-width: 0; }
+.pe-bases .opcao { min-height: 32px; font-size: 14px; }
+.pe-cab .remover { margin-left: auto; }
+.periodo-unico .pe-cab .remover { display: none; }
+.pe-linha { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.pe-linha .opcao-13 { min-height: 40px; }
+.q-campo-mes { flex: 0 1 150px; min-width: 120px; }
 .q-campo-dia { flex: 0 0 96px; min-width: 96px; }
 .q-campo-base { flex: 1.3 1 190px; min-width: 170px; }
 .q-campo-qtd { flex: 0 1 140px; min-width: 120px; }
 .opcao-13 { white-space: nowrap; }
 .pe-previa { flex: 1 1 200px; min-width: 160px; }
-.item-periodo .remover { margin-left: auto; }
+.pe-previa:empty { display: none; }
+.item-periodo > * { flex: none; }
+.q-campo-fim { flex: 0 1 200px; min-width: 190px; }
 .resumo-pensao { margin-top: 12px; font-size: 13px; padding: 8px 12px; border-radius: var(--raio); background: var(--primaria-clara); }
 .rito-campos { margin-top: 16px; align-items: center; }
 .rito-ajuda { flex: 1 1 360px; max-width: 90ch; }
@@ -341,34 +350,14 @@ button, input, select { font: inherit; color: inherit; }
 .nota-indices { font-size: 13px; margin-bottom: 12px; max-width: 110ch; }
 .nota-indices.erro-texto, .aviso-acao.erro-texto { color: var(--erro); }
 
-.pe-rend { flex: 1 1 100%; border-top: 1px dashed var(--borda); padding: 10px 0 0 30px; margin-top: 2px; }
-.pe-rend-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-bottom: 8px; }
-.pe-rend-titulo { font-size: 13px; font-weight: 600; }
-.re-lista { display: flex; flex-direction: column; gap: 8px; }
-.re-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
-.re-pensao { flex: 1 1 160px; }
-.re-item .q-campo-mes { flex: 0 1 210px; }
-.pe-reaj { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-left: 30px; }
+.pe-reaj { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .pe-reaj-ajuda { flex: 1 1 260px; }
-.ajustes { margin-top: 14px; border-top: 1px dashed var(--borda); padding-top: 10px; }
-.lista-ajustes { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.lista-ajustes li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; border: 1px solid var(--borda); border-radius: var(--raio); padding: 6px 8px 6px 12px; }
-.lista-ajustes .aj-texto { flex: 1 1 260px; }
-.lista-ajustes .aj-fonte { flex: 1 1 100%; font-size: 12px; color: var(--texto-2); }
-.editor-ajuste .aj-tipo { margin: 0; }
 .btn-ajuste { width: 26px; height: 26px; margin-left: 2px; vertical-align: middle; opacity: .55; }
 .btn-ajuste:hover, .btn-ajuste:focus-visible { opacity: 1; }
 .btn-ajuste .ic { width: 15px; height: 15px; }
 tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
-@media (max-width: 700px) { .pe-rend, .pe-reaj { padding-left: 0; } }
 
 /* Importação do Copilot e revisão */
-.painel-copilot { border-color: rgba(76, 154, 42, .45); }
-.ic-titulo { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; color: var(--primaria); }
-.previa-copilot { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
-.previa-copilot .rotulo-secao { margin-bottom: 0; }
-#tabCopilot td:nth-child(2) { white-space: normal; min-width: 220px; }
-#tabCopilot td:nth-child(3) { white-space: normal; color: var(--texto-2); min-width: 220px; }
 .revisao { border: 1px solid var(--alerta); border-left: 4px solid var(--alerta); background: var(--revisao-fundo); }
 .revisao-texto { font-size: 13px; margin: 4px 0 8px; max-width: 110ch; }
 .revisao-lista { margin: 0 0 8px; padding-left: 18px; font-size: 13px; }
@@ -378,8 +367,6 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
   background: var(--origem-fundo); border-radius: 6px; padding: 3px 8px; margin-top: -2px;
 }
 .origem-item::before { content: "Fonte: "; font-weight: 600; }
-.item-periodo .origem-item { margin-left: 30px; }
-.re-item .origem-item { margin-top: -4px; }
 .rito-campos .origem-item { flex: 0 1 auto; align-self: center; }
 .badge-conferir { background: var(--alerta); }
 
@@ -504,12 +491,7 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
   .dados-calculo p { font-size: 8.5pt; margin: 2pt 0; }
 }
 
-/* Logo, tema e explicações recolhidas */
-.marca { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.logo-topo { height: 40px; width: auto; display: block; }
-:root[data-tema="escuro"] .logo-topo { background: #fff; border-radius: 8px; padding: 5px 8px; }
-@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .logo-topo { background: #fff; border-radius: 8px; padding: 5px 8px; } }
-.marca-texto { border-left: 1px solid var(--borda); padding-left: 16px; }
+/* Tema e explicações recolhidas (o logo do topo está em compartilhado.css) */
 .btn-tema { gap: 6px; }
 .btn-info {
   flex: 0 0 auto; width: 18px; height: 18px; padding: 0; margin: 0 2px; border-radius: 50%; cursor: pointer;
@@ -519,7 +501,6 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
 .btn-info:hover, .btn-info[aria-expanded="true"] { border-color: var(--primaria); color: var(--primaria); }
 .ajuda:not(.aberta) { display: none !important; }
 .ajuda.aberta { flex-basis: 100%; }
-@media (max-width: 700px) { .logo-topo { height: 32px; } .marca { gap: 10px; } .marca-texto { padding-left: 10px; } .topo h1 { font-size: 19px; } }
 .barra-arquivo-texto { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 
 /* Duas colunas: dados à esquerda, resultado fixo à direita (telas largas) */
@@ -543,3 +524,62 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
 .conferencia[open] > summary { margin-bottom: 6px; }
 #btnFontes[aria-pressed="false"] { color: var(--texto-3); }
 .area-resultado .metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Utilitário: só para leitores de tela */
+.sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Meses e datas digitados (MM/AAAA, DD/MM/AAAA) */
+.erro-campo { font-size: 12px; color: var(--erro); margin-top: 2px; }
+.q-campo-tabela .erro-campo { white-space: normal; }
+
+/* Seção única de prestações e pagamentos (pensão) */
+.bloco-pensao { display: flex; flex-direction: column; gap: 10px; }
+.bloco-pensao > .cartao-acoes { margin-top: 0; align-items: center; }
+.acoes-periodos { align-items: center; }
+.cartao-pagamentos { margin-top: 16px; }
+.tabela-prestacoes { max-height: 70vh; overflow: auto; }
+.tabela-prestacoes thead th { position: sticky; top: 0; z-index: 1; background: var(--fundo); }
+#tabPrestacoes td { vertical-align: middle; padding-top: 4px; padding-bottom: 4px; }
+#tabPrestacoes:not(.com-rend) .col-rend { display: none; }
+#tabPrestacoes .q-campo-tabela { min-width: 0; padding-top: 0; flex: none; }
+#tabPrestacoes .q-campo-tabela input { height: 32px; }
+#tabPrestacoes .ln-rend { width: 120px; text-align: right; }
+#tabPrestacoes .p-venc { width: 120px; }
+#tabPrestacoes .p-valor { width: 110px; }
+#tabPrestacoes .descr { min-width: 160px; }
+#tabPrestacoes .descr.pendente { color: var(--alerta); }
+#tabPrestacoes tr.decimo td:first-child { font-weight: 600; }
+#tabPrestacoes tr.ajustada td { background: var(--alerta-fundo, rgba(233, 168, 32, .08)); }
+#tabPrestacoes tr.periodo-novo td { border-top: 2px solid var(--borda-campo); }
+.acoes-linha { white-space: nowrap; text-align: right; }
+.acoes-linha .q-btn-icone { width: 32px; height: 32px; }
+.linha-avulsa td { background: var(--primaria-clara); }
+.badge-avulsa { background: var(--badge-neutro); }
+#tabPrestacoes .origem-item { display: block; margin: 2px 0 0; }
+.editor-linha td { white-space: normal; background: var(--hover); }
+.ed-corpo { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; max-width: 900px; }
+.ed-tipo .ed-titulo { font-size: 13px; font-weight: 600; color: var(--texto); margin: 0 0 2px; }
+.ed-corpo .cartao-acoes { margin-top: 0; align-items: center; }
+.ed-info:empty, .ed-msg:empty { display: none; }
+.ed-msg { color: var(--erro); }
+.lista-ajustes { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.lista-ajustes li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; border: 1px solid var(--alerta); border-radius: var(--raio); padding: 6px 8px 6px 12px; }
+.lista-ajustes .aj-texto { flex: 1 1 260px; }
+
+/* Juros e encargos: no fim, recolhido, com resumo do padrão */
+.painel-juros > summary { align-items: center; }
+.painel-juros > summary .painel-titulo { margin: 0; }
+.resumo-juros { flex: 1 1 100%; font-size: 13px; color: var(--texto-2); padding-left: 16px; max-width: 120ch; }
+.alterar-juros { margin-left: auto; color: var(--primaria); font-weight: 600; font-size: 14px; }
+.alterar-juros::before { content: "Alterar"; }
+.painel-juros[open] .alterar-juros::before { content: "Fechar"; }
+.juros-corpo { padding-top: 12px; }
+.acoes-form { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; margin: 0 0 16px; }
+.acoes-form .sub { order: -1; }
+.q-btn-grande { height: 48px; padding: 0 32px; font-size: 16px; }
+@media (max-width: 700px) {
+  .acoes-form .q-btn-grande { width: 100%; justify-content: center; }
+  .pe-linha .q-campo-mes, .pe-linha .q-campo-qtd { flex: 1 1 40%; }
+  .resumo-juros { padding-left: 0; }
+  .alterar-juros { margin-left: 16px; }
+}

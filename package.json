@@ -1,6 +1,17 @@
 {
+  "scripts": {
+    "test": "node ferramentas/testar.js && node ferramentas/testar-opcoes.js && node ferramentas/testar-revisao.js && node ferramentas/testar-aleatorio.js 1000 && node ferramentas/testar-propriedades.js 500 && node ferramentas/testar-contrato.js && node ferramentas/testar-contrato-abordagens.js && node ferramentas/testar-series-contrato.js && node ferramentas/testar-contrato-aleatorio.js 1000 && node ferramentas/testar-robustez.js && node ferramentas/testar-regras.js && npm run testar-pagina-regras",
+    "testar-robustez-navegador": "node ferramentas/testar-robustez-navegador.js",
+    "testar-site": "node ferramentas/testar-site.js _site",
+    "gerar-pagina-regras": "node ferramentas/gerar-pagina-regras.js",
+    "testar-pagina-regras": "node --test ferramentas/testar-pagina-regras.js",
+    "testar-pagina-regras-navegador": "node --test ferramentas/testar-pagina-regras-navegador.js",
+    "verificar-regras": "node ferramentas/verificar-regras.js",
+    "testar-regras": "node ferramentas/testar-regras.js"
+  },
   "devDependencies": {
     "axe-core": "^4.14.0",
+    "marked": "^18.1.2",
     "playwright": "^1.64.1"
   }
 }
