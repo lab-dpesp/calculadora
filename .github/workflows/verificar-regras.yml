@@ -1,0 +1,34 @@
+name: Verificar regras de negócio
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  regras:
+    name: Regras de negócio documentadas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Testar verificador
+        run: npm run testar-regras
+      - name: Conferir documentação da alteração inteira
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            npm run verificar-regras -- --base "$BASE"
+          else
+            npm run verificar-regras
+          fi

@@ -5,6 +5,7 @@ on:
     paths:
       - 'contrato/**'
       - 'contrato.html'
+      - 'compartilhado.*'
       - 'ferramentas/testar-contrato*'
       - 'ferramentas/testar-series-contrato.js'
       - 'ferramentas/atualizar-series-contrato.js'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'contrato/**'
       - 'contrato.html'
+      - 'compartilhado.*'
       - 'ferramentas/testar-contrato*'
       - 'ferramentas/testar-series-contrato.js'
       - 'ferramentas/atualizar-series-contrato.js'

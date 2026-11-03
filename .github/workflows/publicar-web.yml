@@ -1,4 +1,4 @@
-# Publicação diária da versão web da calculadora (modelo para GitHub Pages).
+# Publicação diária e automática das regras da versão web (GitHub Pages).
 # Todo dia, às 06:30 de Brasília: busca os índices no Banco Central, confere com a Tabela Prática embutida,
 # confere os totais de referência e só então publica. Se algo divergir, a publicação para e o site continua
 # com a versão de ontem. Nada é gravado no repositório: o data.js atualizado vai direto para o site.
@@ -8,6 +8,29 @@
 name: Publicar versão web
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - REGRAS-DE-NEGOCIO.md
+      - ferramentas/gerar-pagina-regras.js
+      - ferramentas/testar-pagina-regras.js
+      - ferramentas/testar-pagina-regras-navegador.js
+      - package.json
+      - package-lock.json
+      - .github/workflows/publicar-web.yml
+      - calc.html
+      - contrato.html
+      - compartilhado.css
+      - compartilhado.js
+      - calc.css
+      - tema.js
+      - engine.js
+      - ui.js
+      - data.js
+      - indices.js
+      - copilot.js
+      - contrato/**
+      - ferramentas/testar-site.js
   schedule:
     - cron: '30 9 * * *'   # 09:30 UTC = 06:30 em Brasília
   workflow_dispatch: {}
@@ -29,28 +52,33 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Conferir página das regras
+        run: npm run testar-pagina-regras
+      - name: Preparar navegador
+        run: npx playwright install --with-deps chromium
+      - name: Conferir página das regras no navegador
+        run: npm run testar-pagina-regras-navegador
       - name: Atualizar índices pelo Banco Central
         run: node ferramentas/atualizar-indices.js
       - name: Atualizar séries BACEN de contratos
         run: node ferramentas/atualizar-series-contrato.js
       - name: Conferir totais de referência
-        run: |
-          node ferramentas/testar.js
-          node ferramentas/testar-opcoes.js
-          node ferramentas/testar-aleatorio.js 1000
-          node ferramentas/testar-propriedades.js 500
-          node ferramentas/testar-contrato.js
-          node ferramentas/testar-contrato-abordagens.js
-          node ferramentas/testar-series-contrato.js
-          node ferramentas/testar-contrato-aleatorio.js 1000
+        run: npm test
       - name: Montar o site
         run: |
           mkdir -p _site
           cp calc.html index.html
-          cp -r index.html calc.html calc.css tema.js data.js indices.js engine.js copilot.js ui.js contrato.html contrato icons fonts _site/
+          cp -r index.html calc.html calc.css compartilhado.css compartilhado.js tema.js data.js indices.js engine.js copilot.js ui.js contrato.html contrato icons fonts _site/
+          npm run gerar-pagina-regras
+      - name: Conferir o site montado (as duas calculadoras, com um total conhecido em cada)
+        run: npm run testar-site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

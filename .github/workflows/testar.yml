@@ -1,0 +1,62 @@
+# Testes sem rede (npm test: motor, contrato, revisão, robustez e controle de regras) e testes de robustez no
+# navegador em todo PR ou push que altere código de cálculo, telas, dados ou testes.
+name: Testar cálculo
+
+on:
+  push:
+    paths:
+      - 'engine.js'
+      - 'ui.js'
+      - 'data.js'
+      - 'indices.js'
+      - 'copilot.js'
+      - 'calc.html'
+      - 'contrato.html'
+      - 'compartilhado.*'
+      - 'contrato/**'
+      - 'ferramentas/**'
+      - 'REGRAS-DE-NEGOCIO.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar.yml'
+  pull_request:
+    paths:
+      - 'engine.js'
+      - 'ui.js'
+      - 'data.js'
+      - 'indices.js'
+      - 'copilot.js'
+      - 'calc.html'
+      - 'contrato.html'
+      - 'compartilhado.*'
+      - 'contrato/**'
+      - 'ferramentas/**'
+      - 'REGRAS-DE-NEGOCIO.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Testes sem rede
+        run: npm test
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Robustez no navegador
+        run: |
+          for navegador in chromium firefox webkit; do
+            ROBUSTEZ_BROWSER=$navegador node ferramentas/testar-robustez-navegador.js
+          done

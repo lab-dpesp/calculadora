@@ -1,0 +1,57 @@
+# Testa a tela da calculadora (pensão; cível e Fazenda) no navegador: preenchimento pela tabela mês a mês,
+# máscaras MM/AAAA e DD/MM/AAAA, arquivos .calcjur salvos pela tela anterior (mesmo total), importação do
+# Copilot, passagem entre as calculadoras, tela estreita e acessibilidade.
+name: Testar tela da calculadora no navegador
+
+on:
+  push:
+    paths:
+      - 'calc.html'
+      - 'calc.css'
+      - 'ui.js'
+      - 'engine.js'
+      - 'copilot.js'
+      - 'compartilhado.*'
+      - 'contrato.html'
+      - 'contrato/app.js'
+      - 'ferramentas/testar-calc-navegador.js'
+      - 'ferramentas/casos-calcjur/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar-calc-navegador.yml'
+  pull_request:
+    paths:
+      - 'calc.html'
+      - 'calc.css'
+      - 'ui.js'
+      - 'engine.js'
+      - 'copilot.js'
+      - 'compartilhado.*'
+      - 'contrato.html'
+      - 'contrato/app.js'
+      - 'ferramentas/testar-calc-navegador.js'
+      - 'ferramentas/casos-calcjur/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/testar-calc-navegador.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  navegador:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Tela da calculadora
+        run: |
+          for navegador in chromium firefox webkit; do
+            CALC_BROWSER=$navegador node ferramentas/testar-calc-navegador.js
+          done
