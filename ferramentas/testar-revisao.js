@@ -577,4 +577,152 @@ caso('N28/N29 rateio reconcilia correção, deflação, juros, encargos, adianta
   });
 });
 
+/* ---------------- Imputação no mês do pagamento (issue #53) ---------------- */
+
+const duasMensais = (extra) => civel(Object.assign({ parcelas: [{ vencimento: '2024-01-10', valor: 1000 }, { vencimento: '2024-02-10', valor: 1000 }] }, extra));
+const ondeFoi = r => r.pagamentos.map(p => p.aplicacoes.map(a => a.parcela));
+
+caso('N40 sem o campo, o motor mantém a imputação automática (mesmo resultado de antes)', () => {
+  const pags = [{ data: '2024-02-15', valor: 1000 }, { data: '2024-04-20', valor: 300 }];
+  const sem = calc(duasMensais({ pagamentos: pags })), auto = calc(duasMensais({ pagamentos: pags, imputacao: 'automatica' })), vazio = calc(duasMensais({ pagamentos: pags, imputacao: '' }));
+  assert.deepEqual(auto.totais, sem.totais); assert.deepEqual(auto.pagamentos, sem.pagamentos); assert.deepEqual(vazio.linhas, sem.linhas);
+  assert.equal(sem.imputacao, 'automatica');
+  assert.deepEqual(ondeFoi(sem)[0], [1], 'automática: a mais antiga primeiro');
+  assert.equal(sem.pagamentos[0].criterio, 'automatica');
+  assert.ok(!sem.avisos.some(a => /mês do pagamento/.test(a)), 'sem aviso do critério do mês na automática');
+});
+
+caso('N40 mês do pagamento: abate a parcela que vence no mesmo mês, juros antes do capital', () => {
+  const r = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-15', valor: 1000 }] }));
+  assert.equal(r.imputacao, 'mes');
+  const ap = r.pagamentos[0].aplicacoes;
+  assert.equal(ap.length, 1); assert.equal(ap[0].parcela, 2);
+  assert.equal(ap[0].juros, 1.67);   // 5 dias comerciais a 1% a.m. sobre R$ 1.000
+  assert.equal(ap[0].capital, 998.33);
+  assert.equal(r.pagamentos[0].criterio, 'mes');
+  assert.equal(r.linhas[0].pago, 0, 'parcela de janeiro intacta');
+  const auto = calc(duasMensais({ imputacao: 'automatica', pagamentos: [{ data: '2024-02-15', valor: 1000 }] }));
+  assert.equal(auto.pagamentos[0].aplicacoes[0].parcela, 1);
+  assert.notEqual(auto.totais.total, r.totais.total, 'os critérios dão totais diferentes');
+  reconciliar(r);
+});
+
+caso('N40 mês do pagamento: excedente vai para as vencidas mais antigas e depois para as a vencer', () => {
+  const r = calc(civel({ imputacao: 'mes', parcelas: [{ vencimento: '2024-01-10', valor: 1000 }, { vencimento: '2024-02-10', valor: 1000 }, { vencimento: '2024-03-10', valor: 1000 }],
+    pagamentos: [{ data: '2024-02-15', valor: 2500 }] }));
+  assert.deepEqual(ondeFoi(r)[0], [2, 1, 3]);
+  const ap = r.pagamentos[0].aplicacoes;
+  assert.ok(ap[0].quitou && ap[1].quitou && !ap[2].quitou);
+  assert.equal(ap[2].juros, 0, 'parcela a vencer recebe pelo valor nominal');
+  assert.equal(r.pagamentos[0].sobra, 0);
+  reconciliar(r);
+  const sobra = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-15', valor: 5000 }] }));
+  assert.ok(sobra.pagamentos[0].sobra > 0 && sobra.linhas.every(l => l.total === 0), 'excedente além do débito vira sobra (N30)');
+  reconciliar(sobra);
+});
+
+caso('N40 mês do pagamento: pagamento menor deixa saldo na parcela do mês, que segue atualizada', () => {
+  const r = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-15', valor: 400 }] }));
+  assert.deepEqual(ondeFoi(r)[0], [2]);
+  assert.equal(r.linhas[0].pago, 0);
+  assert.ok(r.linhas[1].capital > 0 && r.linhas[1].juros > 0, 'saldo da parcela do mês continua com juros');
+  reconciliar(r);
+});
+
+caso('N40 mês sem parcela em aberto: ordem automática, com aviso', () => {
+  const r = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-04-20', valor: 300 }, { data: '2024-02-12', valor: 50 }] }));
+  const porN = n => r.pagamentos.find(p => p.n === n);
+  assert.equal(porN(1).criterio, 'automatica'); assert.equal(porN(1).aplicacoes[0].parcela, 1);
+  assert.equal(porN(2).criterio, 'mes'); assert.equal(porN(2).aplicacoes[0].parcela, 2);
+  assert.ok(r.avisos.some(a => /^Pagamento 1: não havia parcela em aberto com vencimento no mês do pagamento/.test(a)), r.avisos.join(' | '));
+  // Parcela do mês já quitada por outro pagamento: o segundo pagamento do mês segue a ordem automática.
+  const q = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-11', valor: 5000 / 5 + 0.34 }, { data: '2024-02-20', valor: 100 }] }));
+  assert.ok(q.pagamentos[0].aplicacoes[0].quitou && q.pagamentos[0].aplicacoes[0].parcela === 2);
+  assert.equal(q.pagamentos[1].criterio, 'automatica'); assert.equal(q.pagamentos[1].aplicacoes[0].parcela, 1);
+  assert.ok(q.avisos.some(a => /^Pagamento 2: não havia/.test(a)));
+  const varios = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-05-01', valor: 10 }, { data: '2024-04-01', valor: 10 }] }));
+  assert.ok(varios.avisos.some(a => /^Pagamentos 1, 2: não havia parcela em aberto.*imputados/.test(a)));
+  reconciliar(r); reconciliar(q);
+});
+
+caso('N40 mês do pagamento: parcela do mês ainda a vencer é abatida antes das vencidas', () => {
+  const r = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-05', valor: 1000 }] }));
+  assert.deepEqual(ondeFoi(r)[0], [2]);
+  assert.deepEqual(r.pagamentos[0].aplicacoes[0], { pagamento: 1, data: '2024-02-05', parcela: 2, juros: 0, encargos: 0, capital: 1000, quitou: true });
+  reconciliar(r);
+});
+
+caso('N40 indicação expressa prevalece sobre o mês do pagamento', () => {
+  const r = calc(duasMensais({ imputacao: 'mes', pagamentos: [{ data: '2024-02-15', valor: 1500, parcela: 'a:1' }] }));
+  assert.equal(r.pagamentos[0].criterio, 'indicada');
+  assert.deepEqual(ondeFoi(r)[0], [1, 2]);
+  reconciliar(r);
+});
+
+caso('N40 pensão: mensal e 13º do mês do pagamento vêm antes das prestações antigas', () => {
+  const e = { tipo: 'pensao', dataCalculo: '2024-03-15', regime: 'tjsp', termoJuros: 'vencimento', dataJuros: '', imputacao: 'mes',
+    periodos: [{ inicio: '2023-06', fim: '', dia: 10, base: 'fixo', quantidade: 500, decimo: true }], parcelas: [],
+    pagamentos: [{ data: '2023-12-28', valor: 900 }], multa: false, honorarios: false, honorariosPct: 10 };
+  const r = calc(e);
+  const venc = n => r.linhas.find(l => l.n === n).vencimento;
+  const ap = r.pagamentos[0].aplicacoes;
+  assert.deepEqual(ap.map(a => venc(a.parcela)), ['2023-12-10', '2023-12-20'], 'mensal de 12/2023 e depois o 13º');
+  assert.ok(ap[0].quitou && !ap[1].quitou);
+  const auto = calc(Object.assign({}, e, { imputacao: 'automatica' }));
+  assert.equal(venc(auto.pagamentos[0].aplicacoes[0].parcela), '2023-06-10');
+  reconciliar(r); reconciliar(auto);
+});
+
+caso('N40 mês do pagamento com obrigação fracionada (ID explícito) reconcilia como na automática', () => {
+  const base = civel({ imputacao: 'mes', parcelas: [{ vencimento: '2024-01-10', valor: 1000 }, { vencimento: '2024-02-10', valor: 1000 }],
+    pagamentos: [{ data: '2024-02-15', valor: 700 }, { data: '2024-03-01', valor: 200 }] });
+  const inteira = calc(base), fracoes = calc(fracionar(base, 1, [600, 400], 'fev'));
+  assert.deepEqual(fracoes.totais, inteira.totais);
+  assert.ok(fracoes.pagamentos[0].aplicacoes.every(a => a.obrigacao === 'fev'));
+  reconciliar(fracoes);
+});
+
+caso('N40 critério de imputação desconhecido bloqueia', () => {
+  ['mês', 'MES', 'antiga', 'constructor', 1].forEach(v => erroCom(() => calc(duasMensais({ imputacao: v, pagamentos: [{ data: '2024-02-15', valor: 10 }] })), /Critério de imputação/));
+});
+
+caso('N40 propriedade: no critério do mês, a primeira aplicação cai no mês do pagamento sempre que há parcela em aberto nele', () => {
+  let semente = 53;
+  const rnd = () => (semente = (semente * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const dia = (a, m, d) => a + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  for (let k = 0; k < 300; k++) {
+    const parcelas = [], pagamentos = [];
+    const np = 1 + Math.floor(rnd() * 6), ng = 1 + Math.floor(rnd() * 6);
+    for (let i = 0; i < np; i++) parcelas.push({ vencimento: dia(2023, 1 + Math.floor(rnd() * 12), 1 + Math.floor(rnd() * 28)), valor: r2(50 + rnd() * 2000) });
+    for (let i = 0; i < ng; i++) pagamentos.push({ data: dia(2023, 1 + Math.floor(rnd() * 12), 1 + Math.floor(rnd() * 28)), valor: r2(1 + rnd() * 1500) });
+    const e = civel({ dataCalculo: '2024-06-15', civel: { indice: rnd() < 0.5 ? 'nenhum' : 'tjsp' }, imputacao: 'mes', parcelas, pagamentos });
+    const r = calc(e);
+    reconciliar(r);
+    const auto = calc(Object.assign({}, e, { imputacao: 'automatica' }));
+    reconciliar(auto);
+    r.pagamentos.forEach(p => {
+      if (!p.aplicacoes.length) return;
+      const primeira = r.linhas.find(l => l.n === p.aplicacoes[0].parcela);
+      if (p.criterio === 'mes') assert.equal(primeira.vencimento.slice(0, 7), p.data.slice(0, 7), 'caso ' + k);
+      else assert.ok(!r.linhas.some(l => l.vencimento.slice(0, 7) === p.data.slice(0, 7)) || p.aplicacoes.every(a => r.linhas.find(l => l.n === a.parcela).vencimento.slice(0, 7) !== p.data.slice(0, 7)), 'caso ' + k);
+    });
+  }
+});
+
+caso('N40 copilot.js: campo imputacao, padrão e arquivos salvos antes da opção', () => {
+  const bloco = extra => Object.assign({ formato: 'calcjur-copilot', versao: 1, tipo: 'particular', outrasParcelas: [{ vencimento: '2024-01-10', valor: 100, origem: 'x' }],
+    pagamentos: [{ data: '2024-02-01', valor: 10, origem: 'x' }] }, extra);
+  assert.equal(C.ler(bloco()).dados.imputacao, 'mes');
+  assert.equal(C.ler(bloco({ imputacao: 'mes' })).dados.imputacao, 'mes');
+  assert.equal(C.ler(bloco({ imputacao: 'Mês do pagamento' })).dados.imputacao, 'mes');
+  assert.equal(C.ler(bloco({ imputacao: 'automatica' })).dados.imputacao, 'automatica');
+  assert.equal(C.ler(bloco({ imputacao: 'AUTOMÁTICA' })).dados.imputacao, 'automatica');
+  const antigo = C.ler(bloco({ geradoPor: 'Calculadora de Débitos Judiciais 0.8' }));
+  assert.equal(antigo.dados.imputacao, 'automatica');
+  assert.ok(antigo.avisos.some(a => /antes da opção de imputação/.test(a)));
+  const novo = C.ler(bloco({ geradoPor: 'Calculadora de Débitos Judiciais 0.8', imputacao: 'mes' }));
+  assert.equal(novo.dados.imputacao, 'mes'); assert.ok(!novo.avisos.some(a => /antes da opção/.test(a)));
+  ['qualquer', 'constructor', '1', '!!!', true].forEach(v => assert.ok(C.ler(bloco({ imputacao: v })).erros.some(x => /Critério de imputação desconhecido/.test(x)), v));
+});
+
 console.log(process.exitCode ? 'Falharam testes da revisão.' : 'Todos os ' + n + ' testes da revisão passaram.');

@@ -12,8 +12,9 @@
  *   "juros": { "regime": "tjsp" | "taxalegal" | "fixa" | "nenhum" | "duas" | "selic" | "selic_tl", "taxaMensal": 1,
  *              "termoInicial": "vencimento" | "data", "data": "AAAA-MM-DD", "origem": "...",
  *              "contagemDias": "dias360" | "corridos",   (juros fixos: mês comercial, padrão, ou dias corridos)
+ *              "contagemJuros": "prorata" | "mescheio", (ausente: pro rata)
  *              "duasTaxas": { "taxa1": 1, "ate": "AAAA-MM-DD", "depois": "taxalegal" | "fixa", "taxa2": 0.5 } },   (opcional)
- *       tjsp      0,5% a.m. até 10/01/2003, 1% até 29/08/2024 e taxa legal depois;
+ *       tjsp      0,5% a.m. até 10/01/2003, 1% até 28/08/2024 e taxa legal desde 29/08/2024;
  *       duas      taxa1 até a data "ate" (inclusive) e, depois, taxa legal ou taxa2;
  *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 28/08/2024, depois índice + taxa legal.
  *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
@@ -34,6 +35,10 @@
  *                         "obrigacao": "ID opcional, até 80 caracteres" } ],
  *       O mesmo ID identifica frações de uma obrigação; sem ID, as linhas são dívidas autônomas.
  *   "pagamentos": [ { "data": "AAAA-MM-DD", "valor": 0, "origem": "..." } ],
+ *   "imputacao": "mes" | "automatica",   (critério dos pagamentos sem parcela indicada: "mes" abate primeiro a parcela
+ *                                         que vence no mês do pagamento, padrão; "automatica", as vencidas mais
+ *                                         antigas. Ausente: "mes"; em arquivo salvo pela calculadora antes da
+ *                                         opção, "automatica", o critério com que ele foi calculado)
  *   "fazenda": { "posEC136": "selic" | "ipca2" },                     (opcional)
  *   "encargos": { "multa523": false, "honorariosPct": null, "prazo523": "AAAA-MM-DD" },   (prazo523 = data final
  *                                                                      confirmada, exigida para encargos do art. 523
@@ -44,8 +49,8 @@
  * }
  *
  * O arquivo "Salvar cálculo" (.calcjur) usa este mesmo formato, com mais alguns campos opcionais: "perfilCalculo"
- * (1 = corte histórico em 29/08/2024; 2 = corte em 30/08/2024, com eventos antigos;
- * 3 = corte em 30/08/2024, sem atualizações incidentais de outras obrigações), "partes"
+ * (1 = corte em 29/08/2024, com eventos antigos; 2 = corte em 30/08/2024, com eventos antigos;
+ * 3 = corte em 30/08/2024, sem atualizações incidentais; 4 = corte atual em 29/08/2024), "partes"
  * { exequente, executado }, "revisado" (true quando a importação do Copilot já foi revisada), "historico"
  * [ { dataCalculo, total } ] dos cálculos anteriores, "indices" (os índices usados, para conferir se mudaram
  * quando o arquivo for reaberto) e "parcela" em cada pagamento (imputação indicada:
@@ -68,6 +73,7 @@
     'valor fixo': 'fixo', 'fixo': 'fixo'
   };
   var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1, duas: 1, selic: 1, selic_tl: 1 };
+  var CONTAGENS_JUROS = { prorata: 1, mescheio: 1 };
   var INDICES = { tjsp: 1, ipca: 1, inpc: 1, ipcae: 1, igpm: 1, nenhum: 1 };
 
   var SUCUMBENCIAS = { condenacao: 1, causa: 1, fixo: 1 };
@@ -176,7 +182,11 @@
     else erros.push('Tipo de débito ausente ou inválido ("' + texto(o.tipo) + '"). Use pensao, particular ou fazenda.');
 
     if (o.juros && typeof o.juros === 'object') {
-      var j = o.juros, jr = { regime: null, taxaMensal: null, termo: 'vencimento', data: '', origem: texto(j.origem) };
+      var j = o.juros, jr = { regime: null, taxaMensal: null, termo: 'vencimento', data: '', origem: texto(j.origem), contagemJuros: 'prorata' };
+      if (j.contagemJuros != null) {
+        if (tem(CONTAGENS_JUROS, j.contagemJuros)) jr.contagemJuros = j.contagemJuros;
+        else erros.push('Contagem de juros desconhecida: "' + texto(j.contagemJuros) + '". Use prorata ou mescheio.');
+      }
       if (j.regime != null) {
         if (tem(REGIMES, j.regime)) jr.regime = j.regime; else erros.push('Regime de juros desconhecido: "' + texto(j.regime) + '".');
       }
@@ -317,6 +327,15 @@
       d.ajustes.push({ chave: dec ? 'd:' + m.slice(0, 4) : 'p:' + m, valor: temV ? v : null, rendimento: temR ? v : null, origem: texto(a.origem) });
     });
 
+    var imp = o.imputacao == null || o.imputacao === '' ? '' : semAcento(String(o.imputacao)).replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+    if (o.imputacao == null || o.imputacao === '') {
+      // Arquivos salvos pela calculadora antes da opção foram calculados pela imputação automática.
+      d.imputacao = /^Calculadora/.test(texto(o.geradoPor)) ? 'automatica' : 'mes';
+      if (d.imputacao === 'automatica' && d.pagamentos.length) avisos.push('Arquivo salvo antes da opção de imputação: mantida a imputação automática (parcelas mais antigas primeiro), critério com que foi calculado. Para imputar no mês do pagamento, troque a opção em "Pagamentos e levantamentos".');
+    } else if (imp === 'mes' || imp === 'mes do pagamento') d.imputacao = 'mes';
+    else if (imp === 'automatica' || imp === 'automatico') d.imputacao = 'automatica';
+    else erros.push('Critério de imputação desconhecido: "' + texto(o.imputacao) + '". Use mes ou automatica.');
+
     if (o.encargos && typeof o.encargos === 'object') {
       var hp = o.encargos.honorariosPct == null || o.encargos.honorariosPct === '' ? null : numero(o.encargos.honorariosPct);
       if (hp != null && hp !== 0 && !(hp > 0 && hp <= 100)) erros.push('Percentual dos honorários do art. 523 inválido ("' + texto(o.encargos.honorariosPct) + '"). Use um número maior que zero e até 100.');
@@ -343,10 +362,10 @@
     }
     if (o.perfilCalculo != null) {
       var perfil = Number(o.perfilCalculo);
-      if (perfil === 1 || perfil === 2 || perfil === 3) d.perfilCalculo = perfil;
+      if (perfil === 1 || perfil === 2 || perfil === 3 || perfil === 4) d.perfilCalculo = perfil;
       else erros.push('Perfil de cálculo desconhecido: "' + texto(o.perfilCalculo) + '".');
     } else {
-      d.perfilCalculo = d.calculoAnterior ? 1 : 3;
+      d.perfilCalculo = d.calculoAnterior ? 1 : 4;
     }
     d.historico = (Array.isArray(o.historico) ? o.historico : []).map(function (h) {
       return h && { dataCalculo: data(h.dataCalculo), total: numero(h.total) };

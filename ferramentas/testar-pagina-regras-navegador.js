@@ -34,8 +34,8 @@ test('busca, download, impressão completa, navegação mobile e acessibilidade'
     await page.goto(`http://127.0.0.1:${server.address().port}/regras/`);
     assert.equal(await page.locator('tbody tr:visible').count(), total);
     await page.locator('#busca').fill('N10');
-    assert.equal(await page.locator('tbody tr:visible').count(), 1);
-    assert.ok((await page.locator('tbody tr:visible').innerText()).includes('29/08/2024'));
+    assert.equal(await page.locator('tbody tr:visible').count(), 2);
+    assert.ok((await page.locator('tbody tr:visible').first().innerText()).includes('29/08/2024'));
     await page.locator('#busca').fill('pensao');
     assert.ok(await page.locator('tbody tr:visible').count() > 1);
     await page.locator('#busca').fill('nao-existe-esta-regra');

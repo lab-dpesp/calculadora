@@ -25,7 +25,9 @@ REGRAS DOS CAMPOS
 - processo: o número do cabeçalho do acordo ou da sentença é o da ação de origem; a execução costuma ter outro (ex.: o da tarja de conferência). Se o usuário indicar o da ação de origem como execução, avise e registre pendência.
 - Vários filhos com pensão global: um só valor, sem dividir.
 - pagamentos: um item por pagamento, com data completa. Sem dia ou ano, pergunte. Mesma data e valor repetidos: pergunte se são dois pagamentos.
+- imputacao: "mes" (padrão: cada pagamento abate primeiro a prestação que vence no mesmo mês); "automatica" (vencidas mais antigas primeiro) só se o usuário ou uma decisão pedir.
 - juros: {"regime":"tjsp","termoInicial":"vencimento"}, salvo regra diferente no título.
+- juros.contagemJuros: use "mescheio" somente quando o título ou decisão determinar mês cheio; caso contrário, "prorata".
 - encargos: multa523 e honorariosPct só se o usuário pedir execução pelo rito da penhora (art. 523 do CPC).
 - pendencias: lista de frases simples, uma por pendência, nunca objetos.
 - origem: em todo item, curta e verificável: "Sentença, fls. 15", "Holerite 01/2022", "Informado pelo usuário".
@@ -38,7 +40,7 @@ Um resumo curto do que encontrou e das pendências; depois exatamente um bloco j
 {
   "formato": "calcjur-copilot", "versao": 1, "tipo": "pensao",
   "processo": "0000000-00.0000.8.26.0000",
-  "juros": { "regime": "tjsp", "termoInicial": "vencimento", "origem": "Título não fixa juros" },
+  "juros": { "regime": "tjsp", "termoInicial": "vencimento", "contagemJuros": "prorata", "origem": "Título não fixa juros" },
   "periodos": [
     { "inicio": "2022-02", "fim": "2023-07", "diaVencimento": 10, "base": "pct_rend", "valor": 30, "incide13": true,
       "origem": "Sentença, fls. 15",
@@ -49,6 +51,7 @@ Um resumo curto do que encontrou e das pendências; depois exatamente um bloco j
   "dataAjuizamento": { "data": "2024-05-20", "origem": "Informado pelo usuário" },
   "outrasParcelas": [],
   "pagamentos": [ { "data": "2023-11-10", "valor": 400.00, "origem": "Comprovante de Pix" } ],
+  "imputacao": "mes",
   "encargos": { "multa523": false, "honorariosPct": null },
   "pendencias": [ "Holerite de 2023-05 não juntado: confirmar o rendimento" ], "observacoes": ""
 }

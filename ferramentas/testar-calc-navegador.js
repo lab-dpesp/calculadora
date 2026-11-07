@@ -120,7 +120,7 @@ teste('estrutura: seção única, sem seletor nativo de mês/data, juros recolhi
     .map((id) => document.getElementById(id)).every((el, i, a) => !i || (a[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)));
   assert.ok(ordem, 'prestações, depois juros e encargos, depois Calcular');
   assert.strictEqual(await page.locator('#painelJuros').evaluate((d) => d.open), false, 'juros e encargos começam recolhidos');
-  assert.match(await page.locator('#resumoJuros').innerText(), /^Padrão: juros de 0,5% a\.m\. até 10\/01\/2003, 1% até 29\/08\/2024 e taxa legal depois · desde o vencimento/);
+  assert.match(await page.locator('#resumoJuros').innerText(), /^Padrão: juros de 0,5% a\.m\. até 10\/01\/2003, 1% até 28\/08\/2024 e taxa legal desde 29\/08\/2024 · desde o vencimento/);
   assert.ok(await page.locator('#painelLancamentos #dataAjuizamento').isVisible(), 'ajuizamento fica visível junto das prestações');
   assert.strictEqual(await page.locator('#painelJuros #dataAjuizamento').count(), 0, 'ajuizamento não fica escondido em juros e encargos');
   assert.ok(await page.locator('#painelJuros #dataCalculo').count(), 'data do cálculo fica em juros e encargos');
@@ -209,7 +209,11 @@ teste('arquivos .calcjur salvos pela tela anterior: mesmo total ao abrir, ao col
     const [baixado] = await Promise.all([page.waitForEvent('download'), page.click('#salvarCalculo')]);
     const salvo = JSON.parse(fs.readFileSync(await baixado.path(), 'utf8'));
     for (const k of ['tipo', 'juros', 'civel', 'fazenda', 'sucumbencia', 'periodos', 'ajustes', 'outrasParcelas', 'pagamentos', 'dataAjuizamento', 'encargos']) {
-      assert.deepStrictEqual(salvo[k], origemSemEspacos(caso[k]), nome + ': "' + k + '" igual no arquivo salvo de novo');
+      if (k === 'juros') {
+        const jurosSemCampo = Object.assign({}, salvo.juros); delete jurosSemCampo.contagemJuros;
+        assert.deepStrictEqual(jurosSemCampo, origemSemEspacos(caso[k]), nome + ': juros legados preservados');
+        assert.strictEqual(salvo.juros.contagemJuros, 'prorata', nome + ': contagem ausente regravada como pro rata');
+      } else assert.deepStrictEqual(salvo[k], origemSemEspacos(caso[k]), nome + ': "' + k + '" igual no arquivo salvo de novo');
     }
     assert.strictEqual(salvo.calculoAnterior.total, esperado);
     await semErros(page, nome);
@@ -226,14 +230,72 @@ teste('arquivos .calcjur salvos pela tela anterior: mesmo total ao abrir, ao col
   }
 });
 
-teste('perfil 2: abrir e recarregar conserva o gabarito; perfil 3 só após migração explícita', async () => {
+teste('contagem de juros: pro rata padrão, mês cheio no navegador, salvamento e arquivos antigos', async () => {
+  const page = await novaPagina('calc.html?calc=civel');
+  assert.strictEqual(await page.locator('#contagemJuros').inputValue(), 'prorata', 'pro rata vem pré-selecionado');
+  await definirDataCalculo(page, '2023-01-28');
+  await page.selectOption('#regime', 'fixa');
+  await page.fill('#taxaFixa', '1');
+  await page.locator('#avancadas').evaluate((d) => { d.open = true; });
+  await page.selectOption('#indiceCorrecao', 'nenhum');
+  await page.selectOption('#contagemJuros', 'mescheio');
+  await page.click('#addParcela');
+  const linha = page.locator('#parcelas > li').first();
+  await linha.locator('.p-venc').fill('15/01/2023');
+  await linha.locator('.p-valor').fill('10000');
+  assert.strictEqual(await total(page), 10000, 'mesmo mês incompleto segue a fórmula de mês cheio da planilha');
+  assert.match(await page.locator('#criterios').innerText(), /Contagem de juros: mês cheio/);
+  assert.match(await page.locator('#memoria').innerText(), /0 meses e 0 dias \(mês cheio\)/);
+  const [baixado] = await Promise.all([page.waitForEvent('download'), page.click('#salvarCalculo')]);
+  const salvo = JSON.parse(fs.readFileSync(await baixado.path(), 'utf8'));
+  assert.strictEqual(salvo.juros.contagemJuros, 'mescheio', '.calcjur grava mês cheio');
+  assert.strictEqual((await page.evaluate(() => JSON.parse(localStorage.getItem('calcjur:v3:civel')))).contagemJuros, 'mescheio',
+    'localStorage grava mês cheio');
+  await page.reload(); await page.waitForSelector('#calcular');
+  assert.strictEqual(await page.locator('#contagemJuros').inputValue(), 'mescheio', 'localStorage restaura mês cheio');
+  await page.click('#novoCalculo');
+  await page.waitForSelector('#calcular');
+  assert.strictEqual(await page.locator('#contagemJuros').inputValue(), 'prorata', 'Novo cálculo volta ao padrão');
+  await page.evaluate(() => localStorage.setItem('calcjur:v3:civel', JSON.stringify({
+    tipo: 'particular', dataCalculo: '2023-03-15', regime: 'fixa', taxaFixa: '1', contagemDias: 'dias360',
+    termoJuros: 'vencimento', dataJuros: '', multa: false, honorarios: false, honorariosPct: '10',
+    periodos: [], parcelas: [['2023-01-15', '10000', '', '', '', '']], pagamentos: [], avancados: { indiceCorrecao: 'nenhum' }
+  })));
+  await page.reload(); await page.waitForSelector('#calcular');
+  assert.strictEqual(await page.locator('#contagemJuros').inputValue(), 'prorata', 'localStorage antigo sem o campo abre em pro rata');
+  assert.strictEqual(await total(page), 10200, 'localStorage antigo mantém o total pro rata');
+
+  const antigo = { formato: 'calcjur-copilot', versao: 1, geradoPor: 'Calculadora de Débitos Judiciais 0.8', tipo: 'particular',
+    juros: { regime: 'fixa', taxaMensal: 1, termoInicial: 'vencimento' }, civel: { indice: 'nenhum' },
+    outrasParcelas: [{ vencimento: '2023-01-15', valor: 10000 }],
+    calculoAnterior: { dataCalculo: '2023-03-15', total: 10200 } };
+  const pageAntigo = await novaPagina('calc.html?calc=civel');
+  await abrirArquivo(pageAntigo, 'antigo.calcjur', JSON.stringify(antigo));
+  await definirDataCalculo(pageAntigo, '2023-03-15');
+  assert.strictEqual(await pageAntigo.locator('#contagemJuros').inputValue(), 'prorata', 'arquivo antigo sem o campo abre em pro rata');
+  assert.strictEqual(await total(pageAntigo), 10200, 'arquivo antigo mantém o total pro rata');
+
+  const pageCopilot = await novaPagina('calc.html?calc=civel');
+  await pageCopilot.click('#painelCopilot summary');
+  await pageCopilot.fill('#textoCopilot', JSON.stringify({ formato: 'calcjur-copilot', versao: 1, tipo: 'particular',
+    juros: { regime: 'fixa', taxaMensal: 1, contagemJuros: 'mescheio' }, civel: { indice: 'nenhum' },
+    outrasParcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }));
+  await pageCopilot.click('#lerCopilot');
+  await pageCopilot.click('#aplicarCopilot');
+  await definirDataCalculo(pageCopilot, '2023-01-28');
+  assert.strictEqual(await pageCopilot.locator('#contagemJuros').inputValue(), 'mescheio', 'bloco Copilot v1 restaura mês cheio');
+  assert.strictEqual(await total(pageCopilot), 10000, 'bloco Copilot aplica a contagem importada');
+  await semErros(pageCopilot, 'contagem de juros');
+});
+
+teste('perfis 2 e 3 preservam os cálculos salvos; perfil 4 só após migração explícita', async () => {
   const caso = lerCaso('pensao-sm-exemplo.calcjur');
   const page = await novaPagina('calc.html');
   await abrirArquivo(page, 'perfil2.calcjur', JSON.stringify(caso));
   await definirDataCalculo(page, caso.calculoAnterior.dataCalculo);
   const antigo = await total(page);
   assert.strictEqual(antigo, caso.calculoAnterior.total, 'abertura mantém total histórico do perfil 2');
-  assert.match(await page.locator('#atualizacaoItens').innerText(), /Perfil de cálculo 2 preservado.*atualizações incidentais.*perfil 3/);
+  assert.match(await page.locator('#atualizacaoItens').innerText(), /Perfil de cálculo 2 preservado.*atualizações incidentais.*perfil 4/);
   assert.ok(await page.locator('#atualizarPerfilCalculo').isVisible());
   let guardado = await page.evaluate(() => JSON.parse(localStorage.getItem('calcjur:v3')));
   assert.strictEqual(guardado.perfilCalculo, 2);
@@ -241,7 +303,7 @@ teste('perfil 2: abrir e recarregar conserva o gabarito; perfil 3 só após migr
   assert.strictEqual(await total(page), antigo, 'perfil 2 continua após reload');
   const [baixado] = await Promise.all([page.waitForEvent('download'), page.click('#salvarCalculo')]);
   assert.strictEqual(JSON.parse(fs.readFileSync(await baixado.path(), 'utf8')).perfilCalculo, 2, 'salvar não migra perfil');
-  // localStorage anterior à criação dos perfis usava o atual de então (2), não o novo (3).
+  // localStorage anterior à criação dos perfis usava o atual de então (2), não o novo (4).
   await page.evaluate(() => {
     const salvo = JSON.parse(localStorage.getItem('calcjur:v3'));
     delete salvo.perfilCalculo;
@@ -256,17 +318,32 @@ teste('perfil 2: abrir e recarregar conserva o gabarito; perfil 3 só após migr
   await page.click('#atualizarPerfilCalculo');
   const atual = await total(page);
   const esperadoAtual = await totalMotor(page, entradaPensao(caso.calculoAnterior.dataCalculo, {
-    perfilCalculo: 3,
+    perfilCalculo: 4,
     periodos: [{ inicio: '2020-01', fim: '', dia: 10, base: 'pct_sm', quantidade: 30, decimo: false }],
     pagamentos: caso.pagamentos
   }));
   assert.strictEqual(atual, esperadoAtual);
-  assert.notStrictEqual(atual, antigo, 'adoção explícita do perfil 3 pode alterar centavos');
+  assert.notStrictEqual(atual, antigo, 'adoção explícita do perfil 4 pode alterar centavos');
   guardado = await page.evaluate(() => JSON.parse(localStorage.getItem('calcjur:v3')));
-  assert.strictEqual(guardado.perfilCalculo, 3);
+  assert.strictEqual(guardado.perfilCalculo, 4);
   await page.reload(); await page.waitForSelector('#calcular');
   assert.strictEqual(await total(page), atual, 'perfil migrado persiste');
   assert.ok(await page.locator('#atualizarPerfilCalculo').isHidden());
+  const salvoPerfil3 = {
+    formato: 'calcjur-copilot', versao: 1, tipo: 'particular', perfilCalculo: 3,
+    dataCalculo: '2024-08-30', juros: { regime: 'tjsp', termoInicial: 'vencimento' },
+    civel: { indice: 'nenhum' }, outrasParcelas: [{ vencimento: '2024-08-29', valor: 10000 }],
+    pagamentos: [], calculoAnterior: { dataCalculo: '2024-08-30', total: 10003.33 }
+  };
+  await abrirArquivo(page, 'perfil3.calcjur', JSON.stringify(salvoPerfil3));
+  await page.waitForURL(/calc\.html\?calc=civel/);
+  await page.waitForSelector('#calcular');
+  await definirDataCalculo(page, '2024-08-30');
+  assert.strictEqual(await total(page), salvoPerfil3.calculoAnterior.total, 'abertura mantém total histórico do perfil 3');
+  await page.reload(); await page.waitForSelector('#calcular');
+  assert.strictEqual(await total(page), salvoPerfil3.calculoAnterior.total, 'perfil 3 continua após reload');
+  guardado = await page.evaluate(() => JSON.parse(localStorage.getItem('calcjur:v3:civel')));
+  assert.strictEqual(guardado.perfilCalculo, 3);
   await semErros(page, 'perfis preservados e migração explícita');
 });
 
@@ -401,6 +478,101 @@ teste('Copilot e .calcjur: ID explícito, ID inválido recusado sem substituir o
   const salvo = JSON.parse(fs.readFileSync(await baixado.path(), 'utf8'));
   assert.ok(salvo.outrasParcelas.every((p) => !Object.hasOwn(p, 'obrigacao')), 'regravar arquivo antigo não inventa ID');
   await semErros(page, 'importação de obrigação e legado');
+});
+
+teste('imputação: mês do pagamento por padrão, automática como opção, memória, arquivo, reload e arquivos antigos (#53)', async () => {
+  const page = await novaPagina('calc.html?calc=civel');
+  assert.strictEqual(await page.locator('#imputacao').inputValue(), 'mes', 'mês do pagamento vem pré-selecionado');
+  assert.deepStrictEqual(await page.locator('#imputacao option').evaluateAll((o) => o.map((x) => x.value)), ['mes', 'automatica']);
+  await definirDataCalculo(page, '2024-06-15');
+  await page.selectOption('#regime', 'fixa');
+  await page.fill('#taxaFixa', '1');
+  await page.locator('#avancadas').evaluate((d) => { d.open = true; });
+  await page.selectOption('#indiceCorrecao', 'nenhum');
+  await page.click('#addParcela');
+  const linhas = await page.locator('#parcelas > li').all();
+  await linhas[0].locator('.p-venc').fill('10/01/2024'); await linhas[0].locator('.p-valor').fill('1000');
+  await linhas[1].locator('.p-venc').fill('10/02/2024'); await linhas[1].locator('.p-valor').fill('1000');
+  await page.click('#addPagamento');
+  await page.locator('.g-data').fill('15/02/2024');
+  await page.locator('.g-valor').fill('1000');
+  const entrada = (imputacao) => ({ tipo: 'particular', dataCalculo: '2024-06-15', regime: 'fixa', taxaFixa: 1, contagemDias: 'dias360',
+    termoJuros: 'vencimento', civel: { indice: 'nenhum' }, imputacao,
+    parcelas: [{ vencimento: '2024-01-10', valor: 1000 }, { vencimento: '2024-02-10', valor: 1000 }],
+    pagamentos: [{ data: '2024-02-15', valor: 1000 }] });
+  const doMes = await total(page);
+  assert.strictEqual(doMes, await totalMotor(page, entrada('mes')), 'tela = motor no critério do mês');
+  assert.strictEqual(await page.locator('#tabPagamentos tbody tr').first().locator('td').nth(3).innerText(), '2', 'pagamento de 02/2024 abate a parcela de 02/2024');
+  assert.match(await page.locator('#criterioImputacao').innerText(), /Critério: mês do pagamento/);
+  assert.match(await page.locator('#criterios').innerText(), /Critério de imputação dos pagamentos: mês do pagamento/);
+  assert.strictEqual(await page.locator('.g-parcela option').first().innerText(), 'Mês do pagamento');
+  await page.evaluate(() => {
+    window.ClipboardItem = class { constructor(d) { this.d = d; } getType(t) { return Promise.resolve(this.d[t]); } };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write: async (i) => {
+      window.copiaImp = await (await i[0].getType('text/html')).text(); } } });
+  });
+  await page.click('#copiar');
+  await page.waitForFunction(() => !!window.copiaImp);
+  const doc = await page.evaluate(() => window.copiaImp);
+  assert.ok(/Critério: mês do pagamento/.test(doc), 'memorial indica o critério no quadro de imputação');
+  assert.ok(/Imputação dos pagamentos<\/th><td[^>]*>mês do pagamento/.test(doc), 'anexo de dados indica o critério');
+
+  await page.selectOption('#imputacao', 'automatica');
+  const auto = await total(page);
+  assert.strictEqual(auto, await totalMotor(page, entrada('automatica')), 'tela = motor na automática');
+  assert.strictEqual(auto, await totalMotor(page, entrada(undefined)), 'automática = resultado de antes');
+  assert.notStrictEqual(auto, doMes);
+  assert.strictEqual(await page.locator('#tabPagamentos tbody tr').first().locator('td').nth(3).innerText(), '1');
+  assert.match(await page.locator('#criterioImputacao').innerText(), /Critério: automática/);
+  assert.strictEqual(await page.locator('.g-parcela option').first().innerText(), 'Automático');
+
+  const [baixado] = await Promise.all([page.waitForEvent('download'), page.click('#salvarCalculo')]);
+  const salvo = JSON.parse(fs.readFileSync(await baixado.path(), 'utf8'));
+  assert.strictEqual(salvo.imputacao, 'automatica', 'arquivo guarda o critério');
+  await page.reload(); await page.waitForSelector('#calcular');
+  assert.strictEqual(await page.locator('#imputacao').inputValue(), 'automatica', 'recarregar preserva o critério');
+  assert.strictEqual(await total(page), auto);
+  await page.selectOption('#imputacao', 'mes');
+  assert.strictEqual(await total(page), doMes);
+  await page.reload(); await page.waitForSelector('#calcular');
+  assert.strictEqual(await page.locator('#imputacao').inputValue(), 'mes');
+  assert.strictEqual(await total(page), doMes);
+
+  // Arquivo salvo com o critério reabre com ele; arquivo salvo antes da opção reabre na automática (mesmo total de antes).
+  await abrirArquivo(page, 'auto.calcjur', JSON.stringify(salvo));
+  await definirDataCalculo(page, '2024-06-15');
+  assert.strictEqual(await page.locator('#imputacao').inputValue(), 'automatica');
+  assert.strictEqual(await total(page), auto);
+  const antigo = Object.assign({}, salvo); delete antigo.imputacao;
+  await page.selectOption('#imputacao', 'mes');
+  await abrirArquivo(page, 'antigo.calcjur', JSON.stringify(antigo));
+  await definirDataCalculo(page, '2024-06-15');
+  assert.strictEqual(await page.locator('#imputacao').inputValue(), 'automatica', 'arquivo antigo mantém a automática');
+  assert.strictEqual(await total(page), auto);
+  // Bloco do agente sem o campo: vale o padrão (mês do pagamento).
+  const bloco = Object.assign({}, antigo); delete bloco.geradoPor; delete bloco.calculoAnterior; delete bloco.historico; delete bloco.indices;
+  const page2 = await novaPagina('calc.html?calc=civel');
+  await page2.click('#painelCopilot summary');
+  await page2.fill('#textoCopilot', '```json\n' + JSON.stringify(bloco) + '\n```');
+  await page2.click('#lerCopilot');
+  await page2.click('#aplicarCopilot');
+  await definirDataCalculo(page2, '2024-06-15');
+  assert.strictEqual(await page2.locator('#imputacao').inputValue(), 'mes');
+  assert.strictEqual(await total(page2), doMes);
+  await semErros(page, 'imputação'); await semErros(page2, 'imputação (Copilot)');
+
+  // Cálculo guardado no navegador antes da opção reabre na automática; tela nova (só assinatura) fica no mês.
+  const page3 = await novaPagina('calc.html');
+  await page3.evaluate(() => localStorage.setItem('calcjur:v3', JSON.stringify({ tipo: 'pensao', perfilCalculo: 3, dataCalculo: '2024-06-15' })));
+  await page3.reload(); await page3.waitForSelector('#calcular');
+  assert.strictEqual(await page3.locator('#imputacao').inputValue(), 'automatica');
+  await Promise.all([page3.waitForEvent('load'), page3.click('#novoCalculo')]);
+  await page3.waitForSelector('#calcular');
+  assert.strictEqual(await page3.locator('#imputacao').inputValue(), 'mes', 'Novo cálculo volta ao padrão');
+  await page3.evaluate(() => { localStorage.clear(); localStorage.setItem('calcjur:assinatura', JSON.stringify({ autor: 'X' })); });
+  await page3.reload(); await page3.waitForSelector('#calcular');
+  assert.strictEqual(await page3.locator('#imputacao').inputValue(), 'mes');
+  await semErros(page3, 'imputação (guardado)');
 });
 
 teste('pensão: parcela avulsa aceita obrigação opcional e preserva ao reabrir a página', async () => {
@@ -703,26 +875,26 @@ teste('assinatura compartilhada não transforma cálculo novo em perfil 2; casos
   }
   async function conferirPerfil(chave, esperado, motivo) {
     assert.strictEqual(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)).perfilCalculo, chave), esperado, motivo);
-    assert.strictEqual(await page.locator('#atualizarPerfilCalculo').isVisible(), esperado !== 3, motivo + ': migração só para caso antigo');
+    assert.strictEqual(await page.locator('#atualizarPerfilCalculo').isVisible(), esperado !== 4, motivo + ': migração só para caso antigo');
     assert.strictEqual(await page.locator('#procUnidade').inputValue(), assinatura.unidade);
   }
   for (const [url, chave] of [['calc.html', 'calcjur:v3'], ['calc.html?calc=civel', 'calcjur:v3:civel']]) {
     await preparar({ 'calcjur:assinatura': assinatura }, url);
-    await conferirPerfil(chave, 3, 'apenas assinatura comum em ' + url);
+    await conferirPerfil(chave, 4, 'apenas assinatura comum em ' + url);
     await preparar({ [chave]: assinatura }, url);
-    await conferirPerfil(chave, 3, 'apenas assinatura na chave da calculadora em ' + url);
+    await conferirPerfil(chave, 4, 'apenas assinatura na chave da calculadora em ' + url);
   }
   const pensao = { ...assinatura, tipo: 'pensao', perfilCalculo: 2, dataCalculo: '2025-01-01',
     periodos: [{ inicio: '2024-01', fim: '2024-01', dia: '10', base: 'pct_sm', qtd: '30' }], parcelas: [], pagamentos: [] };
   await preparar({ 'calcjur:v3': pensao }, 'calc.html?calc=civel');
-  await conferirPerfil('calcjur:v3:civel', 3, 'cível nova depois de pensão recebe só assinatura');
+  await conferirPerfil('calcjur:v3:civel', 4, 'cível nova depois de pensão recebe só assinatura');
   await abrir(page, 'calc.html'); await calcular(page);
   await conferirPerfil('calcjur:v3', 2, 'voltar à pensão preserva seu perfil 2');
 
   const civelAntigo = { ...assinatura, tipo: 'particular', dataCalculo: '2025-01-01',
     parcelas: [['2024-01-01', '500', '', '', '']], pagamentos: [] };
   await preparar({ 'calcjur:v3': civelAntigo }, 'calc.html');
-  await conferirPerfil('calcjur:v3', 3, 'pensão nova recebe só assinatura do cível legado');
+  await conferirPerfil('calcjur:v3', 4, 'pensão nova recebe só assinatura do cível legado');
   await abrir(page, 'calc.html?calc=civel'); await calcular(page);
   await conferirPerfil('calcjur:v3:civel', 2, 'caso cível real antigo sem perfil continua no 2');
   await semErros(page, 'assinatura versus caso guardado');

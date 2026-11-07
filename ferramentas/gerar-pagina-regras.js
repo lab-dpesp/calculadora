@@ -6,7 +6,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const DOCUMENTO = 'REGRAS-DE-NEGOCIO.md';
-const REPOSITORIO = 'https://github.com/DPESP-Labs/calculadora-sandbox';
+const REPOSITORIO = 'https://github.com/DPESP-Labs/calculadora-civel';
 
 function escapar(texto) {
   return texto.replace(/[&<>"']/g, (caractere) =>

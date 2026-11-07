@@ -196,6 +196,16 @@
             <h3>Pagamentos e levantamentos</h3>
             <span class="sub">Abatidos pelos arts. 352 a 355 do Código Civil</span>
           </div>
+          <div class="linha-campos">
+            <label class="q-campo q-campo-largo">
+              <span class="q-rotulo">Imputação dos pagamentos</span>
+              <select id="imputacao">
+                <option value="mes" selected>Mês do pagamento: primeiro a parcela que vence no mesmo mês</option>
+                <option value="automatica">Automática: primeiro as parcelas mais antigas</option>
+              </select>
+            </label>
+            <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><p class="sub ajuda">Mês do pagamento (padrão): cada pagamento abate primeiro a parcela com vencimento no mesmo mês; se for maior que ela, ou se não houver parcela em aberto naquele mês, o restante vai para as vencidas mais antigas e, por último, para as a vencer. Automática: vai direto às vencidas mais antigas (art. 355 do CC). Em "Imputar em", a parcela indicada vem sempre antes do critério escolhido.</p>
+          </div>
           <div class="lista-cab cols-pagamento" aria-hidden="true"><span>Nº</span><span>Data</span><span>Valor (R$)</span><span>Imputar em</span><span></span></div>
           <ol class="lista" id="pagamentos"></ol>
           <p class="vazio-lista" id="semPagamentos">Nenhum pagamento informado. Inclua também valores levantados de penhora ou depósito judicial.</p>
@@ -248,14 +258,14 @@
           <label class="q-campo q-campo-largo" data-nao="fazenda">
             <span class="q-rotulo">Juros de mora</span>
             <select id="regime">
-              <option value="tjsp">0,5% a.m. até 10/01/2003; 1% até 29/08/2024; depois taxa legal</option>
+              <option value="tjsp">0,5% a.m. até 10/01/2003; 1% até 28/08/2024; depois taxa legal</option>
               <option value="taxalegal">Taxa legal em todo o período (Tema 1368/STJ)</option>
               <option value="fixa">Taxa fixa mensal</option>
               <option value="nenhum">Sem juros</option>
               <optgroup label="Outros critérios">
                 <option value="duas">Uma taxa até certa data, depois outra</option>
                 <option value="selic">Selic (juros e correção) em todo o período</option>
-                <option value="selic_tl">Selic até 29/08/2024, depois correção + taxa legal</option>
+                <option value="selic_tl">Selic até 28/08/2024, depois correção + taxa legal</option>
               </optgroup>
             </select>
           </label>
@@ -269,6 +279,14 @@
               <option value="dias360">Mês comercial de 30 dias (planilhas do TJSP)</option>
               <option value="corridos">Meses de data a data e dias corridos</option>
             </select>
+          </label>
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Contagem de juros</span>
+            <select id="contagemJuros">
+              <option value="prorata">Pro rata (padrão)</option>
+              <option value="mescheio">Mês cheio</option>
+            </select>
+            <span class="sub">Use mês cheio só por determinação judicial, contrato ou critério específico.</span>
           </label>
         </div>
         <div class="linha-campos" id="campoDuas" hidden>
@@ -485,6 +503,7 @@
 
         <div id="blocoPagamentos" hidden>
           <div class="rotulo-secao">Imputação dos pagamentos</div>
+          <p class="sub" id="criterioImputacao"></p>
           <div class="tabela-rolagem">
             <table class="q-tabela" id="tabPagamentos">
               <thead><tr><th>Pagamento</th><th>Data</th><th class="num">Valor</th><th>Parcela</th><th class="num">Juros</th><th class="num col-enc">Encargos</th><th class="num">Capital</th></tr></thead>
@@ -627,7 +646,7 @@
       <span class="num-item"></span>
       <label class="q-campo q-campo-sem-rotulo"><input type="text" class="g-data" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" aria-label="Data do pagamento"></label>
       <label class="q-campo q-campo-sem-rotulo"><input type="text" inputmode="decimal" class="g-valor dir" placeholder="0,00" aria-label="Valor pago"></label>
-      <label class="q-campo q-campo-sem-rotulo"><select class="g-parcela" aria-label="Imputar em"><option value="">Automático</option></select></label>
+      <label class="q-campo q-campo-sem-rotulo"><select class="g-parcela" aria-label="Imputar em"><option value="">Mês do pagamento</option></select></label>
       <button type="button" class="q-btn-icone remover" aria-label="Remover pagamento" title="Remover pagamento"><svg class="ic"><use href="#i-close"/></svg></button>
       <span class="origem-item" hidden></span>
     </li>

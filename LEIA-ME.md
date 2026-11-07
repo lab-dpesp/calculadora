@@ -111,7 +111,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 
 ## Débito cível e Fazenda Pública
 
-- Cível e pensão: correção pela Tabela Prática do TJSP; no regime padrão, juros simples de 0,5% a.m. até 10/01/2003 (CC/1916), 1% até 29/08/2024 e taxa legal desde 30/08/2024, sem lacuna nem sobreposição (ou taxa legal em todo o período, taxa fixa, sem juros).
+- Cível e pensão: correção pela Tabela Prática do TJSP; no regime padrão, juros simples de 0,5% a.m. até 10/01/2003 (CC/1916), 1% até 28/08/2024 e taxa legal desde 29/08/2024, sem lacuna nem sobreposição (ou taxa legal em todo o período, taxa fixa, sem juros).
 - Juros fixos (1% a.m. ou outra taxa): por padrão, dias contados em mês comercial de 30 dias (DIAS360), como nas planilhas do TJSP; ao lado do regime, dá para escolher meses de data a data e dias corridos, se o título mandar.
 - Taxa legal: a do Banco Central (SGS 29543, Selic menos IPCA-15, Res. CMN 5.171/2024), pro rata pelos dias corridos de cada mês. Antes de 08/2024 (só no regime "taxa legal em todo o período"), Selic do mês anterior menos a variação da Tabela Prática, como a coluna "Selic menos correção" das planilhas do TJSP.
 - Fazenda (não tributário, vencimentos a partir de 07/2009): IPCA-E e juros da poupança até 08/12/2021; Selic depois (EC 113/2021); a partir de 10/09/2025, Selic ou IPCA + 2% a.a. limitado à Selic (EC 136/2025), à escolha.
@@ -133,7 +133,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 
 ## Pagamentos e levantamentos
 
-- Abatidos na data em que foram feitos, pelos arts. 352 a 355 do Código Civil: parcela indicada; depois as vencidas, da mais antiga para a mais recente; em cada parcela, primeiro juros, depois capital.
+- Abatidos na data em que foram feitos, pelos arts. 352 a 355 do Código Civil: parcela indicada; sem indicação, pelo critério escolhido em "Imputação dos pagamentos" — **mês do pagamento** (padrão: primeiro a parcela que vence no mesmo mês) ou **automática** (direto às vencidas mais antigas); o excedente, ou o pagamento de mês sem parcela em aberto, vai para as vencidas, da mais antiga para a mais recente, e depois para as a vencer; em cada parcela, primeiro juros, depois capital. Cálculos salvos antes da opção reabrem na automática.
 - "Mensais em lote" inclui um pagamento por mês, sempre no mesmo dia, entre duas datas (desconto em folha, depósito mensal), com a fonte em cada um.
 - "Colar lista" aceita linhas copiadas de extrato, planilha ou comprovantes, com data e valor em qualquer ordem (ex.: `05/02/2025 Pix recebido R$ 1.000,00`). Linhas sem data ou valor são ignoradas e listadas.
 
@@ -150,6 +150,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 - Os fatores novos da Tabela Prática e do IPCA-E são calculados a partir das séries, com o mesmo arredondamento do TJSP, e os meses já existentes são conferidos com a tabela embutida. Divergências aparecem no topo da tela.
 - Sem internet, a calculadora usa a última atualização guardada ou a tabela embutida.
 - Em "Índices e fontes" é possível exportar o arquivo de índices e importá-lo numa máquina sem acesso ao Banco Central.
+- A Tabela Prática do TJSP embutida começa em 07/1994 (Plano Real); parcelas anteriores estão em outras moedas e não são aceitas. Os fatores de 07/1994 a 12/2007 e o salário mínimo do mesmo período vêm da planilha oficial do TJSP. Os demais índices (INPC, IPCA, IGP-M, Selic e taxa legal anterior a 08/2024) começam em 2008, então escolher outro índice ou a taxa legal em todo o período para parcelas mais antigas ainda dá aviso de índice ausente.
 - O INPC e o IPCA mensais (desde 2008) vão embutidos para o reajuste anual do valor fixo; o INPC foi conferido com a Tabela Prática (199 meses, sem divergência).
 
 ## Versão web (teste, sem integração)

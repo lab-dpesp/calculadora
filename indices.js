@@ -35,8 +35,8 @@
   var VALIDADE_MS = 12 * 3600 * 1000;
 
   var NA_EXTENSAO = !!(root.chrome && root.chrome.runtime && root.chrome.runtime.id);
-  /* estado.fonte é a forma de obtenção dos índices em uso: 'sgs' (consulta direta ao Banco Central), 'arquivo'
-   * (pacote importado) ou 'embutida' (tabela que veio com a página). estado.origem é a fonte declarada nos dados. */
+  /* estado.fonte é a forma de obtenção dos índices em uso: 'institucional', 'sgs' (consulta direta ao Banco Central),
+   * 'arquivo' (pacote importado) ou 'embutida' (tabela que veio com a página). estado.origem é a fonte declarada. */
   var estado = { fonte: 'embutida', atualizadoEm: null, conferidos: 0, divergencias: [], erro: null, mesesNovos: 0, web: !NA_EXTENSAO };
 
   /* ---------- Armazenamento local (chrome.storage na extensão; localStorage fora dela) ---------- */
@@ -146,7 +146,9 @@
     var url = 'https://api.bcb.gov.br/dados/serie/bcdata.sgs.' + codigo + '/dados?formato=json&dataInicial=' + INICIO_BUSCA;
     var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 20000) : null;
-    return fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
+    return Promise.resolve().then(function () {
+      return fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+    }).then(function (r) {
       if (timer) clearTimeout(timer);
       if (!r.ok) throw new Error('série ' + codigo + ': resposta ' + r.status);
       return r.json();
@@ -165,10 +167,12 @@
     return Promise.all(nomes.map(function (k) { return buscarSerie(SERIES[k]); })).then(function (res) {
       var series = {};
       nomes.forEach(function (k, i) { series[k] = res[i]; });
-      var pacote = { formato: 'calcjur-indices', versao: 1, quando: new Date().toISOString(), origem: 'Banco Central (SGS)',
+      var geradoEm = new Date().toISOString();
+      var pacote = { formato: 'calcjur-indices', versao: 1, quando: geradoEm, geradoEm: geradoEm,
+        origem: 'Banco Central (SGS)', fonte: 'Banco Central (SGS)',
         obtencao: 'sgs', series: series };
       aplicar(series);
-      estado.fonte = 'sgs'; estado.atualizadoEm = pacote.quando; estado.erro = null; estado.origem = pacote.origem; estado.importadoEm = null;
+      estado.fonte = 'sgs'; estado.atualizadoEm = pacote.quando; estado.erro = null; estado.origem = pacote.origem; estado.versao = pacote.versao; estado.importadoEm = null;
       return gravar(pacote).then(function () { return estado; });
     }).catch(function (err) {
       estado.erro = 'Não foi possível consultar o Banco Central (' + (err && err.name === 'AbortError' ? 'tempo esgotado' : (err && err.message) || 'sem conexão') + ').';
@@ -176,14 +180,13 @@
     });
   }
 
-  /* Carrega o que estiver guardado e, se estiver velho, tenta atualizar. */
-  function iniciar(aoMudar) {
+  function iniciarComDadosAtuais(aoMudar) {
     return ler().then(function (pacote) {
       if (pacote && pacote.series) {
         aplicar(pacote.series);
-        var legado = declarada(pacote.origem);
+        var legado = declarada(pacote.fonte || pacote.origem);
         estado.fonte = pacote.obtencao === 'arquivo' || legado.arquivo ? 'arquivo' : 'sgs';
-        estado.atualizadoEm = pacote.quando; estado.importadoEm = pacote.importadoEm || null;
+        estado.atualizadoEm = pacote.geradoEm || pacote.quando; estado.versao = pacote.versao; estado.importadoEm = pacote.importadoEm || null;
         estado.origem = legado.origem || (estado.fonte === 'sgs' ? 'Banco Central (SGS)' : null);
       } else {
         aplicar(null);
@@ -194,6 +197,47 @@
         return atualizarAgora().then(function (st) { if (aoMudar) aoMudar(st); return st; });
       }
       return estado;
+    });
+  }
+
+  function buscarInstitucional(url) {
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 20000) : null;
+    return fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
+      if (!r.ok) throw new Error('resposta ' + r.status);
+      return r.json();
+    }).then(function (pacote) {
+      if (timer) clearTimeout(timer);
+      var erro = validarPacote(pacote);
+      if (erro) throw new Error(erro);
+      if (typeof pacote.geradoEm !== 'string' || !isFinite(Date.parse(pacote.geradoEm))) {
+        throw new Error('data de geração ausente ou inválida');
+      }
+      if (typeof pacote.fonte !== 'string' || !pacote.fonte.trim() || pacote.fonte.length > 200) {
+        throw new Error('fonte ausente ou inválida');
+      }
+      aplicar(pacote.series);
+      estado.fonte = 'institucional'; estado.versao = pacote.versao; estado.atualizadoEm = pacote.geradoEm;
+      estado.origem = pacote.fonte.trim(); estado.importadoEm = null; estado.erro = null;
+      return estado;
+    }).catch(function (err) {
+      if (timer) clearTimeout(timer);
+      estado.erro = 'Não foi possível consultar o pacote institucional (' +
+        (err && err.name === 'AbortError' ? 'tempo esgotado' : (err && err.message) || 'sem conexão') + ').';
+      return null;
+    });
+  }
+
+  /* Sem configuração institucional, mantém exatamente o fluxo atual; se a consulta falhar, usa o mesmo fluxo atual. */
+  function iniciar(aoMudar) {
+    var url = typeof root.CALCJUR_PACOTE_INDICES_URL === 'string' ? root.CALCJUR_PACOTE_INDICES_URL.trim() : '';
+    if (!url || typeof fetch !== 'function') return iniciarComDadosAtuais(aoMudar);
+    return buscarInstitucional(url).then(function (st) {
+      if (st) {
+        if (aoMudar) aoMudar(st);
+        return st;
+      }
+      return iniciarComDadosAtuais(aoMudar);
     });
   }
 
@@ -245,19 +289,20 @@
     try { pacote = JSON.parse(texto); } catch (_) { return Promise.reject(new Error('O arquivo não é um JSON válido (pode estar incompleto ou truncado).')); }
     var erro = validarPacote(pacote);
     if (erro) return Promise.reject(new Error(erro + ' Os índices em uso não foram alterados.'));
-    var legado = declarada(pacote.origem);
+    var legado = declarada(pacote.fonte || pacote.origem);
     pacote.origem = legado.origem;
     pacote.obtencao = 'arquivo';
     pacote.importadoEm = new Date().toISOString();
     aplicar(pacote.series);
+    pacote.quando = pacote.geradoEm || pacote.quando;
     if (typeof pacote.quando !== 'string' || !isFinite(Date.parse(pacote.quando))) pacote.quando = null;
-    estado.fonte = 'arquivo'; estado.atualizadoEm = pacote.quando; estado.importadoEm = pacote.importadoEm;
+    estado.fonte = 'arquivo'; estado.atualizadoEm = pacote.quando; estado.versao = pacote.versao; estado.importadoEm = pacote.importadoEm;
     estado.origem = pacote.origem; estado.erro = null;
     return gravar(pacote).then(function () { return estado; });
   }
   function voltarEmbutidos() {
     aplicar(null);
-    estado.fonte = 'embutida'; estado.atualizadoEm = null; estado.erro = null; estado.origem = null; estado.importadoEm = null;
+    estado.fonte = 'embutida'; estado.atualizadoEm = null; estado.versao = null; estado.erro = null; estado.origem = null; estado.importadoEm = null;
     return gravar(null).then(function () { return estado; });
   }
 

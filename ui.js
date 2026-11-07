@@ -957,8 +957,8 @@
   }
 
   /* Resumo de "Juros e encargos" (recolhido): o padrão numa linha, ou o que foi alterado. */
-  var REGIME_CURTO = { tjsp: 'juros de 0,5% a.m. até 10/01/2003, 1% até 29/08/2024 e taxa legal depois', taxalegal: 'taxa legal em todo o período', nenhum: 'sem juros',
-    selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 29/08/2024, depois correção e taxa legal' };
+  var REGIME_CURTO = { tjsp: 'juros de 0,5% a.m. até 10/01/2003, 1% até 28/08/2024 e taxa legal desde 29/08/2024', taxalegal: 'taxa legal em todo o período', nenhum: 'sem juros',
+    selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 28/08/2024, depois correção e taxa legal' };
   function resumirJuros() {
     var faz = tipo === 'fazenda', pen = tipo === 'pensao', reg = $('regime').value, partes = [];
     var dc = iso('dataCalculo'), parte = function (txt, mudou) { partes.push([txt, !!mudou]); };
@@ -969,6 +969,9 @@
     else parte(REGIME_CURTO[reg], reg !== 'tjsp');
     if (faz || reg !== 'nenhum') parte(termo() === 'data' ? 'desde ' + (iso('dataJuros') ? brIso(iso('dataJuros')) : 'a data informada') : 'desde o vencimento de cada parcela', termo() === 'data');
     if (!faz && (reg === 'tjsp' || reg === 'fixa' || reg === 'duas')) parte($('contagemDias').value === 'corridos' ? 'dias corridos' : 'mês comercial de 30 dias', $('contagemDias').value === 'corridos');
+    parte(faz ? ($('contagemJuros').value === 'mescheio' ? 'mês cheio selecionado (não aplicado à Fazenda)' : 'contagem própria da Fazenda (opção não aplicada)') :
+      ($('contagemJuros').value === 'mescheio' ? 'contagem de juros mês cheio' : 'contagem de juros pro rata'),
+      $('contagemJuros').value === 'mescheio');
     var multa = !faz && $('multa').checked, hon = $('honorarios').checked;
     parte(multa || hon ? [multa ? 'multa de 10%' : '', hon ? 'honorários de ' + ($('honorariosPct').value || '?') + '%' : ''].filter(Boolean).join(' e ') + ' do art. 523'
       : (faz ? 'sem honorários do art. 523' : 'sem multa nem honorários do art. 523'), multa || hon);
@@ -997,6 +1000,7 @@
     if (tipo !== 'pensao' && $('sucBase').value) u.push('sucumbência');
     return u;
   }
+  var NOMES_IMPUTACAO = { mes: 'mês do pagamento (primeiro a parcela que vence no mesmo mês)', automatica: 'automática (primeiro as parcelas vencidas mais antigas)' };
   var NOMES_INDICE = { tjsp: 'Tabela Prática do TJSP', ipca: 'IPCA', inpc: 'INPC', ipcae: 'IPCA-E', igpm: 'IGP-M', nenhum: 'sem correção' };
 
   function coletarPeriodos() {
@@ -1029,6 +1033,7 @@
       regime: $('regime').value,
       taxaFixa: lerNumero($('taxaFixa').value),
       contagemDias: $('contagemDias').value,
+      contagemJuros: $('contagemJuros').value,
       posEC136: $('posEC136').value,
       termoJuros: termo(),
       dataJuros: iso('dataJuros'),
@@ -1050,7 +1055,8 @@
       sucumbencia: tipo !== 'pensao' && $('sucBase').value ? { base: $('sucBase').value, pct: lerNumero($('sucPct').value),
         valor: lerNumero($('sucValor').value), data: iso('sucData'), transito: iso('sucTransito') } : null,
       parcelas: parcelas,
-      pagamentos: pagamentos
+      pagamentos: pagamentos,
+      imputacao: $('imputacao').value === 'automatica' ? 'automatica' : 'mes'
     };
   }
   /* Campos das opções avançadas e dos juros em duas taxas, como texto da tela (para guardar e restaurar); meses e datas em ISO. */
@@ -1072,14 +1078,15 @@
   function salvar(e) {
     try {
       localStorage.setItem(CHAVE, JSON.stringify({
-        tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, contagemDias: e.contagemDias, posEC136: e.posEC136,
+        tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, contagemDias: e.contagemDias,
+        contagemJuros: e.contagemJuros, posEC136: e.posEC136,
         termoJuros: e.termoJuros, dataJuros: e.dataJuros, multa: $('multa').checked, honorarios: e.honorarios,
         honorariosPct: $('honorariosPct').value, prazo523: iso('prazo523'), dataAjuizamento: iso('dataAjuizamento'), pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
         periodos: coletarPeriodosBrutos(),
         parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde, p.obrigacao]; }),
         avancados: avancadosBrutos(),
-        pagamentos: e.pagamentos.map(function (p) { return [p.data, p.valorTexto, p.parcela, p.origem]; }),
+        pagamentos: e.pagamentos.map(function (p) { return [p.data, p.valorTexto, p.parcela, p.origem]; }), imputacao: e.imputacao,
         origemAjuizamento: $('origemAjuizamento').dataset.origem || '',
         importacao: importacao,
         anterior: anterior, historico: historico, dataAtualizada: dataAtualizada, pdfAtualizacao: $('pdfAtualizacao').checked,
@@ -1124,7 +1131,7 @@
     var s = guardadoDaPagina();
     var casoGuardado = s && ['tipo', 'dataCalculo', 'periodos', 'parcelas', 'pagamentos', 'regime', 'avancados', 'dataAjuizamento', 'anterior']
       .some(function (k) { return Object.prototype.hasOwnProperty.call(s, k); });
-    perfilCalculo = s && [E.perfilCalculoHistorico, E.perfilCalculoAnterior, E.perfilCalculoAtual].indexOf(s.perfilCalculo) >= 0
+    perfilCalculo = s && [E.perfilCalculoHistorico, E.perfilCalculoAnterior, E.perfilCalculoAnteriorSemEventos, E.perfilCalculoAtual].indexOf(s.perfilCalculo) >= 0
       ? s.perfilCalculo : casoGuardado ? E.perfilCalculoAnterior : E.perfilCalculoAtual;
     porIso('dataCalculo', (s && s.dataCalculo) || dataPadrao());
     if (s) {
@@ -1132,6 +1139,9 @@
       $('regime').value = s.regime || 'tjsp';
       $('taxaFixa').value = s.taxaFixa || '1';
       $('contagemDias').value = s.contagemDias === 'corridos' ? 'corridos' : 'dias360';
+      $('contagemJuros').value = s.contagemJuros === 'mescheio' ? 'mescheio' : 'prorata';
+      // Cálculo guardado antes da opção foi feito pela imputação automática: reabre igual. Sem caso guardado, vale o padrão.
+      if (casoGuardado) $('imputacao').value = s.imputacao === 'mes' ? 'mes' : 'automatica';
       $('posEC136').value = s.posEC136 || 'selic';
       var r = document.querySelector('input[name=termo][value="' + (s.termoJuros || 'vencimento') + '"]');
       if (r) r.checked = true;
@@ -1197,10 +1207,10 @@
   function atualizarOpcoes(e) {
     var lista = [];
     try { lista = e.dataCalculo ? E.listarParcelas(e).filter(function (p) { return p.vencimento; }) : []; } catch (_) { lista = []; }
-    var assin = JSON.stringify(lista.map(function (p) { return [p.chave, p.vencimento, p.obrigacao || '']; })) + '#' + tipo;
+    var assin = JSON.stringify(lista.map(function (p) { return [p.chave, p.vencimento, p.obrigacao || '']; })) + '#' + tipo + '#' + e.imputacao;
     if (assin === assinaturaOpcoes) return;
     assinaturaOpcoes = assin;
-    var html = '<option value="">Automático</option>' + lista.map(function (p) {
+    var html = '<option value="">' + (e.imputacao === 'automatica' ? 'Automático' : 'Mês do pagamento') + '</option>' + lista.map(function (p) {
       return '<option value="' + p.chave + '">' + esc(rotuloParcela(p)) + '</option>';
     }).join('');
     cada(listaG.querySelectorAll('li'), function (li) {
@@ -1464,6 +1474,7 @@
 
     $('blocoPagamentos').hidden = !res.pagamentos.length;
     $('tabPagamentos').classList.toggle('sem-encargos', !faz);
+    $('criterioImputacao').textContent = 'Critério: ' + NOMES_IMPUTACAO[res.imputacao] + '.';
     var pg = '';
     res.pagamentos.forEach(function (p) {
       var apl = p.aplicacoes.length ? p.aplicacoes : [null];
@@ -1494,6 +1505,7 @@
 
   function criterios(e, res) {
     var c = [];
+    var mesCheio = e.contagemJuros === 'mescheio';
     if (e.perfilCalculo !== E.perfilCalculoAtual) c.push(descricaoPerfilPreservado(e.perfilCalculo));
     if (e.tipo === 'fazenda') {
       c.push('Débito não tributário contra a Fazenda Pública. Correção pelo IPCA-E (Tema 810/STF e Tema 905/STJ), com os fatores da Tabela EC 113/2021 do TJSP.');
@@ -1502,6 +1514,8 @@
       c.push(e.posEC136 === 'ipca2'
         ? 'A partir de 10/09/2025, IPCA + 2% a.a., limitado à Selic de cada mês, por aplicação do critério da EC 136/2025 também à fase anterior à requisição.'
         : 'Depois de 10/09/2025 (EC 136/2025) mantém-se a Selic até a data do cálculo, por entender-se que a nova regra vale só a partir da expedição do requisitório.');
+      c.push('Contagem selecionada: ' + (mesCheio ? 'mês cheio (não aplicado)' : 'pro rata (opção não aplicada)') +
+        '; a regra própria da Fazenda Pública foi mantida.');
     } else {
       if (e.tipo === 'pensao') {
         c.push('Prestações geradas a partir dos períodos do título, uma por mês, no dia de vencimento indicado (ou no último dia do mês, se ele for menor). Pensão em salários mínimos: salário mínimo nacional vigente na data de cada vencimento; daí em diante, correção e juros como em qualquer prestação vencida.');
@@ -1512,18 +1526,22 @@
         if (res && res.rito) c.push('Rito da prisão: as três prestações da pensão vencidas antes do ajuizamento (' + brIso(e.dataAjuizamento) + ') e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ). As demais parcelas, inclusive as avulsas, vão para o rito da penhora.');
       }
       c.push(textoCorrecao(e));
-      if (e.regime === 'tjsp') c.push('Juros simples de 0,5% ao mês até 10/01/2003 (CC/1916, art. 1.062), 1% ao mês de 11/01/2003 a 29/08/2024 (CC/2002, art. 406 c/c CTN, art. 161, § 1º) e, a partir de 30/08/2024 (Lei 14.905/2024), taxa legal, sem lacuna nem sobreposição de dias; confira o título e a hipótese jurídica aplicável.');
+      if (e.regime === 'tjsp') c.push('Juros simples de 0,5% ao mês até 10/01/2003 (CC/1916, art. 1.062), 1% ao mês de 11/01/2003 a 28/08/2024 (CC/2002, art. 406 c/c CTN, art. 161, § 1º) e, a partir de 29/08/2024 (Lei 14.905/2024), taxa legal, sem lacuna nem sobreposição de dias; confira o título e a hipótese jurídica aplicável.');
       if (e.regime === 'taxalegal') c.push('Taxa legal (art. 406 do CC) em todo o período, conforme a leitura do Tema 1368/STJ para o período anterior à Lei 14.905/2024: Selic deduzida do IPCA-15 (Res. CMN 5.171/2024) e, antes de 08/2024, Selic deduzida da variação da Tabela Prática, como nas planilhas do TJSP.');
       if (e.regime === 'fixa') c.push('Juros de ' + num(e.taxaFixa, 2) + '% ao mês.');
       if (e.regime === 'nenhum') c.push('Sem juros de mora.');
       if (e.regime === 'duas') c.push('Juros de ' + num(e.jurosDuas.taxa1, 2) + '% ao mês até ' + brIso(e.jurosDuas.ate) + ' e, depois, ' +
         (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% ao mês.' : 'taxa legal (Selic deduzida do IPCA-15, art. 406 do CC).'));
-      if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais, pro rata die, sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
-      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 29/08/2024; a partir de 30/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais, pro rata die, sobre o capital.');
+      if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
+      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 28/08/2024; a partir de 29/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital.');
       var comp = e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas');
       if (e.regime !== 'nenhum') c.push((comp ? 'Juros compostos, com capitalização mensal, nas taxas fixas: (1 + taxa)^(meses + dias ÷ 30) − 1; taxa legal e Selic sempre simples. ' : 'Juros simples sobre o capital corrigido. ') +
-        (e.contagemDias === 'corridos' ? 'Taxa fixa: meses completos de data a data, mais os dias corridos restantes ÷ 30. ' : 'Taxa fixa: dias contados em mês comercial de 30 dias (função DIAS360, como nas planilhas do TJSP) ÷ 30. ') + 'Taxa legal: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).');
+        (mesCheio ? 'Taxas fixas: meses completos pelos limites mensais da planilha TJSP (critério pendente de validação). Taxa legal e Selic: taxas mensais nos meses completos entre os limites mensais. ' :
+          (e.contagemDias === 'corridos' ? 'Taxa fixa: meses completos de data a data, mais os dias corridos restantes ÷ 30. ' :
+            'Taxa fixa: dias contados em mês comercial de 30 dias (função DIAS360, como nas planilhas do TJSP) ÷ 30. ') +
+          'Taxa legal e Selic: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).'));
     }
+    if (e.tipo !== 'fazenda') c.push('Contagem de juros: ' + (mesCheio ? 'mês cheio' : 'pro rata (padrão)') + '.');
     if (!(e.tipo !== 'fazenda' && e.regime === 'nenhum')) {
       c.push(e.termoJuros === 'data'
         ? 'Juros contados de ' + brIso(e.dataJuros) + ', ou do vencimento, se posterior.'
@@ -1537,7 +1555,9 @@
     var temObrigacao = e.parcelas.some(function (p) { return !!p.obrigacao; });
     if (temObrigacao) c.push('Linhas com o mesmo ID de obrigação são frações da mesma dívida, com as mesmas datas de vencimento, correção, juros e rito. Sem ID, cada linha é uma dívida autônoma: não há agrupamento por data, valor ou descrição.');
     if (e.pagamentos.length) {
-      c.push('Pagamentos e levantamentos imputados na data em que foram feitos (CC, arts. 352 a 355): primeiro na ' + (temObrigacao ? 'obrigação da parcela indicada' : 'parcela indicada') + ', se houver; depois nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada ' + (temObrigacao ? 'obrigação, consideradas todas as suas frações' : 'parcela') + ', primeiro nos juros e encargos, depois no capital (art. 354).');
+      var mesPag = (res ? res.imputacao : e.imputacao) === 'mes';
+      c.push('Critério de imputação dos pagamentos: ' + NOMES_IMPUTACAO[mesPag ? 'mes' : 'automatica'] + '. Pagamentos e levantamentos imputados na data em que foram feitos (CC, arts. 352 a 355): primeiro na ' + (temObrigacao ? 'obrigação da parcela indicada' : 'parcela indicada') + ', se houver; ' +
+        (mesPag ? 'sem indicação, na ' + (temObrigacao ? 'obrigação' : 'parcela') + ' com vencimento no mesmo mês do pagamento; o excedente, ou o pagamento feito em mês sem parcela em aberto, é imputado' : 'depois') + ' nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada ' + (temObrigacao ? 'obrigação, consideradas todas as suas frações' : 'parcela') + ', primeiro nos juros e encargos, depois no capital (art. 354).');
     }
     if ((e.multa && e.tipo !== 'fazenda') || e.honorarios) {
       c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) +
@@ -1626,7 +1646,7 @@
       '</td><td class="num">' + moeda(t.juros) + '</td>' + (faz ? '<td class="num">' + moeda(t.encargos) + '</td>' : '') + '<td class="num">' + moeda(t.subtotal) + '</td>' + (res.rito ? '<td></td>' : '') + '</tr></tfoot></table>';
 
     if (res.pagamentos.length) {
-      h += '<h2>Imputação dos pagamentos</h2><table class="dados"><thead><tr><th>Pagamento</th><th>Data</th><th class="num">Valor</th><th>Parcela</th><th class="num">Juros</th>' + (faz ? '<th class="num">Encargos</th>' : '') + '<th class="num">Capital</th></tr></thead><tbody>';
+      h += '<h2>Imputação dos pagamentos</h2><p>Critério: ' + esc(NOMES_IMPUTACAO[res.imputacao]) + '.</p><table class="dados"><thead><tr><th>Pagamento</th><th>Data</th><th class="num">Valor</th><th>Parcela</th><th class="num">Juros</th>' + (faz ? '<th class="num">Encargos</th>' : '') + '<th class="num">Capital</th></tr></thead><tbody>';
       res.pagamentos.forEach(function (p) {
         p.aplicacoes.forEach(function (a, i) {
           h += '<tr><td>' + (i ? '' : p.n) + '</td><td>' + (i ? '' : brIso(p.data)) + '</td><td class="num">' + (i ? '' : moeda(p.valor)) + '</td><td>' + a.parcela +
@@ -1772,24 +1792,31 @@
   function ultimoDe(tab) { return Object.keys(D[tab]).sort().pop(); }
   /* Forma de obtenção (consulta ao SGS ou arquivo importado) separada da fonte declarada nos dados. */
   function descricaoIndices(st) {
+    if (st.fonte === 'institucional') {
+      return 'do pacote institucional versão ' + (st.versao == null ? 'não informada' : st.versao) +
+        ' (fonte: ' + (st.origem || 'não informada') + (st.atualizadoEm ? ', gerado em ' + dataHoraBr(st.atualizadoEm) : '') + ')';
+    }
     if (st.fonte === 'arquivo') {
       return 'de arquivo importado' + (st.importadoEm ? ' em ' + dataHoraBr(st.importadoEm) : '') + ' (fonte declarada no arquivo: ' +
         (st.origem || 'não informada') + (st.atualizadoEm ? ', dados de ' + dataHoraBr(st.atualizadoEm) : '') + ')';
     }
     return 'atualizados pelo Banco Central (consulta ao SGS) em ' + dataHoraBr(st.atualizadoEm);
   }
-  var NOME_OBTENCAO = { sgs: 'Banco Central', arquivo: 'Arquivo importado', embutida: 'Tabela embutida' };
+  var NOME_OBTENCAO = { institucional: 'Pacote institucional', sgs: 'Banco Central', arquivo: 'Arquivo importado', embutida: 'Tabela embutida' };
   function renderIndices() {
     var st = I.estado();
     var selo = $('statusSelo'), txt = $('statusTexto');
     if (st.divergencias.length) { selo.className = 'badge badge-alerta'; selo.textContent = 'Conferir índices'; }
+    else if (st.fonte === 'institucional') { selo.className = 'badge badge-ok'; selo.textContent = 'Pacote institucional'; }
     else if (st.fonte === 'sgs') { selo.className = 'badge badge-ok'; selo.textContent = 'Índices atualizados'; }
     else if (st.fonte === 'arquivo') { selo.className = 'badge badge-neutro'; selo.textContent = 'Índices de arquivo importado'; }
     else if (st.web) { selo.className = 'badge badge-neutro'; selo.textContent = 'Índices da publicação'; }
     else if (st.erro) { selo.className = 'badge badge-alerta'; selo.textContent = 'Sem atualização'; }
     else { selo.className = 'badge badge-neutro'; selo.textContent = 'Tabela embutida'; }
     var em = D.indicesEmbutidosEm ? ' com o Banco Central em ' + brIso(D.indicesEmbutidosEm) : '';
-    var txtLongo = (st.fonte === 'sgs' ? (st.origem || 'Banco Central') + ', ' + dataHoraBr(st.atualizadoEm)
+    var txtLongo = (st.fonte === 'institucional' ? 'Pacote institucional versão ' + (st.versao == null ? 'não informada' : st.versao) +
+      ', ' + (st.origem || 'fonte não informada') + ', gerado em ' + dataHoraBr(st.atualizadoEm)
+      : st.fonte === 'sgs' ? (st.origem || 'Banco Central') + ', ' + dataHoraBr(st.atualizadoEm)
       : st.fonte === 'arquivo' ? 'Índices ' + descricaoIndices(st)
       : (st.web ? (em ? 'Conferidos' + em : 'Embutidos na página') : 'Tabela embutida na extensão' + (em ? ', conferida' + em : ''))) + '. Cálculos até ' + U.mesBr(D.ultimoMes) + '.';
     txt.textContent = 'até ' + U.mesBr(D.ultimoMes);
@@ -1813,8 +1840,8 @@
     }).join('');
     var nota = $('notaIndices'), partes = [];
     if (st.fonte !== 'embutida') {
-      var deOnde = st.fonte === 'arquivo' ? 'do arquivo importado' : 'do Banco Central';
-      partes.push('Conferência automática: ' + st.conferidos + ' variações mensais ' + deOnde + ' comparadas com os fatores do TJSP embutidos na extensão, ' +
+      var deOnde = st.fonte === 'institucional' ? 'do pacote institucional' : st.fonte === 'arquivo' ? 'do arquivo importado' : 'do Banco Central';
+      partes.push('Conferência automática: ' + st.conferidos + ' variações mensais ' + deOnde + ' comparadas com os fatores da Tabela Prática do TJSP embutidos, ' +
         (st.divergencias.length ? st.divergencias.length + ' com divergência: ' + st.divergencias.join(' ') : 'nenhuma divergência') + '.');
       if (st.mesesNovos) partes.push(st.mesesNovos + (st.mesesNovos === 1 ? ' mês novo calculado' : ' meses novos calculados') + ' a partir das séries ' + deOnde + '.');
     } else if (st.web) {
@@ -1822,7 +1849,7 @@
     } else {
       partes.push('A calculadora está usando os índices que vieram com a extensão. Com internet, ela busca os novos no Banco Central sozinha, no máximo a cada 12 horas.');
     }
-    if (st.erro && !st.web) partes.push(st.erro + ' Os cálculos seguem com os índices já guardados.');
+    if (st.erro) partes.push(st.erro + ' Os cálculos seguem com os índices já disponíveis.');
     $('atualizarIndices').hidden = !!st.web;
     nota.textContent = partes.join(' ');
     nota.classList.toggle('erro-texto', !!st.erro || st.divergencias.length > 0);
@@ -1873,8 +1900,8 @@
   var lidoCopilot = null;
   var NOMES_BASE = { pct_sm: '% do salário mínimo', qtd_sm: 'salários mínimos', pct_rend: '% dos rendimentos', fixo: 'valor fixo' };
   var NOMES_TIPO = { pensao: 'Pensão alimentícia', particular: 'Débito cível', fazenda: 'Fazenda Pública' };
-  var NOMES_REGIME = { tjsp: '0,5% a.m. até 10/01/2003, 1% até 29/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros',
-    duas: 'uma taxa até certa data, depois outra', selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 29/08/2024, depois correção e taxa legal' };
+  var NOMES_REGIME = { tjsp: '0,5% a.m. até 10/01/2003, 1% até 28/08/2024, depois taxa legal', taxalegal: 'taxa legal em todo o período', fixa: 'taxa fixa', nenhum: 'sem juros',
+    duas: 'uma taxa até certa data, depois outra', selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 28/08/2024, depois correção e taxa legal' };
 
   function linhasPrevia(d) {
     var L = [];
@@ -1892,6 +1919,7 @@
     });
     if (d.ajuizamento) L.push(['Ajuizamento', brIso(d.ajuizamento.data), d.ajuizamento.origem]);
     d.parcelas.forEach(function (p, i) { L.push([(d.tipo === 'pensao' || !d.tipo ? 'Parcela avulsa ' : 'Parcela ') + (i + 1), brIso(p.vencimento) + ' – ' + moeda(p.valor) + (p.descricao ? ' (' + p.descricao + ')' : '') + (p.obrigacao ? ' – ' + identidadeObrigacao(p) : ''), p.origem]); });
+    if (d.pagamentos.length) L.push(['Imputação', NOMES_IMPUTACAO[d.imputacao === 'automatica' ? 'automatica' : 'mes'], null]);
     d.pagamentos.forEach(function (p, i) { L.push(['Pagamento ' + (i + 1), brIso(p.data) + ' – ' + moeda(p.valor), p.origem]); });
     if (d.encargos) L.push(['Art. 523, § 1º', (d.encargos.multa ? 'multa de 10%' : 'sem multa') + (d.encargos.honorariosPct ? '; honorários de ' + num(d.encargos.honorariosPct, 0) + '%' : '; sem honorários'), null]);
     d.pendencias.forEach(function (p) { L.push(['Pendência', p, null]); });
@@ -1921,6 +1949,7 @@
   function preencher(d) {
     perfilCalculo = d.perfilCalculo || (d.calculoAnterior ? E.perfilCalculoHistorico : E.perfilCalculoAtual);
     definirTipo(d.tipo || 'pensao');
+    $('contagemJuros').value = d.juros && d.juros.contagemJuros === 'mescheio' ? 'mescheio' : 'prorata';
     if (d.juros) {
       if (d.juros.regime) $('regime').value = d.juros.regime;
       if (d.juros.regime === 'fixa') $('taxaFixa').value = num(d.juros.taxaMensal, 2);
@@ -1934,6 +1963,7 @@
       porIso('dataJuros', d.juros.termo === 'data' ? d.juros.data : '');
     }
     if (d.posEC136) $('posEC136').value = d.posEC136;
+    $('imputacao').value = d.imputacao === 'automatica' ? 'automatica' : 'mes';
     var cv = d.civel || {};
     $('indiceCorrecao').value = cv.indice || 'tjsp';
     $('trocaIndice').checked = !!cv.indice2;
@@ -2069,7 +2099,7 @@
       partes: ($('procExequente').value.trim() || $('procExecutado').value.trim()) ? { exequente: $('procExequente').value.trim(), executado: $('procExecutado').value.trim() } : undefined,
       juros: semVazio({ regime: faz ? undefined : e.regime, taxaMensal: !faz && e.regime === 'fixa' ? e.taxaFixa : undefined,
         termoInicial: e.termoJuros, data: e.termoJuros === 'data' ? e.dataJuros : undefined,
-        contagemDias: !faz && e.contagemDias === 'corridos' ? 'corridos' : undefined,
+        contagemDias: !faz && e.contagemDias === 'corridos' ? 'corridos' : undefined, contagemJuros: e.contagemJuros,
         duasTaxas: !faz && e.regime === 'duas' ? semVazio({ taxa1: e.jurosDuas.taxa1, ate: e.jurosDuas.ate, depois: e.jurosDuas.depois,
           taxa2: e.jurosDuas.depois === 'fixa' ? e.jurosDuas.taxa2 : undefined }) : undefined }),
       civel: e.tipo === 'particular' ? semVazio({ indice: e.civel.indice, indice2: e.civel.indice2 || undefined, indice2Desde: e.civel.indice2 ? e.civel.indice2Desde : undefined,
@@ -2089,6 +2119,7 @@
         .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined, obrigacao: p.obrigacao || undefined }); }),
       pagamentos: e.pagamentos.filter(function (p) { return p.data && p.valor > 0; })
         .map(function (p) { return semVazio({ data: p.data, valor: p.valor, parcela: p.parcela || undefined, origem: p.origem || undefined }); }),
+      imputacao: e.imputacao,
       encargos: semVazio({ multa523: !faz && e.multa, honorariosPct: e.honorarios ? e.honorariosPct : null, prazo523: e.prazo523 || undefined }),
       pendencias: importacao && !importacao.revisado ? importacao.pendencias.slice() : [],
       observacoes: importacao && importacao.observacoes ? importacao.observacoes : undefined,
@@ -2130,7 +2161,7 @@
     leitor.readAsText(f);
   });
   /* Campos do caso que o arquivo pode não trazer: voltam ao padrão da tela nova, sem herdar o caso anterior. */
-  var CAMPOS_DO_CASO = ['regime', 'taxaFixa', 'contagemDias', 'posEC136', 'dataJuros', 'multa', 'honorarios', 'honorariosPct', 'prazo523',
+  var CAMPOS_DO_CASO = ['regime', 'taxaFixa', 'contagemDias', 'contagemJuros', 'posEC136', 'imputacao', 'dataJuros', 'multa', 'honorarios', 'honorariosPct', 'prazo523',
     'procNumero', 'procExequente', 'procExecutado'].concat(CAMPOS_AVANCADOS, MARCAS_AVANCADAS);
   function zerarCaso() {
     CAMPOS_DO_CASO.forEach(function (id) {
@@ -2249,7 +2280,8 @@
     }
     if (!res) itens.push('Sem resultado nesta data. Veja a mensagem no quadro do resultado' + (dc === ant.dataCalculo ? ': se houver pagamento lançado depois de ' + brIso(ant.dataCalculo) + ', a conferência na data anterior não é possível com ele na lista.' : '.'));
     var ci = compararIndices(indicesSalvos);
-    if (indicesSalvos && typeof indicesSalvos.fonte === 'string') itens.push('Índices usados no cálculo salvo: ' + indicesSalvos.fonte.slice(0, 60) + '.');
+    if (indicesSalvos && typeof indicesSalvos.fonte === 'string') itens.push('Índices usados no cálculo salvo: ' + indicesSalvos.fonte.slice(0, 60) +
+      (indicesSalvos.fonte === 'pacote institucional' && indicesSalvos.versao != null ? ', versão ' + String(indicesSalvos.versao).slice(0, 40) : '') + '.');
     if (ci) {
       if (ci.mudou.length) itens.push('Índices que mudaram desde o cálculo salvo (' + ci.mudou.length + '): ' + ci.mudou.slice(0, 4).join('; ') + (ci.mudou.length > 4 ? '; e mais ' + (ci.mudou.length - 4) : '') + '. Por isso, refeito na mesma data, o total pode não bater.');
       if (ci.faltam.length) itens.push('O cálculo salvo usou índices que esta calculadora ainda não tem: ' + ci.faltam.slice(0, 3).join('; ') + (ci.faltam.length > 3 ? '; e mais ' + (ci.faltam.length - 3) : '') + '. Atualize os índices antes de refazer.');
@@ -2264,9 +2296,12 @@
     $('atualizarPerfilCalculo').hidden = perfilCalculo === E.perfilCalculoAtual;
   }
   function descricaoPerfilPreservado(perfil) {
-    return 'Perfil de cálculo ' + perfil + ' preservado, com corte em ' + (perfil === E.perfilCalculoHistorico ? '29/08/2024' : '30/08/2024') +
-      ' e eventos antigos: pagamentos podem provocar atualizações incidentais em outras obrigações. O perfil ' + E.perfilCalculoAtual +
-      ' atualiza apenas a obrigação afetada pelo evento e evita essas atualizações incidentais. A migração é explícita e pode alterar centavos; confira a memória antes de adotá-la.';
+    var corte = perfil === E.perfilCalculoAnterior || perfil === E.perfilCalculoAnteriorSemEventos ? '30/08/2024' : '29/08/2024';
+    var eventosAntigos = perfil === E.perfilCalculoHistorico || perfil === E.perfilCalculoAnterior;
+    return 'Perfil de cálculo ' + perfil + ' preservado, com corte em ' + corte +
+      (eventosAntigos ? ' e eventos antigos: pagamentos podem provocar atualizações incidentais em outras obrigações.' :
+        ' e atualização apenas da obrigação afetada pelo evento.') + ' O perfil ' + E.perfilCalculoAtual +
+      ' usa o corte atual em 29/08/2024 e atualiza apenas a obrigação afetada pelo evento. A migração é explícita e pode alterar centavos; confira a memória antes de adotá-la.';
   }
   $('refazerAnterior').addEventListener('click', function () {
     if (!anterior) return;
@@ -2319,7 +2354,9 @@
     }
     var st = I.estado();
     return { conferidosEm: st.fonte !== 'embutida' ? st.atualizadoEm : (D.indicesEmbutidosEm || null),
-      fonte: st.fonte === 'sgs' ? 'Banco Central' : st.fonte === 'arquivo' ? 'arquivo importado' : 'tabela embutida',
+      fonte: st.fonte === 'institucional' ? 'pacote institucional' : st.fonte === 'sgs' ? 'Banco Central' :
+        st.fonte === 'arquivo' ? 'arquivo importado' : 'tabela embutida',
+      versao: st.fonte === 'institucional' && st.versao != null ? st.versao : undefined,
       de: de, ate: ate, tabelas: tabelas };
   }
   function rotuloIndice(t, k) { return NOMES_TAB[t] + ' de ' + (t === 'SALARIO_MINIMO' ? brIso(k) : U.mesBr(k)); }
@@ -2361,7 +2398,11 @@
     if (!faz) gerais.push(['Juros', NOMES_REGIME[e.regime] + (e.regime === 'fixa' ? ' de ' + num(e.taxaFixa, 2) + '% a.m.' : '') +
       (e.regime === 'duas' ? ': ' + num(e.jurosDuas.taxa1, 2) + '% a.m. até ' + brIso(e.jurosDuas.ate) + ', depois ' + (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% a.m.' : 'taxa legal') : '') +
       (e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas') ? ', compostos' : '') +
-      ((e.regime === 'tjsp' || e.regime === 'fixa' || e.regime === 'duas') ? (e.contagemDias === 'corridos' ? '; dias corridos' : '; mês comercial de 30 dias') : '')]);
+      ((e.regime === 'tjsp' || e.regime === 'fixa' || e.regime === 'duas') && e.contagemJuros !== 'mescheio' ?
+        (e.contagemDias === 'corridos' ? '; dias corridos' : '; mês comercial de 30 dias') : '') +
+      '; contagem de juros ' + (e.contagemJuros === 'mescheio' ? 'mês cheio' : 'pro rata')]);
+    else gerais.push(['Contagem de juros', e.contagemJuros === 'mescheio' ?
+      'Mês cheio selecionado, mas não aplicado à Fazenda Pública' : 'Pro rata (padrão); regra atual da Fazenda mantida']);
     if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido']);
     if (e.sucumbencia && e.sucumbencia.base) gerais.push(['Honorários de sucumbência', ({ condenacao: num(e.sucumbencia.pct, 2) + '% sobre a condenação',
       causa: num(e.sucumbencia.pct, 2) + '% sobre o valor da causa de ' + moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
@@ -2369,6 +2410,7 @@
       (e.sucumbencia.base !== 'condenacao' && e.sucumbencia.transito ? '; juros desde o trânsito em julgado (' + brIso(e.sucumbencia.transito) + ')' : '')]);
     else gerais.push(['Critério após 10/09/2025', e.posEC136 === 'ipca2' ? 'IPCA + 2% a.a., limitado à Selic' : 'Selic']);
     if (faz || e.regime !== 'nenhum') gerais.push(['Termo inicial dos juros', e.termoJuros === 'data' ? brIso(e.dataJuros) : 'vencimento de cada parcela']);
+    if (e.pagamentos.length) gerais.push(['Imputação dos pagamentos', NOMES_IMPUTACAO[res.imputacao]]);
     if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) : 'não informado']);
     if (!faz) gerais.push(['Art. 523, § 1º', (e.multa ? 'multa de 10%' : 'sem multa') + '; ' + (e.honorarios ? 'honorários de ' + num(e.honorariosPct, e.honorariosPct % 1 ? 2 : 0) + '%' : 'sem honorários') +
       (e.prazo523 && (e.multa || e.honorarios) ? '; fim do prazo em ' + brIso(e.prazo523) : '')]);
@@ -2427,7 +2469,7 @@
     if (temDados() && !confirm('Começar um cálculo novo? Tudo o que está na tela será apagado. Se quiser guardar este cálculo, clique em Cancelar e use "Salvar" antes.')) return;
     try {
       localStorage.setItem(CHAVE, JSON.stringify({ tipo: tipo, unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
-        pdfDetalhado: $('pdfDetalhado').checked, dataCalculo: dataPadrao() }));
+        pdfDetalhado: $('pdfDetalhado').checked, dataCalculo: dataPadrao(), imputacao: 'mes' }));
     } catch (_) {}
     location.reload();
   });

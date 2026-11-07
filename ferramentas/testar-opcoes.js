@@ -58,9 +58,9 @@ caso('troca de índice', base({ civel: { indice: 'tjsp', indice2: 'ipca', indice
 caso('IGP-M', base({ civel: { indice: 'igpm' } }), r2(10000 * acum('IGPM', '2023-03', '2026-10')));
 caso('INPC', base({ civel: { indice: 'inpc' } }), r2(10000 * acum('INPC', '2023-03', '2026-10')));
 
-// 4. "Duas taxas" com 1% até 29/08/2024 e taxa legal depois = regime padrão.
+// 4. "Duas taxas" com 1% até 28/08/2024 e taxa legal depois = regime padrão.
 const padrao = E.calcular(base({ regime: 'tjsp' })).totais.total;
-caso('duas taxas = padrão', base({ regime: 'duas', jurosDuas: { taxa1: 1, ate: '2024-08-29', depois: 'taxalegal' } }), padrao);
+caso('duas taxas = padrão', base({ regime: 'duas', jurosDuas: { taxa1: 1, ate: '2024-08-28', depois: 'taxalegal' } }), padrao);
 
 // 5. 1% até 14/03/2025 e 0,5% depois. 15/03/2023 a 15/03/2025: 24 meses; 15/03/2025 a 31/10/2026: 19 meses e 16 dias.
 const cap = r2(10000 * D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2023-03']);
@@ -74,12 +74,12 @@ caso('juros compostos', base({ regime: 'fixa', taxaFixa: 1, civel: { jurosCompos
 // 7. Selic como juros e correção, em todo o período (até o último mês fechado da Selic em data.js).
 caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 * proRata('SELIC', '2023-03-15', '2026-10-31') / 100)));
 
-// 8. Selic até 29/08/2024; depois Tabela Prática e taxa legal.
+// 8. Selic até 28/08/2024; depois Tabela Prática e taxa legal.
 (function () {
-  const sel = r2(10000 * proRata('SELIC', '2023-03-15', '2024-08-30') / 100);
+  const sel = r2(10000 * proRata('SELIC', '2023-03-15', '2024-08-29') / 100);
   const f = D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2024-08'];
   const P = r2(10000 * f), J0 = r2(sel * f);
-  const tl = r2(P * proRata('TAXA_LEGAL', '2024-08-30', '2026-10-31') / 100);
+  const tl = r2(P * proRata('TAXA_LEGAL', '2024-08-29', '2026-10-31') / 100);
   caso('Selic até a Lei 14.905, depois taxa legal', base({ regime: 'selic_tl' }), r2(P + r2(J0 + tl)));
 })();
 
@@ -88,8 +88,8 @@ caso('Selic em todo o período', base({ regime: 'selic' }), r2(10000 + r2(10000 
   const pre = r2(10000 * (28 + 9 / 30) / 100);             // 01/01/2022 a 10/05/2024: 28 meses e 9 dias a 1%
   const f = D.FATORES_TJSP['2026-10'] / D.FATORES_TJSP['2024-05'];
   const P = r2(10000 * f), J0 = r2(pre * f);
-  const j1 = 3 + 20 / 30;                                     // 10/05/2024 a 30/08/2024: 3 meses e 20 dias (mês comercial)
-  const j = r2(P * (j1 + proRata('TAXA_LEGAL', '2024-08-30', '2026-10-31')) / 100);
+  const j1 = 3 + 19 / 30;                                     // 10/05/2024 a 29/08/2024: 3 meses e 19 dias (mês comercial)
+  const j = r2(P * (j1 + proRata('TAXA_LEGAL', '2024-08-29', '2026-10-31')) / 100);
   caso('termos próprios da parcela', base({ regime: 'tjsp', parcelas: [{ vencimento: '2024-05-10', valor: 10000, correcaoDesde: '2024-05-10', jurosDesde: '2022-01-01' }] }),
     r2(P + r2(J0 + j)));
 })();
@@ -131,24 +131,31 @@ caso('juros fixos do dia 31 a 28/02, dias corridos', base({ regime: 'fixa', taxa
 caso('juros fixos de 15/01 a 15/03, dias corridos', base({ regime: 'fixa', taxaFixa: 1, civel: { indice: 'nenhum' }, dataCalculo: '2023-03-15',
   contagemDias: 'corridos', parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }), 10200);
 
-// 12b. Novo regime a partir de 30/08/2024; intervalos de juros são [início, fim).
+// 12b. Novo regime a partir de 29/08/2024; intervalos de juros são [início, fim).
 caso('vencimento em 28/08/2024', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-09-02',
   parcelas: [{ vencimento: '2024-08-28', valor: 10000 }] }),
-  r2(10000 + r2(10000 * (2 / 30 + proRata('TAXA_LEGAL', '2024-08-30', '2024-09-02')) / 100)));
-caso('intervalo termina na transição', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30',
-  parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }), r2(10000 + r2(10000 / 30 / 100)));
+  r2(10000 + r2(10000 * (1 / 30 + proRata('TAXA_LEGAL', '2024-08-29', '2024-09-02')) / 100)));
 caso('perfil histórico preserva o corte anterior', base({ regime: 'tjsp', perfilCalculo: E.perfilCalculoHistorico,
   civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-29', '2024-08-30') / 100)));
-caso('perfil atual usa o corte atual', base({ regime: 'tjsp', perfilCalculo: E.perfilCalculoAtual,
+caso('perfil 2 preserva o corte anterior', base({ regime: 'tjsp', perfilCalculo: E.perfilCalculoAnterior,
   civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
   r2(10000 + r2(10000 / 30 / 100)));
+caso('perfil 3 preserva o corte anterior', base({ regime: 'tjsp', perfilCalculo: E.perfilCalculoAnteriorSemEventos,
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
+  r2(10000 + r2(10000 / 30 / 100)));
+caso('perfil atual usa o corte atual', base({ regime: 'tjsp', perfilCalculo: E.perfilCalculoAtual,
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
+  r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-29', '2024-08-30') / 100)));
 caso('perfil histórico preserva o corte de Selic', base({ regime: 'selic_tl', perfilCalculo: E.perfilCalculoHistorico,
   civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-29', '2024-08-30') / 100)));
-caso('perfil atual usa o corte atual de Selic', base({ regime: 'selic_tl', perfilCalculo: E.perfilCalculoAtual,
+caso('perfil 2 preserva o corte anterior de Selic', base({ regime: 'selic_tl', perfilCalculo: E.perfilCalculoAnterior,
   civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('SELIC', '2024-08-29', '2024-08-30') / 100)));
+caso('perfil atual usa o corte atual de Selic', base({ regime: 'selic_tl', perfilCalculo: E.perfilCalculoAtual,
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }),
+  r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-29', '2024-08-30') / 100)));
 caso('vencimento na transição', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-08-31',
   parcelas: [{ vencimento: '2024-08-30', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-30', '2024-08-31') / 100)));
@@ -162,12 +169,110 @@ caso('exemplo oficial BCB: R$ 1.000,00 de 30 a 31/08/2024, somente taxa legal', 
   assert.equal(resultado.totais.total, 1000.20);
   return resultado.totais.total;
 }, 1000.20);
+// Extenso.xlsm pelo LibreOffice, sem macros: O20 alternado, D19=15/08/2024,
+// I37=B40=10/01/2024, D40=10000, I20=CC/02, O34=Não. Valores literais de H40/I40/N40.
+// N40 soma valores não arredondados; no mês cheio há R$ 0,01 de diferença por N04.
+[
+  { contagem: 'prorata', jurosPlanilha: 737.773079591565, totalPlanilha: 11032.281166915727,
+    juros: 737.77, total: 11032.28, totalExibidoPlanilha: 11032.28, diferenca: 0 },
+  { contagem: 'mescheio', jurosPlanilha: 720.6155661126913, totalPlanilha: 11015.123653436855,
+    juros: 720.62, total: 11015.13, totalExibidoPlanilha: 11015.12, diferenca: 0.01 }
+].forEach(g => {
+  caso('Extenso 06/11/2026: R$ 10.000,00 de 10/01 a 15/08/2024, ' + g.contagem, () => {
+    const entrada = base({ regime: 'tjsp', contagemJuros: g.contagem, civel: { indice: 'tjsp' },
+      dataCalculo: '2024-08-15', parcelas: [{ vencimento: '2024-01-10', valor: 10000 }] });
+    const r = E.calcular(entrada);
+    assert.equal(r2(10294.508087324162), 10294.51);
+    assert.equal(r2(g.jurosPlanilha), g.juros);
+    assert.equal(r2(g.totalPlanilha), g.totalExibidoPlanilha);
+    assert.equal(r.totais.capital, 10294.51);
+    assert.equal(r.totais.juros, g.juros);
+    assert.equal(r.totais.total, r2(r.totais.capital + r.totais.juros));
+    assert.equal(r2(r.totais.total - g.totalExibidoPlanilha), g.diferenca);
+    if (g.contagem === 'mescheio') {
+      assert.match(r.linhas[0].eventos.join(' '), /7 meses e 0 dias \(mês cheio\) = 7,0000%/);
+    } else {
+      delete entrada.contagemJuros;
+      assert.deepEqual(E.calcular(entrada).totais, r.totais);
+    }
+    return r.totais.total;
+  }, g.total);
+});
+caso('planilha TJSP: taxa legal em três meses cheios, com os extremos incompletos', () => {
+  const r = E.calcular(base({ regime: 'taxalegal', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2024-11-15', parcelas: [{ vencimento: '2024-08-15', valor: 10000 }] }));
+  assert.equal(r.totais.capital, 10000);
+  assert.equal(r.totais.juros, 198.58);
+  assert.match(r.linhas[0].eventos.join(' '), /3 meses contados/);
+  return r.totais.total;
+}, 10198.58);
+caso('planilha TJSP: Selic linearizada em três meses cheios', () => {
+  const r = E.calcular(base({ regime: 'selic', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2023-04-15', parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }));
+  assert.equal(r.totais.juros, 321);
+  assert.match(r.linhas[0].eventos.join(' '), /3 meses contados/);
+  return r.totais.total;
+}, 10321);
+caso('planilha TJSP: início e fim no mesmo mês contam zero mês completo', () => {
+  const r = E.calcular(base({ regime: 'taxalegal', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2024-09-25', parcelas: [{ vencimento: '2024-09-15', valor: 10000 }] }));
+  assert.equal(r.totais.juros, 0);
+  assert.match(r.linhas[0].eventos.join(' '), /0 meses contados/);
+  return r.totais.total;
+}, 10000);
+caso('planilha TJSP: juros fixos em início e fim no mesmo mês', () => {
+  const r = E.calcular(base({ regime: 'fixa', taxaFixa: 1, contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2023-01-28', parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }));
+  assert.equal(r.totais.juros, 0);
+  assert.match(r.linhas[0].eventos.join(' '), /0 meses e 0 dias \(mês cheio\)/);
+  return r.totais.total;
+}, 10000);
+caso('planilha TJSP: duas taxas fixas contam o mês da troca só na segunda fase', () => {
+  const r = E.calcular(base({ regime: 'duas', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2023-03-15', jurosDuas: { taxa1: 1, ate: '2023-02-14', depois: 'fixa', taxa2: 2 },
+    parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }));
+  assert.equal(r.totais.juros, 300);
+  assert.match(r.linhas[0].eventos.join(' '), /1 mês.*mês cheio.*2,0000%/);
+  return r.totais.total;
+}, 10300);
+caso('planilha TJSP: tjsp atribui o mês da transição à taxa legal', base({ regime: 'tjsp', contagemJuros: 'mescheio',
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-09-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10160.53);
+caso('planilha TJSP: selic_tl atribui agosto à taxa legal sem duplicar o mês', base({ regime: 'selic_tl', contagemJuros: 'mescheio',
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-10-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10219.15);
+assert.throws(() => E.calcular(base({ contagemJuros: 'invalida' })), /Contagem de juros desconhecida/);
+const defaultProRata = E.calcular(base({ regime: 'taxalegal', civel: { indice: 'nenhum' } })).totais.total;
+assert.equal(E.calcular(base({ regime: 'taxalegal', contagemJuros: 'prorata', civel: { indice: 'nenhum' } })).totais.total, defaultProRata);
+const fazendaProRata = E.calcular({ tipo: 'fazenda', dataCalculo: '2026-10-31', termoJuros: 'vencimento', parcelas: [{ vencimento: '2020-06-10', valor: 10000 }], pagamentos: [] });
+const fazendaMesCheio = E.calcular({ tipo: 'fazenda', dataCalculo: '2026-10-31', termoJuros: 'vencimento', contagemJuros: 'mescheio', parcelas: [{ vencimento: '2020-06-10', valor: 10000 }], pagamentos: [] });
+assert.equal(fazendaMesCheio.totais.total, fazendaProRata.totais.total);
+assert.ok(fazendaMesCheio.avisos.some(a => /mês cheio não se aplica à Fazenda Pública/.test(a)));
 caso('vencimento em 31/08/2024', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-09-01',
   parcelas: [{ vencimento: '2024-08-31', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-08-31', '2024-09-01') / 100)));
 caso('vencimento em 01/09/2024', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-09-02',
   parcelas: [{ vencimento: '2024-09-01', valor: 10000 }] }),
   r2(10000 + r2(10000 * proRata('TAXA_LEGAL', '2024-09-01', '2024-09-02') / 100)));
+// Só a parcela fixa é gabarito; a tela do contador usa outro método para a taxa legal.
+for (const [vencimento, esperado] of [
+  ['2024-08-26', 0.10], ['2024-08-27', 0.07], ['2024-08-28', 0.03], ['2024-08-29', 0.00]
+]) {
+  const fixos = E.juros(vencimento, '2024-09-30', 'tjsp', 1, 'dias360', 'prorata').trechos
+    .filter(trecho => /^Juros de 1% a\.m\./.test(trecho.texto))
+    .reduce((total, trecho) => total + trecho.pct, 0);
+  assert.equal(Number(fixos.toFixed(2)), esperado, 'juros fixos para vencimento em ' + vencimento);
+}
+const transicaoSemJuros = E.calcular(base({ regime: 'tjsp', civel: { indice: 'nenhum' },
+  dataCalculo: '2024-08-29', parcelas: [{ vencimento: '2024-08-29', valor: 10000 }] }));
+assert.equal(transicaoSemJuros.totais.juros, 0);
+caso('N10: gabarito do contador em 06/11/2026, antes da vigência da taxa legal', () => {
+  const r = E.calcular({ tipo: 'particular', dataCalculo: '2024-08-15', regime: 'tjsp', termoJuros: 'vencimento',
+    contagemJuros: 'prorata', civel: { indice: 'tjsp' }, parcelas: [{ vencimento: '2024-01-10', valor: 10000 }], pagamentos: [] });
+  assert.equal(r.totais.capital, 10294.51);
+  assert.equal(r.totais.juros, 737.77);
+  assert.equal(r.totais.total, 11032.28);
+  assert.doesNotMatch(r.linhas[0].eventos.join(' '), /Taxa legal/);
+  return r.totais.total;
+}, 11032.28);
 caso('período vazio no corte', base({ regime: 'tjsp', civel: { indice: 'nenhum' }, dataCalculo: '2024-08-30',
   parcelas: [{ vencimento: '2024-08-30', valor: 10000 }] }), 10000);
 
@@ -187,10 +292,11 @@ caso('tjsp anterior a 2003 usa 0,5% a.m.', base({ regime: 'tjsp', dataCalculo: '
 caso('tjsp iniciado em 11/01/2003 usa 1% a.m.', base({ regime: 'tjsp', dataCalculo: '2003-02-11', civel: { indice: 'nenhum' },
   parcelas: [{ vencimento: '2003-01-11', valor: 10000 }] }), 10100);
 caso('tjsp iniciado depois de 2003 mantém 1% a.m.', base({ regime: 'tjsp', dataCalculo: '2024-08-30', civel: { indice: 'nenhum' },
-  parcelas: [{ vencimento: '2003-01-12', valor: 10000 }] }), 35960);
+  parcelas: [{ vencimento: '2003-01-12', valor: 10000 }] }),
+  r2(10000 + r2(10000 * (259 + 17 / 30 + proRata('TAXA_LEGAL', '2024-08-29', '2024-08-30')) / 100)));
 caso('tjsp atravessa as três fases', base({ regime: 'tjsp', dataCalculo: '2024-08-31', civel: { indice: 'nenhum' },
   parcelas: [{ vencimento: '2001-05-01', valor: 10000 }] }),
-  r2(10000 + r2(10000 * (10.1666666667 + 259.6333333333 + proRata('TAXA_LEGAL', '2024-08-30', '2024-08-31')) / 100)));
+  r2(10000 + r2(10000 * (10.1666666667 + 259.6 + proRata('TAXA_LEGAL', '2024-08-29', '2024-08-31')) / 100)));
 caso('0,5% a.m. respeita dias corridos', base({ regime: 'tjsp', contagemDias: 'corridos', dataCalculo: '2001-02-28', civel: { indice: 'nenhum' },
   parcelas: [{ vencimento: '2001-01-31', valor: 10000 }] }), 10050);
 const trechosAntigos = E.juros('2001-05-01', '2003-01-11', 'tjsp').trechos;
@@ -199,6 +305,14 @@ assert.match(trechosAntigos[0].texto, /Juros de 0,5% a\.m\. \(CC\/1916\)/);
 const copilotAntigo = C.ler({ formato: 'calcjur-copilot', versao: 1, tipo: 'particular',
   juros: { regime: 'tjsp' }, civel: { indice: 'nenhum' }, outrasParcelas: [{ vencimento: '2001-05-01', valor: 10000 }] });
 assert.equal(copilotAntigo.erros.length, 0);
+assert.equal(copilotAntigo.dados.juros.contagemJuros, 'prorata');
+const copilotMesCheio = C.ler({ formato: 'calcjur-copilot', versao: 1, tipo: 'particular',
+  juros: { regime: 'taxalegal', contagemJuros: 'mescheio' }, outrasParcelas: [{ vencimento: '2024-08-15', valor: 10000 }] });
+assert.equal(copilotMesCheio.erros.length, 0);
+assert.equal(copilotMesCheio.dados.juros.contagemJuros, 'mescheio');
+const copilotContagemInvalida = C.ler({ formato: 'calcjur-copilot', versao: 1, tipo: 'particular',
+  juros: { regime: 'tjsp', contagemJuros: 'dias360' }, outrasParcelas: [{ vencimento: '2024-08-15', valor: 10000 }] });
+assert.match(copilotContagemInvalida.erros.join(' '), /Contagem de juros desconhecida/);
 assert.equal(E.calcular(Object.assign({}, copilotAntigo.dados, { dataCalculo: '2003-01-11',
   regime: copilotAntigo.dados.juros.regime, termoJuros: copilotAntigo.dados.juros.termo })).totais.total, 11016.67);
 const pensaoAntiga = E.calcular({ tipo: 'pensao', dataCalculo: '2008-05-01', regime: 'tjsp', termoJuros: 'vencimento',

@@ -8,7 +8,8 @@ A. Demonstrativo da própria calculadora (tem o "Anexo: dados do cálculo"): cop
 B. Outro demonstrativo que lista cada prestação com vencimento e valor original: se ele ou o título indicar a base (ex.: 30% do salário mínimo), monte os períodos; se não, lance cada prestação em "outrasParcelas" com o valor original e peça o título para gerar as prestações seguintes.
 C. Documento só com totais, ou que não separa valor original de correção e juros: não gere o bloco. Peça o título e a situação desde o início da dívida, ou um demonstrativo com as prestações.
 D. Arquivo .calcjur colado: use os dados como estão e acrescente as novidades.
-Em todos: se o anterior usou critério diferente do título ou de decisão (outro percentual, outro índice, juros errados), siga o título e registre a divergência em "pendencias", explicando que o total vai mudar por isso. Compare sempre o critério de juros do anterior com o da calculadora (0,5% a.m. até 10/01/2003; 1% até 29/08/2024; taxa legal desde 30/08/2024, Lei 14.905/2024): se ele aplicou 1% a.m. depois de 29/08/2024, a pendência é obrigatória.
+- Para juros.contagemJuros, use "mescheio" somente se o título ou decisão determinar mês cheio; se não determinar, informe "prorata".
+Em todos: se o anterior usou critério diferente do título ou de decisão (outro percentual, outro índice, juros errados), siga o título e registre a divergência em "pendencias", explicando que o total vai mudar por isso. Compare sempre o critério de juros do anterior com o da calculadora (0,5% a.m. até 10/01/2003; 1% até 28/08/2024; taxa legal desde 29/08/2024, Lei 14.905/2024): se ele aplicou 1% a.m. depois de 28/08/2024, a pendência é obrigatória.
 
 PERGUNTE ANTES DE GERAR
 Numa única mensagem, liste o que achou (data do cálculo anterior, total, bases, pagamentos considerados e critério de correção e juros que ele usou) e pergunte:
@@ -27,6 +28,7 @@ REGRAS DOS CAMPOS
 - rendimentos: obrigatório em todo período "pct_rend": os do anterior, mais os novos informados. Lista vazia só se ninguém informou o valor, com pendência. Bruto não vira líquido: peça o líquido.
 - Férias, PLR e verbas não mensais: só com data e valor da pensão sobre elas; senão, pendência.
 - pagamentos: TODOS, os do cálculo anterior e os novos, com data e valor originais. A calculadora reimputa tudo. Não lance o total pago como um só pagamento se o anterior lista vários. Mesma data e valor repetidos: pergunte.
+- imputacao: o critério do anterior. "automatica" se ele imputou nas parcelas mais antigas primeiro (anexo da calculadora: "Imputação dos pagamentos: automática"; demonstrativo antigo da calculadora sem essa linha também); "mes" se imputou na prestação do mês do pagamento, e nos demais casos.
 - dataAjuizamento: a da execução em curso. Tarja de juntada ou protocolo não é ajuizamento.
 - calculoAnterior: {"dataCalculo": data até a qual o anterior atualizou ("valores atualizados até"), não a data da juntada ou da assinatura; "total": total devido nessa data; "totalPrisao" e "totalPenhora" se houver; "origem": onde está}.
 - processo: o da execução. O número do título é o da ação de origem; na dúvida, pergunte. Se o usuário disser "o do documento", use o número que o documento dá à execução. Desconhecido: "" e pendência; nunca o número do exemplo.
@@ -44,7 +46,7 @@ Resumo curto: o que veio do cálculo anterior, o que muda e as pendências. Depo
 {
   "formato": "calcjur-copilot", "versao": 1, "tipo": "pensao",
   "processo": "0000000-00.0000.8.26.0000",
-  "juros": { "regime": "tjsp", "termoInicial": "vencimento", "origem": "Cálculo anterior, anexo" },
+  "juros": { "regime": "tjsp", "termoInicial": "vencimento", "contagemJuros": "prorata", "origem": "Cálculo anterior, anexo" },
   "periodos": [
     { "inicio": "2021-03", "fim": "2022-10", "diaVencimento": 5, "base": "pct_rend", "valor": 30, "incide13": true,
       "origem": "Cálculo anterior, anexo",
@@ -59,6 +61,7 @@ Resumo curto: o que veio do cálculo anterior, o que muda e as pendências. Depo
     { "data": "2021-09-30", "valor": 250.00, "origem": "Cálculo anterior, anexo" },
     { "data": "2024-01-08", "valor": 600.00, "origem": "Informado pelo usuário" }
   ],
+  "imputacao": "mes",
   "encargos": { "multa523": false, "honorariosPct": null },
   "calculoAnterior": { "dataCalculo": "2023-06-30", "total": 9875.40, "origem": "Demonstrativo de fls. 80" },
   "pendencias": [ "Comprovante do pagamento de 2024-01-08 não juntado" ], "observacoes": ""

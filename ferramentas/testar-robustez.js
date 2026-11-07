@@ -45,11 +45,20 @@ function pacoteValido() {
   };
 }
 
+function pacoteInstitucional() {
+  const pacote = pacoteValido();
+  delete pacote.quando;
+  delete pacote.origem;
+  pacote.geradoEm = '2026-10-01T12:00:00.000Z';
+  pacote.fonte = 'CTI';
+  return pacote;
+}
+
 (async function () {
-  await test('importação: perfis 1/2/3 são preservados; novo cálculo usa 3 e resultado antigo sem perfil usa 1', function () {
+  await test('importação: perfis 1/2/3/4 são preservados; novo cálculo usa 4 e resultado antigo sem perfil usa 1', function () {
     const caso = { formato: 'calcjur-copilot', versao: 1, tipo: 'particular', outrasParcelas: [{ vencimento: '2024-01-01', valor: 500 }] };
-    assert.strictEqual(copilot.ler(caso).dados.perfilCalculo, 3);
-    for (const perfilCalculo of [1, 2, 3]) {
+    assert.strictEqual(copilot.ler(caso).dados.perfilCalculo, 4);
+    for (const perfilCalculo of [1, 2, 3, 4]) {
       const r = copilot.ler({ ...caso, perfilCalculo });
       assert.deepStrictEqual(r.erros, []);
       assert.strictEqual(r.dados.perfilCalculo, perfilCalculo);
@@ -57,7 +66,7 @@ function pacoteValido() {
     const anterior = { ...caso, calculoAnterior: { dataCalculo: '2025-01-01', total: 500 } };
     assert.strictEqual(copilot.ler(anterior).dados.perfilCalculo, 1);
     assert.strictEqual(copilot.ler({ ...anterior, perfilCalculo: 2 }).dados.perfilCalculo, 2);
-    assert.match(copilot.ler({ ...caso, perfilCalculo: 4 }).erros.join(' '), /Perfil de cálculo desconhecido/);
+    assert.match(copilot.ler({ ...caso, perfilCalculo: 5 }).erros.join(' '), /Perfil de cálculo desconhecido/);
   });
 
   await test('importação: obrigação explícita é texto de até 80 caracteres, sem inferência nas parcelas antigas', function () {
@@ -156,6 +165,60 @@ function pacoteValido() {
     ({ I } = carregarIndices(arm4));
     await I.iniciar();
     assert.strictEqual(I.estado().fonte, 'sgs', 'pacote antigo da consulta direta continua como Banco Central');
+  });
+
+  await test('pacote institucional válido é priorizado e compara as séries com os fatores TJSP', async function () {
+    const armazenamento = {};
+    const { I } = carregarIndices(armazenamento);
+    const fetchAnterior = globalThis.fetch, urlAnterior = globalThis.CALCJUR_PACOTE_INDICES_URL;
+    globalThis.CALCJUR_PACOTE_INDICES_URL = 'https://indices.institucional/pacote.json';
+    globalThis.fetch = async (url) => {
+      assert.strictEqual(url, globalThis.CALCJUR_PACOTE_INDICES_URL);
+      return { ok: true, json: async () => pacoteInstitucional() };
+    };
+    try {
+      const st = await I.iniciar();
+      assert.strictEqual(st.fonte, 'institucional');
+      assert.strictEqual(st.versao, 1);
+      assert.strictEqual(st.atualizadoEm, '2026-10-01T12:00:00.000Z');
+      assert.strictEqual(st.origem, 'CTI');
+      assert.ok(st.divergencias.some((d) => /Tabela Prática/.test(d)), 'mês divergente da tabela TJSP deve ser avisado');
+    } finally {
+      globalThis.fetch = fetchAnterior;
+      if (urlAnterior === undefined) delete globalThis.CALCJUR_PACOTE_INDICES_URL;
+      else globalThis.CALCJUR_PACOTE_INDICES_URL = urlAnterior;
+    }
+  });
+
+  await test('falha do pacote institucional segue a consulta atual ao SGS', async function () {
+    const pacoteSalvo = pacoteValido();
+    pacoteSalvo.obtencao = 'arquivo';
+    const armazenamento = { 'calcjur:indices:v1': JSON.stringify(pacoteSalvo) };
+    const { I } = carregarIndices(armazenamento);
+    const fetchAnterior = globalThis.fetch, urlAnterior = globalThis.CALCJUR_PACOTE_INDICES_URL;
+    const buscarAnterior = globalThis.CALCJUR_BUSCAR_BCB;
+    let bcb = 0;
+    globalThis.CALCJUR_PACOTE_INDICES_URL = 'https://indices.institucional/pacote.json';
+    globalThis.CALCJUR_BUSCAR_BCB = true;
+    globalThis.fetch = async (url) => {
+      if (url === globalThis.CALCJUR_PACOTE_INDICES_URL) throw new Error('indisponível');
+      bcb++;
+      return { ok: true, json: async () => [{ data: '01/01/2024', valor: '0.5' }] };
+    };
+    try {
+      const st = await I.iniciar();
+      assert.strictEqual(st.fonte, 'sgs');
+      assert.strictEqual(bcb, Object.keys(I.SERIES).length, 'consulta às séries SGS continua depois da falha institucional');
+      const salvo = JSON.parse(armazenamento['calcjur:indices:v1']);
+      assert.strictEqual(salvo.fonte, 'Banco Central (SGS)');
+      assert.ok(salvo.geradoEm, 'a exportação mantém a data de geração');
+    } finally {
+      globalThis.fetch = fetchAnterior;
+      if (urlAnterior === undefined) delete globalThis.CALCJUR_PACOTE_INDICES_URL;
+      else globalThis.CALCJUR_PACOTE_INDICES_URL = urlAnterior;
+      if (buscarAnterior === undefined) delete globalThis.CALCJUR_BUSCAR_BCB;
+      else globalThis.CALCJUR_BUSCAR_BCB = buscarAnterior;
+    }
   });
 
   await test('B1 pacote de índices inválido é recusado indicando série e registro, sem tocar nas tabelas em uso', async function () {

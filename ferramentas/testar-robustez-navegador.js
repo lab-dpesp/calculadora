@@ -3,7 +3,7 @@
  *   A1 contrato: resultado desatualizado após edição ou erro bloqueia imprimir/CSV/JSON até novo cálculo válido;
  *   A2 contrato e débitos: abrir B depois de A dá o mesmo que abrir B numa tela nova;
  *   A3 contrato: valor líquido informado x presumido sobrevive a salvar e reabrir (e arquivos 1.0.0);
- *   A4 débitos: índices de arquivo importado continuam "arquivo importado" depois de recarregar, salvar e reabrir;
+ *   A4 débitos: origem, versão e índices continuam identificados ao recarregar, salvar e reabrir;
  *   B1/B2 débitos: pacote de índices inválido, arquivo grande, truncado ou de versão incompatível não altera nada;
  *   C1/C3 contrato: CET sem juros mostra 0,00% (sem sinal) e rótulo da primeira parcela SAC.
  * Confere o texto mostrado ao usuário, não só os valores.
@@ -344,6 +344,39 @@ function pacoteIndices() {
     series: { inpc: serie('0.50'), ipca15: serie('0.40'), ipcae: serie('0.40'), ipca: serie('0.42'), selic: serie('0.97'),
       taxaLegal: serie('0.60'), sm: [{ data: '01/01/2024', valor: '1412.00' }], igpm: serie('0.30') } };
 }
+function pacoteInstitucional() {
+  const pacote = pacoteIndices();
+  delete pacote.quando;
+  delete pacote.origem;
+  pacote.geradoEm = '2026-10-01T12:00:00.000Z';
+  pacote.fonte = 'CTI';
+  return pacote;
+}
+teste('índices institucionais: origem e versão aparecem no cálculo e no .calcjur; divergência TJSP é avisada', async () => {
+  const page = await novaPagina('calc.html?calc=civel');
+  const url = 'https://indices.institucional/pacote.json';
+  await page.addInitScript(({ endpoint, pacote }) => {
+    window.CALCJUR_PACOTE_INDICES_URL = endpoint;
+    const fetchOriginal = window.fetch;
+    window.fetch = (input, options) => input === endpoint
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve(pacote) })
+      : fetchOriginal(input, options);
+  }, { endpoint: url, pacote: pacoteInstitucional() });
+  await page.reload();
+  await page.waitForFunction(() => /Pacote institucional versão 1/.test(document.getElementById('resumoIndices').textContent));
+  assert.match(await page.locator('#resumoIndices').textContent(), /CTI/);
+  assert.match(await page.locator('#notaIndices').textContent(), /com divergência: Tabela Prática/);
+
+  const caso = lerCaso('civel-tjsp.calcjur');
+  delete caso.calculoAnterior; delete caso.indices;
+  await abrirCalc(page, 'caso.calcjur', JSON.stringify(caso));
+  assert.match(await page.locator('#criterios').innerText(), /pacote institucional versão 1 \(fonte: CTI/);
+  const salvo = JSON.parse(await baixar(page, '#salvarCalculo'));
+  assert.strictEqual(salvo.indices.fonte, 'pacote institucional');
+  assert.strictEqual(salvo.indices.versao, 1);
+  assert.strictEqual(salvo.indices.conferidosEm, '2026-10-01T12:00:00.000Z');
+});
+
 teste('A4/B1 débitos: índices de arquivo importado continuam "arquivo importado" ao recarregar, salvar e reabrir; pacote inválido é recusado', async () => {
   const page = await novaPagina('calc.html?calc=civel');
   const caso = lerCaso('civel-tjsp.calcjur');

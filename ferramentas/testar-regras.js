@@ -12,7 +12,7 @@ const DOCUMENTO = 'REGRAS-DE-NEGOCIO.md';
 const ORIGINAL = '# Registro\n\n## Calculadora normal\n\nRegra normal.\n\n' +
   '## Contratos de consumidor\n\nRegra consumidor.\n\n## Manutenção obrigatória e comando\n\nComando.\n';
 const DATA = "var DADOS = {\n  ultimoMes: '2026-10',\n  indicesEmbutidosEm: '2026-10-24',\n" +
-  "  vigenciaLei14905: '2024-08-29',\n  SELIC: {\n    '2026-09': 1.2,\n    '2026-10': 1.3\n  }\n};\n";
+  "  vigenciaLei14905: '2024-08-30',\n  SELIC: {\n    '2026-09': 1.2,\n    '2026-10': 1.3\n  }\n};\n";
 const SNAPSHOT = "(function (root) {\n  var snapshot = " +
   '{"catalogVersion":"2","consultedAt":"2026-10-30","observations":{"25464":[{"month":"2026-09","value":1}]}}' +
   ";\n  root.ContratoSeriesBacen = snapshot;\n})(this);\n";
@@ -142,7 +142,7 @@ caso('atualização numérica dos índices dispensa documento', ({ gravar, verif
   assert.deepEqual(verificar(), []);
 });
 caso('corte normativo em data.js exige seção normal', ({ gravar, verificar }) => {
-  gravar('data.js', DATA.replace('2024-08-29', '2024-08-30'));
+  gravar('data.js', DATA.replace('2024-08-30', '2024-08-29'));
   assert.match(verificar().join('\n'), /data\.js/);
 });
 caso('alteração de estrutura ou lógica em data.js não é dado', ({ gravar, verificar }) => {
