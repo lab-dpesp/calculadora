@@ -30,6 +30,8 @@
  *                                                                     (pensão, opcional: rendimento do mês ou valor
  *                                                                      de uma prestação no lugar do apurado pela base)
  *   "dataAjuizamento": { "data": "AAAA-MM-DD", "origem": "..." },    (pensão, opcional)
+ *   "ritoExecucao": "ambos" | "prisao" | "penhora",                  (pensão, opcional; ausente: ainda não definido)
+ *   "ritosManuais": { "p:AAAA-MM" | "d:AAAA": "prisao" | "penhora" }, (pensão, opcional: prestações movidas de rito)
  *   "outrasParcelas": [ { "vencimento": "AAAA-MM-DD", "valor": 0, "descricao": "...", "origem": "...",
  *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD",
  *                         "obrigacao": "ID opcional, até 80 caracteres" } ],
@@ -281,9 +283,22 @@
     });
     if (d.tipo === 'pensao' && !d.periodos.length && !(o.outrasParcelas || []).length) erros.push('Pensão sem períodos e sem parcelas: o Copilot não teve dados para montar o cálculo. Responda às pendências na conversa com ele e cole o novo bloco.');
 
+    if (o.ritoExecucao != null && o.ritoExecucao !== '') {
+      if (['ambos', 'prisao', 'penhora'].indexOf(o.ritoExecucao) >= 0) d.ritoExecucao = o.ritoExecucao;
+      else erros.push('Rito da execução inválido ("' + texto(o.ritoExecucao) + '"). Use "ambos", "prisao" ou "penhora".');
+    }
+    if (o.ritosManuais != null) {
+      var rm = o.ritosManuais, chavesRm = typeof rm === 'object' && !Array.isArray(rm) ? Object.keys(rm) : null;
+      if (!chavesRm || chavesRm.some(function (k) { return !/^(p:\d{4}-\d{2}|d:\d{4})$/.test(k) || (rm[k] !== 'prisao' && rm[k] !== 'penhora'); })) {
+        erros.push('Prestações movidas de rito inválidas. Use a prestação ("p:AAAA-MM" ou "d:AAAA") e "prisao" ou "penhora".');
+      } else if (chavesRm.length) {
+        d.ritosManuais = {};
+        chavesRm.forEach(function (k) { d.ritosManuais[k] = rm[k]; });
+      }
+    }
     var aj = o.dataAjuizamento;
     if (aj && typeof aj === 'object' && (aj.data == null || aj.data === '')) {
-      avisos.push('Data do ajuizamento não informada' + (aj.origem ? ' (' + texto(aj.origem) + ')' : '') + '. Sem ela, o débito não é separado por rito.');
+      avisos.push('Data do ajuizamento não informada' + (aj.origem ? ' (' + texto(aj.origem) + ')' : '') + '. Sem ela, a separação dos ritos, se pedida, usa a data do cálculo como ajuizamento previsto.');
       aj = null;
     }
     if (aj) {

@@ -4,7 +4,7 @@
 A planilha é aberta sem macros; o script só preenche os campos de entrada e lê os resultados das fórmulas.
 Saída: um JSON com, para cada caso, a entrada e o que a planilha apurou (valor corrigido, juros e total).
 
-  python3 ferramentas/tjsp/gabarito-tjsp.py [quantidade=300] [semente=1] [saida] [modelo=simples|extenso]
+  python3 ferramentas/tjsp/gabarito-tjsp.py [quantidade=300] [semente=1] [saida] [modelo=simples|extenso] [contagem=prorata|mescheio]
 
 Modelo "simples" (planilha "Cálculo Simples"; aba Menus, célula B6), saída padrão gabarito.json:
   2  Tabela Prática + 1% a.m. até ago/2024, depois Selic menos correção  -> regime "tjsp" da calculadora
@@ -24,6 +24,9 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 300
 SEMENTE = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 MODELO = sys.argv[4] if len(sys.argv) > 4 else 'simples'
+CONTAGEM = sys.argv[5] if len(sys.argv) > 5 else 'prorata'
+if CONTAGEM not in ('prorata', 'mescheio'):
+    raise SystemExit('Contagem inválida: use prorata ou mescheio.')
 SAIDA = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else os.path.join(AQUI, 'gabarito.json' if MODELO == 'simples' else 'gabarito-extenso.json')
 PLANILHA = os.environ.get('PLANILHA_TJSP', os.path.join(AQUI, 'planilhas', 'Calculo-Simples.xlsm' if MODELO == 'simples' else 'Extenso.xlsm'))
 EXT_OPCOES = {
@@ -95,7 +98,7 @@ def extenso(desk):
             valor = round(rnd.uniform(100, 200000), 2)
             f.getCellRangeByName('I20').setString(EXT_OPCOES[regime])
             f.getCellRangeByName('J20').setValue(0.12)
-            f.getCellRangeByName('O20').setString('pro rata')
+            f.getCellRangeByName('O20').setString('mês cheio' if CONTAGEM == 'mescheio' else 'pro rata')
             f.getCellRangeByName('O34').setString('Não')
             f.getCellRangeByName('D19').setValue(serial(calc))
             f.getCellRangeByName('I37').setValue(serial(juros))
@@ -106,9 +109,10 @@ def extenso(desk):
             casos.append({'opcao': regime, 'dataCalculo': calc, 'vencimento': ini, 'jurosDesde': juros, 'valor': valor,
                           'tj': {'corrigido': g('H40'), 'pctJurosFixos': g('K40'), 'pctTaxaLegal': g('L40'),
                                  'juros': g('I40'), 'total': g('N40')}})
-        json.dump({'planilha': os.path.basename(PLANILHA), 'modelo': 'extenso', 'indicesAte': ultimo.strftime('%Y-%m'),
+        json.dump({'planilha': os.path.basename(PLANILHA), 'modelo': 'extenso', 'contagemJuros': CONTAGEM, 'indicesAte': ultimo.strftime('%Y-%m'),
                    'semente': SEMENTE, 'casos': casos}, open(SAIDA, 'w'), ensure_ascii=False, indent=1)
-        print('%d casos calculados na planilha Extenso do TJSP (índices até %s) -> %s' % (len(casos), ultimo.strftime('%m/%Y'), SAIDA))
+        print('%d casos calculados na planilha Extenso do TJSP (%s, índices até %s) -> %s' %
+              (len(casos), CONTAGEM, ultimo.strftime('%m/%Y'), SAIDA))
     finally:
         doc.close(True)
 

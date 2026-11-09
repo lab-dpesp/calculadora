@@ -140,6 +140,28 @@
     return (low + high) / 2;
   }
 
+  // Taxa mensal que iguala o valor recebido às prestações (uma por mês, sem datas reais), como faz a calculadora do DOL.
+  function solveCashflowRate(receivedCents, paymentsCents) {
+    if (!Number.isSafeInteger(receivedCents) || receivedCents <= 0 || !Array.isArray(paymentsCents) || !paymentsCents.length ||
+        paymentsCents.some(function (p) { return !Number.isSafeInteger(p) || p <= 0; })) {
+      throw new Error('Informe valores positivos para identificar a taxa.');
+    }
+    var total = paymentsCents.reduce(function (sum, p) { return sum + p; }, 0);
+    if (total < receivedCents) throw new Error('Os pagamentos não liquidam o valor recebido.');
+    if (total === receivedCents) return 0;
+    var presentValue = function (rate) {
+      return paymentsCents.reduce(function (sum, p, index) { return sum + p / Math.pow(1 + rate, index + 1); }, 0);
+    };
+    var low = -0.999999, high = 10;
+    if (presentValue(high) > receivedCents) throw new Error('Taxa implícita fora do intervalo suportado.');
+    for (var i = 0; i < 160; i++) {
+      var middle = (low + high) / 2;
+      if (presentValue(middle) > receivedCents) low = middle;
+      else high = middle;
+    }
+    return (low + high) / 2;
+  }
+
   function parseIsoDate(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) throw new Error('Data inválida; use AAAA-MM-DD.');
     var parts = value.split('-').map(Number);
@@ -303,6 +325,7 @@
     schedulePrice: schedulePrice,
     scheduleSac: scheduleSac,
     solvePeriodicRate: solvePeriodicRate,
+    solveCashflowRate: solveCashflowRate,
     datedRate: datedRate,
     calculateCet: calculateCet,
     periodicDates: periodicDates,

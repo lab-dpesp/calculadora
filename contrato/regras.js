@@ -61,10 +61,12 @@
         'A taxa não foi informada. Não foi presumida uma taxa contratual; confira o instrumento e a taxa média da mesma espécie.',
         'STJ Tema 234 e Súmula 530 — revisão humana necessária.', ['contrato integral']);
     }
+    // Taxa comparada: a calculada sobre o valor liberado (critério do DOL); sem ela, a taxa informada (uso direto do motor).
+    var comparedRate = input.comparedRate !== undefined ? input.comparedRate : input.monthlyRate;
     if (input.comparison && input.comparison.available &&
-        Number.isFinite(input.monthlyRate) && input.comparison.differencePercentagePoints > 0) {
-      add('JUR_001', 'Taxa informada acima da referência BACEN', 'POTENTIAL_ISSUE',
-        'A taxa remuneratória informada supera a série de referência BACEN usada para esta modalidade e competência. A diferença é um dado de triagem, não conclusão de abusividade.',
+        Number.isFinite(comparedRate) && input.comparison.differencePercentagePoints > 0) {
+      add('JUR_001', 'Taxa do contrato acima da referência BACEN', 'POTENTIAL_ISSUE',
+        'A taxa do contrato, calculada sobre o valor liberado e incluindo IOF e tarifas financiados, supera a média BACEN da modalidade e competência. A diferença é um dado de triagem, não conclusão de abusividade.',
         'STJ Tema 27 — verificar a tese vigente e as circunstâncias do contrato.', ['contrato integral', 'memória de cálculo'],
         (function (state) { return state === 'red' ? 'red' : 'yellow'; })(trafficLight(input.comparison).state));
     }

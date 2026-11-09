@@ -341,6 +341,12 @@ button, input, select { font: inherit; color: inherit; }
 .rito-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .rito-valor { font-size: 20px; font-weight: 700; line-height: 32px; }
 .rito .sub { display: block; }
+.rito-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.nota-ritos { grid-column: 1 / -1; margin: 0; }
+.q-campo-rito { flex: 0 1 340px; }
+.btn-mover-rito { background: none; border: 0; padding: 2px 4px; margin-left: 2px; font: inherit; font-size: 12px; color: var(--primaria); text-decoration: underline; cursor: pointer; }
+.rito-ajustado { display: block; font-size: 11px; }
+.nota-rito { flex: 1 1 320px; max-width: 90ch; margin: 0; }
 .badge-prisao { background: #7B1FA2; }
 .badge-penhora { background: #1565C0; }
 .opcao-pequena { font-size: 13px; min-height: 0; margin-left: 4px; }
@@ -432,7 +438,7 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
     color-scheme: light;
     --fonte: "Figtree", -apple-system, "Segoe UI", sans-serif;
   }
-  .btn-ajuste { display: none !important; }
+  .btn-ajuste, .btn-mover-rito { display: none !important; }
   :root { --dp-verde: #12493C; --dp-verde-claro: #9FC440; --dp-tinta: #1d2522; --dp-cinza: #5f6b66; --dp-linha: #B7C9C0; --dp-fundo: #E6EFEA; }
   .tela { display: none !important; }
   html, body { background: #fff; }

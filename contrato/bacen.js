@@ -189,7 +189,7 @@
 
   function compareRates(contractMonthlyRate, item) {
     if (!item || !item.available) return { available: false, reason: item && item.reason || 'Comparação indisponível.' };
-    if (!Number.isFinite(contractMonthlyRate) || contractMonthlyRate < 0) return { available: false, reason: 'Taxa remuneratória contratual inválida ou não informada.' };
+    if (!Number.isFinite(contractMonthlyRate) || contractMonthlyRate < 0) return { available: false, reason: 'Taxa do contrato não calculada: confira o valor liberado, as parcelas e o prazo.' };
     var contractPercent = contractMonthlyRate * 100;
     return {
       available: true,

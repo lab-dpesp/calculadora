@@ -121,7 +121,9 @@ summary { cursor: pointer; font-weight: 600; }
 .semaforo-yellow { --badge: #5b3e00; border-color: var(--amarelo-borda); background: var(--amarelo-fundo); }
 .semaforo-red { --badge: #a00010; border-color: var(--vermelho); background: var(--vermelho-fundo); }
 .semaforo-gray { --badge: #525955; border-color: var(--cinza-borda); background: var(--cinza-fundo); }
-.cartoes { margin-bottom: 12px; }
+.cartoes { margin-bottom: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .cartoes { grid-template-columns: 1fr; } }
+.cartoes .nota { grid-column: 1 / -1; margin: 0; }
 .cartoes .metrica strong { font-size: 22px; }
 .metricas + .metricas { margin-top: 8px; }
 .achados { list-style: none; padding: 0; }

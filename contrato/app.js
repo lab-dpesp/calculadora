@@ -30,7 +30,7 @@
     ao_dia: 'ao dia', mensal: 'ao mês', anual: 'ao ano',
     evento_unico: 'incidência única', nao_informada: 'periodicidade não informada'
   };
-  var modes = { financed: 'Financiado', upfront: 'Pago à vista', deducted: 'Descontado da liberação', recurring: 'Cobrado em cada parcela', unknown: 'Desconhecido' };
+  var modes = { financed: 'Financiado', upfront: 'Pago à vista', deducted: 'Descontado da liberação', recurring: 'Cobrado em cada parcela (valor por parcela)', unknown: 'Desconhecido' };
   var formatMoney = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   var percentFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Resíduo numérico que arredondaria para zero (ex.: CET de -6e-16) não pode aparecer como "−0,00".
@@ -48,6 +48,10 @@
   var ORIGINS = ['documento', 'usuario', 'presumido'];
   var LEGACY_NET_ASSUMPTION = 'valor líquido presumido igual ao valor financiado, sem encargos informados';
   var LEGACY_DISBURSEMENT_ASSUMPTION = 'liberação presumida na data do contrato (';
+  var NET_MINUS_CHARGES_ASSUMPTION = 'valor líquido presumido igual ao valor financiado menos os encargos financiados ou descontados da liberação (';
+  var NET_EQUALS_FINANCED_WITH_CHARGES_ASSUMPTION = 'valor líquido presumido igual ao valor financiado (os encargos informados foram pagos à vista ou cobrados nas parcelas)';
+  // Encargo "cobrado em cada parcela" acima desta fração da parcela sugere que foi digitado o valor total.
+  var RECURRING_CHARGE_WARNING_SHARE = 0.25;
   var EXPORT_BUTTONS = ['imprimir', 'baixarCsv', 'baixarJson'];
   var STALE_MESSAGE = 'Dados alterados — recalcule antes de exportar.';
   /* Resultado exibido que não corresponde mais ao formulário: fica marcado e não pode ser impresso nem exportado. */
@@ -259,6 +263,22 @@
       effective.netDisbursed = input.financedAmount;
       origins.netDisbursed = 'presumido';
       assumptions.push(LEGACY_NET_ASSUMPTION);
+    } else if (!input.netDisbursed && input.charges.length && input.financedAmount &&
+        input.charges.every(function (charge) { return charge.paymentMode !== 'unknown'; })) {
+      // Encargos financiados ou descontados já estão dentro do valor financiado: o líquido recebido é a diferença.
+      var presumedPrincipal = null;
+      try { presumedPrincipal = F.parseMoney(input.financedAmount); } catch (_) { presumedPrincipal = null; }
+      var embeddedCharges = input.charges.filter(function (charge) {
+        return charge.paymentMode === 'financed' || charge.paymentMode === 'deducted';
+      }).reduce(function (sum, charge) { return sum + charge.amountCents; }, 0);
+      if (presumedPrincipal !== null && presumedPrincipal > embeddedCharges) {
+        var presumedNet = presumedPrincipal - embeddedCharges;
+        effective.netDisbursed = (presumedNet / 100).toFixed(2);
+        origins.netDisbursed = 'presumido';
+        assumptions.push(embeddedCharges > 0
+          ? NET_MINUS_CHARGES_ASSUMPTION + formatMoney.format(presumedNet / 100) + ')'
+          : NET_EQUALS_FINANCED_WITH_CHARGES_ASSUMPTION);
+      }
     }
     // O campo do usuário não é sobrescrito: a premissa fica na origem e no valor efetivo usado no cálculo.
     input.fieldOrigins = origins;
@@ -320,6 +340,27 @@
       } catch (_) { cet = null; }
     }
     var cetIncomplete = cetIncompleteReasons.length > 0;
+    // Taxa comparada com a média BACEN (critério do DOL, decisão de 08/11/2026): taxa mensal que iguala o valor
+    // liberado às prestações, sem datas reais. IOF e tarifas financiados ou descontados entram no custo; encargos
+    // pagos à vista reduzem o valor recebido e os cobrados em cada parcela somam-se a ela, como no CET.
+    var comparedRate = null;
+    var comparedRateReason = '';
+    if (!(net > 0)) {
+      comparedRateReason = 'Informe o valor líquido liberado ao cliente para calcular a taxa do contrato.';
+    } else {
+      var upfrontCharges = 0, recurringCharges = 0;
+      input.charges.forEach(function (charge) {
+        if (charge.paymentMode === 'upfront') upfrontCharges += charge.amountCents;
+        if (charge.paymentMode === 'recurring') recurringCharges += charge.amountCents;
+      });
+      var costFlows = (input.amortization === 'SAC' && schedule
+        ? schedule.map(function (row) { return row.installmentCents; })
+        : Array.from({ length: input.installments }, function () { return input.paymentCents; }))
+        .map(function (amount) { return amount + recurringCharges; });
+      try { comparedRate = F.solveCashflowRate(net - upfrontCharges, costFlows); } catch (error) {
+        comparedRateReason = 'Não foi possível calcular a taxa do contrato com o valor liberado e as parcelas informadas: ' + error.message;
+      }
+    }
     var referenceMonth = input.contractDate ? input.contractDate.slice(0, 7) : '';
     var modalityResolution = input.documentClassification
       ? window.ContratoBacen.resolveModality(input.documentClassification,
@@ -332,8 +373,11 @@
       input.modality = manualCatalogEntry.serieKey || 'fora_do_escopo';
       input.payrollSubtype = '';
     }
-    var match = window.ContratoBacen.compareCandidates(input.monthlyRate, input.modality,
+    var match = window.ContratoBacen.compareCandidates(comparedRate, input.modality,
       input.payrollSubtype, referenceMonth, input.bacenSeriesSelection);
+    if (comparedRate === null && match.selected) {
+      match.comparison = Object.assign({}, match.comparison, { available: false, reason: comparedRateReason });
+    }
     var reference = match.selected ? match.selected.observation : {
       available: false, reason: match.comparison.reason
     };
@@ -344,9 +388,10 @@
       contractDate: input.contractDate, monthlyRate: input.monthlyRate,
       statedCet: input.statedCet, calculatedCet: cet, cetIncomplete: cetIncomplete,
       cetIncompleteReasons: cetIncompleteReasons, capitalization: input.capitalization,
-      modality: input.modality, comparison: comparison, charges: input.charges
+      modality: input.modality, comparison: comparison, charges: input.charges, comparedRate: comparedRate
     });
     return { input: input, schedule: schedule, implied: implied, cet: cet, cetIncomplete: cetIncomplete,
+      comparedRate: comparedRate, comparedRateReason: comparedRateReason, netCents: net > 0 ? net : null,
       cetIncompleteReasons: cetIncompleteReasons,
       firstDueDate: firstDueDate, presumptions: presumptions,
       reference: reference, comparison: comparison, candidates: match.candidates,
@@ -416,10 +461,11 @@
     get('semaforoTexto').textContent = (result.ambiguous && !result.comparison.selectedBy
       ? 'Modalidade não identificada com precisão. Selecione manualmente uma série para habilitar a comparação. '
       : '') + (result.comparison.available
-      ? 'Juros contratados: ' + formatPercent.format(result.comparison.ratio) + 'x a média BACEN da competência (limites: ' +
-        formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.yellow) + 'x e ' + formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.red) + 'x).'
-      : result.comparison.reason) + (result.comparison.available
-      ? ' Faixa comparativa; não declara regularidade ou abusividade.' : '');
+      ? 'Taxa do contrato: ' + formatPercent.format(result.comparison.ratio) + 'x a média BACEN (limites: ' +
+        formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.yellow) + 'x e ' + formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.red) + 'x).' +
+        (light.state === 'green' && result.comparison.differencePercentagePoints > 0 ? ' Acima da média, mas dentro da faixa verde.' : '') +
+        ' Triagem; não declara regularidade nem abusividade.'
+      : result.comparison.reason);
     var candidatesPanel = get('seriesCandidatas');
     candidatesPanel.hidden = !result.ambiguous;
     if (result.ambiguous) {
@@ -461,9 +507,9 @@
     }
     var cards = get('cartoes');
     cards.replaceChildren();
-    metric(cards, 'Taxa contratada', result.input.monthlyRate === null ? 'Não informada' : formatPercent.format(result.input.monthlyRate * 100) + '% a.m.');
+    metric(cards, 'Taxa do contrato (sobre o valor liberado)', result.comparedRate === null ? 'Não calculada'
+      : formatPercent.format(result.comparedRate * 100) + '% a.m.');
     metric(cards, 'Média BACEN', result.comparison.available ? formatPercent.format(result.comparison.bacenPercent) + '% a.m.' : 'Indisponível');
-    metric(cards, 'Diferença em vezes', result.comparison.available && result.comparison.ratio !== null ? formatPercent.format(result.comparison.ratio) + 'x' : 'Indisponível');
     var cetLabel = result.input.amortization === 'SAC' && result.schedule
       ? 'CET estimado (dados presumidos; parcelas SAC simuladas)'
       : result.presumptions.length ? 'CET estimado (dados presumidos)' : 'CET estimado';
@@ -472,6 +518,11 @@
     if (result.presumptions.length) {
       var cetNote = addText(cards, 'p', 'Para esta estimativa: ' + result.presumptions.join('; ') + '.');
       cetNote.className = 'nota';
+    }
+    var recurringWarning = recurringChargeWarning(result.input);
+    if (recurringWarning) {
+      var recurringNote = addText(cards, 'p', recurringWarning);
+      recurringNote.className = 'nota aviso-encargo-parcela';
     }
     var metrics = get('metricas');
     metrics.replaceChildren();
@@ -496,12 +547,17 @@
     } else installmentWarning.hidden = true;
     var comparison = get('comparacao');
     if (result.comparison.available) {
-      comparison.textContent = formatPercent.format(result.comparison.contractedPercent) + '% a.m. informados versus ' +
+      comparison.textContent = formatPercent.format(result.comparison.contractedPercent) +
+        '% a.m. (taxa do contrato, calculada sobre o valor liberado' + (result.netCents ? ' de ' + formatMoney.format(result.netCents / 100) : '') +
+        ' com as parcelas informadas, incluindo IOF e tarifas financiados) versus ' +
         formatPercent.format(result.comparison.bacenPercent) + '% a.m. (SGS ' + result.comparison.observation.seriesCode +
         ', ' + result.comparison.observation.referenceMonth + '): diferença de ' +
         formatPercent.format(result.comparison.differencePercentagePoints) + ' ponto(s) percentual(is); razão ' +
         (result.comparison.ratio === null ? 'não calculável' : formatPercent.format(result.comparison.ratio) + 'x') +
-        '. Consultado em ' + formatDate(result.comparison.observation.consultedAt) + '. Fonte: ';
+        '.' + annualComparisonText(result.comparison) +
+        (result.input.monthlyRate !== null ? ' Juros remuneratórios informados no contrato: ' +
+          formatPercent.format(result.input.monthlyRate * 100) + '% a.m.' : '') +
+        ' Consultado em ' + formatDate(result.comparison.observation.consultedAt) + '. Fonte: ';
       var link = addText(comparison, 'a', 'API do BACEN (SGS)');
       link.href = result.comparison.observation.sourceUrl;
       link.target = '_blank';
@@ -526,8 +582,16 @@
     if (result.comparison.available && ['PRICE', 'SAC'].includes(result.input.amortization)) {
       var refRate = result.comparison.bacenPercent / 100;
       try {
-        var refPayment = paymentFor(result.input.principalCents, refRate, result.input.installments, result.input.amortization);
-        metric(simulation, 'Cenário hipotético pela taxa média BACEN', formatMoney.format(refPayment / 100) + ' por parcela · mesma base e prazo');
+        // Como no DOL: parcela pela taxa média sobre o valor liberado, comparada com a parcela paga.
+        var refBase = result.netCents || result.input.principalCents;
+        var refPayment = paymentFor(refBase, refRate, result.input.installments, result.input.amortization);
+        var paidPayment = result.input.amortization === 'SAC' && result.schedule ? result.schedule[0].installmentCents : result.input.paymentCents;
+        var perInstallment = paidPayment - refPayment;
+        metric(simulation, 'Cenário hipotético pela taxa média BACEN', formatMoney.format(refPayment / 100) +
+          (result.input.amortization === 'SAC' ? ' na primeira parcela' : ' por parcela') + ' sobre ' + formatMoney.format(refBase / 100) +
+          ' liberados · ' + (perInstallment > 0 ? 'a parcela paga é ' + formatMoney.format(perInstallment / 100) + ' maior'
+            : perInstallment < 0 ? 'a parcela paga é ' + formatMoney.format(-perInstallment / 100) + ' menor' : 'igual à parcela paga') +
+          (result.input.amortization === 'SAC' ? '' : ' (' + formatMoney.format(Math.abs(perInstallment) * result.input.installments / 100) + ' no total)'));
       } catch (_) { metric(simulation, 'Cenário pela taxa média BACEN', 'Não calculável com estes parâmetros.'); }
     } else metric(simulation, 'Cenário pela taxa média BACEN', result.comparison.available
       ? 'Indisponível: sistema de amortização desconhecido.' : 'Indisponível sem referência da mesma competência.');
@@ -566,6 +630,34 @@
     });
     resultNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+  // Informação adicional: a mesma comparação em taxa anual equivalente. O semáforo continua usando a razão mensal.
+  function annualComparisonText(comparison) {
+    if (!comparison || !comparison.available) return '';
+    var contractedAnnual = Math.pow(1 + comparison.contractedPercent / 100, 12) - 1;
+    var bacenAnnual = Math.pow(1 + comparison.bacenPercent / 100, 12) - 1;
+    if (!Number.isFinite(contractedAnnual) || !Number.isFinite(bacenAnnual) || bacenAnnual <= 0) return '';
+    return ' Em taxa anual equivalente: ' + formatPercent.format(contractedAnnual * 100) + '% a.a. contra ' +
+      formatPercent.format(bacenAnnual * 100) + '% a.a. (' + formatPercent.format(contractedAnnual / bacenAnnual) +
+      'x); o semáforo usa a razão das taxas mensais.';
+  }
+  function recurringChargeWarning(input) {
+    var recurring = input.charges.filter(function (charge) { return charge.paymentMode === 'recurring'; })
+      .reduce(function (sum, charge) { return sum + charge.amountCents; }, 0);
+    if (recurring <= 0 || recurring < input.paymentCents * RECURRING_CHARGE_WARNING_SHARE) return '';
+    return 'Os encargos marcados como “cobrado em cada parcela” somam ' + formatMoney.format(recurring / 100) +
+      ' por parcela (' + formatPercent.format(recurring / input.paymentCents * 100) + '% da parcela informada) e são ' +
+      'acrescentados a todas as ' + input.installments + ' parcelas no CET. Confira se foi digitado o valor de cada parcela, e não o total.';
+  }
+  // Na impressão, os detalhes recolhidos do resultado são abertos para o PDF trazer a análise completa.
+  var printOpened = [];
+  window.addEventListener('beforeprint', function () {
+    printOpened = Array.from(document.querySelectorAll('#resultado details:not([open])'));
+    printOpened.forEach(function (details) { details.open = true; });
+  });
+  window.addEventListener('afterprint', function () {
+    printOpened.forEach(function (details) { details.open = false; });
+    printOpened = [];
+  });
   function paymentFor(principalCents, rate, count, amortization) {
     return amortization === 'SAC'
       ? F.scheduleSac(principalCents, rate, count)[0].installmentCents

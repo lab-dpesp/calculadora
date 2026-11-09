@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node ferramentas/testar.js && node ferramentas/testar-opcoes.js && node ferramentas/testar-revisao.js && node ferramentas/testar-aleatorio.js 1000 && node ferramentas/testar-propriedades.js 500 && node ferramentas/testar-contrato.js && node ferramentas/testar-contrato-abordagens.js && node ferramentas/testar-series-contrato.js && node ferramentas/testar-contrato-aleatorio.js 1000 && node ferramentas/testar-robustez.js && node ferramentas/testar-regras.js && npm run testar-pagina-regras",
+    "test": "node ferramentas/testar.js && node ferramentas/testar-opcoes.js && node ferramentas/testar-rito.js && node ferramentas/tjsp/testar-comparar-tjsp.js && node ferramentas/testar-revisao.js && node ferramentas/testar-aleatorio.js 1000 && node ferramentas/testar-propriedades.js 500 && node ferramentas/testar-contrato.js && node ferramentas/testar-contrato-abordagens.js && node ferramentas/testar-series-contrato.js && node ferramentas/testar-contrato-aleatorio.js 1000 && node ferramentas/testar-robustez.js && node ferramentas/testar-regras.js && npm run testar-pagina-regras",
     "testar-robustez-navegador": "node ferramentas/testar-robustez-navegador.js",
     "testar-site": "node ferramentas/testar-site.js _site",
     "gerar-pagina-regras": "node ferramentas/gerar-pagina-regras.js",

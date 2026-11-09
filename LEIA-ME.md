@@ -77,9 +77,12 @@ Tudo fica numa seção, "Prestações e pagamentos": escolha a base, informe in�
 - Reajuste anual do valor fixo: a cada 12 meses da data-base (o mês em que o valor foi fixado; vazio = início do período), o valor é multiplicado pela variação do índice nos 12 meses anteriores ao mês do reajuste, com arredondamento em centavos. Ex.: R$ 1.000,00 fixados em 01/2024 com INPC passam a R$ 1.047,68 em 01/2025 e a R$ 1.088,52 em 01/2026. Variação negativa não reduz o valor. Pelo salário mínimo, o valor acompanha a proporção entre o mínimo do mês do reajuste e o da data-base.
 - Ajustes em prestações: o lápis de cada linha da tabela (ou da memória de cálculo) troca o rendimento só daquele mês (13º, férias com 1/3, uma mudança pontual), o valor de uma prestação, ou um novo percentual/valor deste mês em diante (divide o período). O "×" remove a prestação. Os ajustes aparecem destacados na tabela, na memória, na conferência e no anexo do PDF.
 - "+ Parcela avulsa" (ou "Colar lista") inclui na mesma tabela despesas extraordinárias, diferenças e valores fora do título.
-- Com a data do ajuizamento (campo logo acima dos pagamentos), o débito é separado:
-  - rito da prisão: as três prestações anteriores ao ajuizamento e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ);
-  - rito da penhora: as demais. Multa e honorários do art. 523, § 1º, incidem só sobre esta parte.
+- A pergunta "Por qual rito vai executar?" (logo acima dos pagamentos) define o que sai do cálculo:
+  - prisão e penhora, em execuções separadas (padrão): o débito é separado e cada rito tem o seu botão de PDF e de cópia para o Word;
+  - só prisão: entram só as três prestações anteriores ao ajuizamento e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ);
+  - só penhora: todo o débito, sem pedido de prisão (art. 528, § 8º). Multa e honorários do art. 523, § 1º, incidem só no rito da penhora.
+  - Se a execução ainda não foi ajuizada, informe a data prevista, mesmo futura, ou deixe em branco para usar a data do cálculo; a calculadora avisa qual usou.
+  - O "mover" na coluna Rito da memória de cálculo troca uma prestação de rito, por exemplo quando uma decisão ampliar ou restringir o rito da prisão; clicar de novo desfaz. O documento lista as prestações movidas.
 
 ## Salvar, abrir e atualizar um cálculo
 
@@ -197,5 +200,5 @@ A mesma pasta funciona como site: basta publicar `calc.html` (renomeado para `in
 
 - Fazenda: só natureza não tributária, com vencimentos a partir de 07/2009. Não trata previdenciário, tributário nem desapropriação, nem o período posterior à expedição do requisitório.
 - Férias e terço constitucional não são gerados sozinhos: informe o rendimento do mês das férias pelo ajuste da prestação (ou lance a pensão sobre elas em "Outras parcelas").
-- A separação por rito segue a regra geral; decisões que ampliem ou restrinjam o rito da prisão precisam de ajuste manual.
+- A separação por rito segue a regra geral; decisões que ampliem ou restrinjam o rito da prisão são tratadas movendo a prestação, e a calculadora não confere o fundamento.
 - Protótipo de teste: confira o resultado antes de usar em juízo.

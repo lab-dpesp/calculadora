@@ -288,6 +288,21 @@ teste('contagem de juros: pro rata padrão, mês cheio no navegador, salvamento 
   await semErros(pageCopilot, 'contagem de juros');
 });
 
+teste('aviso de taxa legal ao selecionar mês cheio', async () => {
+  const page = await novaPagina('calc.html?calc=civel');
+  await abrirJuros(page);
+  const aviso = page.locator('#avisoMesCheioTaxaLegal');
+  assert.ok(await aviso.isHidden(), 'o aviso começa oculto');
+  await page.selectOption('#regime', 'taxalegal');
+  await page.selectOption('#contagemJuros', 'mescheio');
+  assert.ok(await aviso.isVisible(), 'o aviso aparece com taxa legal e mês cheio');
+  assert.match(await aviso.innerText(), /Resolução CMN 5\.171\/2024.*pro rata/i);
+  await page.selectOption('#regime', 'fixa');
+  assert.ok(await aviso.isHidden(), 'o aviso some sem taxa legal');
+  await page.selectOption('#regime', 'duas');
+  assert.ok(await aviso.isVisible(), 'o aviso aparece quando a segunda taxa é legal');
+});
+
 teste('perfis 2 e 3 preservam os cálculos salvos; perfil 4 só após migração explícita', async () => {
   const caso = lerCaso('pensao-sm-exemplo.calcjur');
   const page = await novaPagina('calc.html');
@@ -928,6 +943,53 @@ teste('navegação, tela estreita e acessibilidade (claro e escuro)', async () =
   assert.strictEqual(await page.locator('.nav-calc a[aria-current=page]').innerText(), 'Contrato bancário');
   assert.strictEqual(await page.locator('.ic-caixa > details.importar-copilot#painelCopilot').count(), 1, 'mesmo componente do Copilot');
 });
+
+testes.push(['rito: dois documentos, data futura, mover prestação, salvar e reabrir (N42)', async () => {
+  const page = await novaPagina('calc.html');
+  await definirDataCalculo(page, '2026-10-31');
+  await page.fill('.pe-inicio', '01/2025'); await page.fill('.pe-qtd', '30');
+  await page.click('#preencherPrestacoes');
+  await calcular(page);
+  assert.strictEqual(await page.locator('#ritoExecucao').inputValue(), 'ambos', 'padrão: os dois ritos');
+  assert.match(await page.locator('#ritos').innerText(), /usada a data do cálculo/);
+  const valorRito = (i) => page.locator('#ritos .rito-valor').nth(i).innerText().then(valorMoeda);
+  const totalGeral = await total(page);
+
+  await page.fill('#dataAjuizamento', '05/11/2026');
+  await calcular(page);
+  assert.strictEqual(await page.locator('#erro').isHidden(), true, 'data futura aceita');
+  assert.doesNotMatch(await page.locator('#ritos').innerText(), /usada a data do cálculo/);
+  const prisaoAntes = await valorRito(0);
+
+  const botoes = page.locator('#memoria .btn-mover-rito');
+  assert.ok(await botoes.count() >= 22, 'cada prestação pode ser movida');
+  await page.getByRole('button', { name: 'Mover a prestação 1 para o rito da prisão', exact: true }).click();
+  await page.waitForTimeout(150);
+  assert.match(await page.locator('#memoria').innerText(), /movida manualmente/);
+  assert.ok(await valorRito(0) > prisaoAntes, 'prisão aumenta');
+  assert.ok(Math.abs(await total(page) - totalGeral) < 0.005, 'total não muda');
+
+  await page.evaluate(() => { window.print = () => { window.__impressos = (window.__impressos || 0) + 1; }; });
+  await page.click('[data-doc-rito=prisao][data-acao=pdf]');
+  await page.waitForTimeout(200);
+  const docPrisao = await page.locator('#impressao').textContent();
+  assert.match(docPrisao, /Rito da prisão \(art\. 528/);
+  assert.match(docPrisao, /Ajuizamento previsto/);
+  assert.match(docPrisao, /Rito alterado manualmente/);
+  await page.click('[data-doc-rito=penhora][data-acao=pdf]');
+  await page.waitForTimeout(200);
+  assert.match(await page.locator('#impressao').textContent(), /Rito da penhora \(art\. 528/);
+  assert.strictEqual(await page.evaluate(() => window.__impressos), 2, 'um PDF por rito');
+
+  await page.waitForTimeout(300);
+  await page.reload();
+  await page.waitForTimeout(400);
+  assert.match(await page.locator('#memoria').innerText(), /movida manualmente/, 'a mudança persiste ao recarregar');
+  await page.getByRole('button', { name: 'Mover a prestação 1 para o rito da penhora', exact: true }).click();
+  await page.waitForTimeout(150);
+  assert.doesNotMatch(await page.locator('#memoria').innerText(), /movida manualmente/, 'mover de volta desfaz o ajuste');
+  await semErros(page, 'rito');
+}]);
 
 (async function main() {
   await servir();

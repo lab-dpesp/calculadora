@@ -233,6 +233,18 @@
     }
     return { pct: pct, ate: ate, meses: meses };
   }
+  function somaMesCheioTaxaLegal(a, b, taxaDoMes) {
+    var t = primeiroDiaProxMes(a), fim = primeiroDiaProxMes(b), pct = 0, ate = b, meses = 0;
+    if (b <= a) return { pct: 0, ate: a, meses: 0 };
+    while (t < fim) {
+      var tx = taxaDoMes(mes(t));
+      if (tx == null) { ate = Math.max(a, t); break; }
+      pct += tx;
+      t = primeiroDiaProxMes(t);
+      meses++;
+    }
+    return { pct: pct, ate: ate, meses: meses };
+  }
   function limiteMesCheio(t, contagemJuros) {
     return contagemJuros === 'mescheio' ? primeiroDiaMes(t) : t;
   }
@@ -279,7 +291,7 @@
   }
   function trechoTaxaLegal(a, b, contagemJuros) {
     var s = contagemJuros === 'mescheio'
-      ? somaMesCheio(a, b, function (m) { return valorTab('TAXA_LEGAL', m, 'a taxa legal'); })
+      ? somaMesCheioTaxaLegal(a, b, function (m) { return valorTab('TAXA_LEGAL', m, 'a taxa legal'); })
       : somaProRata(a, b, function (m) { return valorTab('TAXA_LEGAL', m, 'a taxa legal'); });
     return { pct: s.pct, texto: 'Taxa legal, ' + periodo(a, b) + ': ' + pctFmt(s.pct) + '%' +
       (contagemJuros === 'mescheio' ? ', ' + s.meses + (s.meses === 1 ? ' mês contado' : ' meses contados') : '') };
@@ -895,8 +907,18 @@
     var ajuiz = null;
     if (pensao && e.dataAjuizamento) {
       ajuiz = parse(e.dataAjuizamento);
-      if (ajuiz > calc) throw erro('A data do ajuizamento é posterior à data do cálculo.');
     }
+    // Rito escolhido (N42). Vazio: comportamento anterior, em que só a data do ajuizamento separa os ritos.
+    var ritoExec = pensao ? (e.ritoExecucao || '') : '';
+    if (['', 'ambos', 'prisao', 'penhora'].indexOf(ritoExec) < 0) throw erro('Rito da execução desconhecido.');
+    // Com o rito escolhido, a data pode ser a do ajuizamento previsto, depois do cálculo.
+    if (ajuiz && ajuiz > calc && !ritoExec) throw erro('A data do ajuizamento é posterior à data do cálculo.');
+    var ritosManuais = (pensao && e.ritosManuais) || {};
+    Object.keys(ritosManuais).forEach(function (k) {
+      if (ritosManuais[k] !== 'prisao' && ritosManuais[k] !== 'penhora') throw erro('Rito indicado para a prestação ' + k + ' é desconhecido.');
+    });
+    var ajuizPresumido = !ajuiz && (ritoExec === 'ambos' || ritoExec === 'prisao');
+    if (ajuizPresumido) ajuiz = calc;
 
     var lista = listarParcelas(e);
     if (!lista.length) throw erro(pensao ? 'Informe ao menos um período da pensão ou uma parcela.' : 'Inclua ao menos uma parcela.');
@@ -968,18 +990,28 @@
     unidades.forEach(function (par) { atualizar(par, calc, ctx); });
 
     // Rito da execução de alimentos (art. 528, § 7º, do CPC).
-    var ritoAtivo = !!ajuiz;
+    var ritoAtivo = !!ajuiz && ritoExec !== 'penhora', avisosRito = [];
     if (ritoAtivo) {
       var prest = pars.filter(function (p) { return p.origem === 'pensao'; });
-      var anteriores = prest.filter(function (p) { return p.vencimento < ajuiz; }).slice(-3);
+      // Prestações que vencerão entre o cálculo e o ajuizamento previsto ocupam lugar entre as três últimas (N42).
+      // Só as datas importam aqui: base e valor neutros evitam depender de índices de meses futuros.
+      var previstas = ajuiz <= calc ? [] : gerarPensao((e.periodos || []).map(function (per) {
+        return { inicio: per.inicio, fim: per.fim, dia: per.dia, base: 'fixo', quantidade: 1, decimo: per.decimo };
+      }), iso(ajuiz), []).filter(function (p) { var v = parse(p.vencimento); return v > calc && v < ajuiz; });
+      var vagas = Math.max(0, 3 - previstas.length);
+      var anteriores = vagas ? prest.filter(function (p) { return p.vencimento < ajuiz; }).slice(-vagas) : [];
       pars.forEach(function (p) {
-        p.rito = (p.origem === 'pensao' && (p.vencimento >= ajuiz || anteriores.indexOf(p) >= 0)) ? 'prisao' : 'penhora';
+        p.ritoAuto = (p.origem === 'pensao' && (p.vencimento >= ajuiz || anteriores.indexOf(p) >= 0)) ? 'prisao' : 'penhora';
+        var manual = p.origem === 'pensao' && Object.prototype.hasOwnProperty.call(ritosManuais, p.chave) ? ritosManuais[p.chave] : '';
+        p.rito = manual || p.ritoAuto;
       });
+      if (previstas.length) avisosRito.push((previstas.length === 1 ? '1 prestação vencerá' : previstas.length + ' prestações vencerão') + ' entre o cálculo e o ajuizamento previsto (' + br(ajuiz) +
+        ') e ainda não ' + (previstas.length === 1 ? 'entra' : 'entram') + ' neste valor, embora conte entre as três últimas. Refaça o cálculo perto do protocolo.');
     }
 
     var linhas = pars.map(function (par) {
       return {
-        n: par.n, chave: par.chave, origem: par.origem, descricao: par.descricao, obrigacao: par.obrigacao || '', rito: par.rito || null,
+        n: par.n, chave: par.chave, origem: par.origem, descricao: par.descricao, obrigacao: par.obrigacao || '', rito: par.rito || null, ritoAuto: par.ritoAuto || null, ritoManual: !!par.rito && par.rito !== par.ritoAuto,
         vencimento: iso(par.vencimento), valor: par.valor, indice: par.indice,
         inicioJuros: iso(par.inicioJuros), inicioCorrecao: iso(par.inicioCorrecao), capital: r2(par.P), juros: r2(par.J), encargos: r2(par.E),
         total: saldo(par), quitada: saldo(par) === 0 && par.imputacoes.length > 0,
@@ -1079,7 +1111,7 @@
     t.total = r2(t.debito + t.multa + t.honorarios);
     if (ritoAtivo) t.totalPenhora = r2(t.penhora + t.multa + t.honorarios);
 
-    var avisos = (lista.avisos || []).slice().concat(avisosSuc, avisos523);
+    var avisos = (lista.avisos || []).slice().concat(avisosSuc, avisos523, avisosRito);
     if (fazenda && contagemJuros === 'mescheio') avisos.push('A contagem de juros mês cheio não se aplica à Fazenda Pública; foi mantida a regra atual.');
     if (fazenda && calc >= ctx.M2) avisos.push('Depois da EC 136/2025, o índice aplicável antes da expedição do precatório ou da RPV está em discussão no STF (Tema 1.484 da repercussão geral, ainda sem julgamento de mérito). Confira o título e a orientação mais recente.');
     if (fazenda && e.multa) avisos.push('A multa do art. 523, § 1º, não se aplica ao cumprimento de sentença contra a Fazenda Pública (art. 534, § 2º, do CPC) e foi desconsiderada.');
@@ -1090,15 +1122,50 @@
     if (sobra > 0) avisos.push('Os pagamentos superam o débito em ' + moedaFmt(sobra) + ' (valores da data de cada pagamento, sem atualização).');
     if (ritoAtivo && !pars.some(function (p) { return p.rito === 'prisao'; })) avisos.push('Nenhuma prestação da pensão entrou no rito da prisão. Confira a data do ajuizamento e os períodos.');
 
-    return {
-      linhas: linhas, totais: t, entrada: e, avisos: avisos, conferencia: conferir(e, lista, pagamentos, calc),
-      rito: ritoAtivo, imputacao: ctx.imputacao,
+    var resultado = {
+      linhas: linhas, totais: t, entrada: e, avisos: avisos, avisos523: avisos523, conferencia: conferir(e, lista, pagamentos, calc),
+      rito: ritoAtivo, ritoExecucao: ritoExec, ajuizamentoUsado: ajuiz ? iso(ajuiz) : '', ajuizamentoPresumido: ajuizPresumido && ritoAtivo, ajuizamentoFuturo: ritoAtivo && ajuiz > calc, imputacao: ctx.imputacao,
       pagamentos: pagamentos.map(function (p) { return { n: p.n, data: iso(p.t), valor: p.valor, parcela: p.alvo ? p.alvo.n : null, criterio: p.criterio, aplicacoes: p.aplicacoes, sobra: p.sobra }; })
     };
+    return ritoExec === 'prisao' ? recortarRito(resultado, 'prisao') : resultado;
+  }
+
+  /* Demonstrativo de um rito só, a partir do cálculo com os ritos separados (N42). Não refaz a conta: as prestações e a
+   * imputação dos pagamentos são as do cálculo inteiro, então prisão + penhora fecham com o total. */
+  function recortarRito(res, rito) {
+    if (!res || !res.rito) throw erro('Este cálculo não tem os ritos separados.');
+    if (rito !== 'prisao' && rito !== 'penhora') throw erro('Rito da execução desconhecido.');
+    var pen = rito === 'penhora', t0 = res.totais, daqui = {};
+    var linhas = res.linhas.filter(function (l) { if (l.rito !== rito) return false; daqui[l.n] = true; return true; });
+    var soma = function (k) { return r2(linhas.reduce(function (s, l) { return s + l[k]; }, 0)); };
+    var t = { valor: soma('valor'), capital: soma('capital'), juros: soma('juros'), encargos: soma('encargos'), pagamentos: soma('pago'), sobra: 0 };
+    t.subtotal = r2(t.capital + t.juros + t.encargos);
+    t.correcao = t.pagamentos ? null : r2(t.capital - t.valor);
+    // Multa e honorários do art. 523 só existem no rito da penhora.
+    ['multaContratual', 'multaContratualPct', 'sucumbencia', 'multa', 'honorarios', 'honorariosPct', 'tardios523', 'multaProjetada', 'honorariosProjetados'].forEach(function (k) {
+      t[k] = pen ? (t0[k] || 0) : 0;
+    });
+    t.sucumbenciaTexto = pen ? t0.sucumbenciaTexto : undefined;
+    t.base523 = pen ? t0.base523 : null;
+    t.debito = r2(t.subtotal + t.multaContratual + t.sucumbencia);
+    t.totalProjetado523 = r2(t.debito + t.multaProjetada + t.honorariosProjetados);
+    t.total = r2(t.debito + t.multa + t.honorarios);
+    var pagamentos = [];
+    res.pagamentos.forEach(function (p) {
+      var ap = p.aplicacoes.filter(function (a) { return daqui[a.parcela]; });
+      if (ap.length) pagamentos.push(Object.assign({}, p, { aplicacoes: ap, sobra: 0, dividido: ap.length < p.aplicacoes.length }));
+    });
+    return Object.assign({}, res, {
+      linhas: linhas, totais: t, rito: false, recorte: rito, pagamentos: pagamentos,
+      entrada: pen ? res.entrada : Object.assign({}, res.entrada, { multa: false, honorarios: false, prazo523: '' }),
+      avisos: pen ? res.avisos : res.avisos.filter(function (a) { return res.avisos523.indexOf(a) < 0; }),
+      avisos523: pen ? res.avisos523 : [],
+      foraDoRecorte: { parcelas: res.linhas.length - linhas.length, total: pen ? t0.prisao : t0.penhora }
+    });
   }
 
   var api = {
-    calcular: calcular, juros: juros, gerarPensao: gerarPensao, listarParcelas: listarParcelas, salarioMinimo: function (isoData) { return salarioMinimo(parse(isoData)); },
+    calcular: calcular, recortarRito: recortarRito, juros: juros, gerarPensao: gerarPensao, listarParcelas: listarParcelas, salarioMinimo: function (isoData) { return salarioMinimo(parse(isoData)); },
     perfilCalculoHistorico: PERFIL_CALCULO_HISTORICO, perfilCalculoAnterior: PERFIL_CALCULO_ANTERIOR,
     perfilCalculoAnteriorSemEventos: PERFIL_CALCULO_ANTERIOR_SEM_EVENTOS, perfilCalculoAtual: PERFIL_CALCULO_ATUAL,
     descreverBase: descreverBase,

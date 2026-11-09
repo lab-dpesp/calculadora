@@ -182,13 +182,26 @@
           </div>
         </div>
 
+        <div class="linha-campos rito-campos" data-so="pensao">
+          <label class="q-campo q-campo-rito">
+            <span class="q-rotulo">Por qual rito vai executar?</span>
+            <select id="ritoExecucao">
+              <option value="ambos" selected>Prisão e penhora, em execuções separadas</option>
+              <option value="prisao">Só prisão</option>
+              <option value="penhora">Só penhora</option>
+              <option value="">Ainda não definido</option>
+            </select>
+          </label>
+          <p class="sub nota-rito" id="notaRito" role="status"></p>
+        </div>
+
         <div class="linha-campos rito-campos ajuizamento-prestacoes" data-so="pensao">
-          <label class="q-campo q-campo-medio">
+          <label class="q-campo q-campo-medio" id="campoAjuizamento">
             <span class="q-rotulo">Ajuizamento da execução (opcional)</span>
             <input type="text" id="dataAjuizamento" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
           </label>
           <span class="origem-item" id="origemAjuizamento" hidden></span>
-          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><p class="sub rito-ajuda ajuda">Para que serve: com a data, o débito é separado em rito da prisão (as três prestações anteriores ao ajuizamento e as vencidas no curso do processo, art. 528, § 7º, do CPC) e rito da penhora (as demais). Multa e honorários do art. 523 incidem só sobre o rito da penhora.</p>
+          <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><p class="sub rito-ajuda ajuda">Rito da prisão: as três prestações anteriores ao ajuizamento e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ). Rito da penhora: as demais, ou todo o débito se a parte escolher só a penhora (art. 528, § 8º). Multa e honorários do art. 523 incidem só no rito da penhora. Se a execução ainda não foi ajuizada, informe a data prevista, mesmo futura, ou deixe em branco para usar a data do cálculo. Depois de calcular, cada prestação pode ser movida de rito na memória de cálculo, por exemplo quando uma decisão ampliar ou restringir o rito da prisão.</p>
         </div>
 
         <div class="cartao cartao-pagamentos">
@@ -287,6 +300,7 @@
               <option value="mescheio">Mês cheio</option>
             </select>
             <span class="sub">Use mês cheio só por determinação judicial, contrato ou critério específico.</span>
+            <span class="sub" id="avisoMesCheioTaxaLegal" role="note" hidden>A Resolução CMN 5.171/2024 (art. 6º, parágrafo único) prevê cálculo pro rata para a taxa legal. Use mês cheio apenas se o título determinar; é uma convenção de contadoria.</span>
           </label>
         </div>
         <div class="linha-campos" id="campoDuas" hidden>
@@ -476,7 +490,7 @@
         <div class="ritos" id="ritos" hidden></div>
 
         <div class="acoes">
-          <button type="button" class="q-btn" id="pdf"><svg class="ic"><use href="#i-pdf"/></svg>Gerar demonstrativo em PDF</button>
+          <button type="button" class="q-btn" id="pdf"><svg class="ic"><use href="#i-pdf"/></svg><span id="rotuloPdf">Gerar demonstrativo em PDF</span></button>
           <button type="button" class="q-btn-outline" id="copiar"><svg class="ic"><use href="#i-copy"/></svg>Copiar memória de cálculo</button>
           <button type="button" class="q-btn-outline" id="csv"><svg class="ic"><use href="#i-download"/></svg>Baixar CSV</button>
           <button type="button" class="q-btn-outline" id="salvarCalculo2"><svg class="ic"><use href="#i-save"/></svg>Salvar cálculo</button>

@@ -42,9 +42,20 @@ test('T1 Price, taxa implícita, simulação e tarifas TAC/TEC', function () {
   close(comparison.differencePercentagePoints, 1.87, 1e-10);
   const rateFinding = legal.evaluate({ monthlyRate: 0.093, comparison }).find((item) => item.id === 'JUR_001');
   assert.ok(rateFinding);
-  assert.match(rateFinding.message, /série de referência BACEN usada/);
+  assert.match(rateFinding.message, /supera a média BACEN da modalidade/);
   delete snapshot.observations['25464'];
   snapshot.consultedAt = null;
+});
+test('T1b Taxa do contrato pelo critério do DOL (5 casos conferidos na calculadora do DOL v1.5.0 em 08/11/2026)', function () {
+  // [valor liberado, parcelas, parcela, taxa a.m. mostrada pelo DOL]
+  [[500000, 12, 62000, 6.71], [1000000, 24, 64000, 3.76], [2000000, 48, 78000, 2.92],
+    [800000, 84, 23000, 2.51], [3800000, 48, 140000, 2.61]].forEach(([net, n, p, dol]) => {
+    const rate = financial.solveCashflowRate(net, Array(n).fill(p)) * 100;
+    assert.ok(Math.abs(rate - dol) < 0.01, rate + ' x DOL ' + dol);
+    close(rate / 100, financial.solvePeriodicRate(net, p, n), 1e-12, 'parcelas fixas = Price');
+  });
+  assert.strictEqual(financial.solveCashflowRate(120000, Array(12).fill(10000)), 0);
+  assert.throws(() => financial.solveCashflowRate(120000, Array(12).fill(9000)), /não liquidam/);
 });
 test('T2 Price com taxa zero', function () {
   const rows = financial.schedulePrice(120000, 0, 12);

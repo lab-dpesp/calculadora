@@ -270,12 +270,12 @@ teste('C1/C3 contrato: CET de fluxo sem juros é 0,00% sem sinal; SAC rotula a p
   await page.selectOption('#amortization', 'SAC');
   await page.fill('#monthlyRate', '2');
   await calcularContrato(page);
-  const metricas = await page.locator('#metricas').innerText();
+  const metricas = await page.locator('#metricas').textContent();
   assert.match(metricas, /Primeira parcela do cronograma SAC/);
   assert.doesNotMatch(metricas, /Parcela pelo cronograma da taxa informada/);
   await page.selectOption('#amortization', 'PRICE');
   await calcularContrato(page);
-  assert.match(await page.locator('#metricas').innerText(), /Parcela pelo cronograma da taxa informada/);
+  assert.match(await page.locator('#metricas').textContent(), /Parcela pelo cronograma da taxa informada/);
 });
 
 /* ---------- Calculadora de débitos ---------- */

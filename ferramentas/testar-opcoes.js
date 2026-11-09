@@ -198,14 +198,24 @@ caso('exemplo oficial BCB: R$ 1.000,00 de 30 a 31/08/2024, somente taxa legal', 
     return r.totais.total;
   }, g.total);
 });
-caso('planilha TJSP: taxa legal em três meses cheios, com os extremos incompletos', () => {
+caso('planilha TJSP: taxa legal conta do mês seguinte ao início até o mês do cálculo', () => {
   const r = E.calcular(base({ regime: 'taxalegal', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
     dataCalculo: '2024-11-15', parcelas: [{ vencimento: '2024-08-15', valor: 10000 }] }));
   assert.equal(r.totais.capital, 10000);
-  assert.equal(r.totais.juros, 198.58);
+  assert.equal(r.totais.juros, r2(10000 * (D.TAXA_LEGAL['2024-09'] + D.TAXA_LEGAL['2024-10'] +
+    D.TAXA_LEGAL['2024-11']) / 100));
   assert.match(r.linhas[0].eventos.join(' '), /3 meses contados/);
   return r.totais.total;
-}, 10198.58);
+}, 10176.63);
+caso('planilha TJSP: mês cheio da taxa legal inclui o mês final e exclui o mês inicial', () => {
+  const r = E.calcular(base({ regime: 'taxalegal', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
+    dataCalculo: '2026-03-05', parcelas: [{ vencimento: '2025-12-20', valor: 10000 }] }));
+  const taxa = D.TAXA_LEGAL['2026-01'] + D.TAXA_LEGAL['2026-02'] + D.TAXA_LEGAL['2026-03'];
+  assert.equal(r.totais.juros, r2(10000 * taxa / 100));
+  assert.equal(r.totais.juros, 208.55);
+  assert.match(r.linhas[0].eventos.join(' '), /3 meses contados/);
+  return r.totais.total;
+}, 10208.55);
 caso('planilha TJSP: Selic linearizada em três meses cheios', () => {
   const r = E.calcular(base({ regime: 'selic', contagemJuros: 'mescheio', civel: { indice: 'nenhum' },
     dataCalculo: '2023-04-15', parcelas: [{ vencimento: '2023-01-15', valor: 10000 }] }));
@@ -235,10 +245,10 @@ caso('planilha TJSP: duas taxas fixas contam o mês da troca só na segunda fase
   assert.match(r.linhas[0].eventos.join(' '), /1 mês.*mês cheio.*2,0000%/);
   return r.totais.total;
 }, 10300);
-caso('planilha TJSP: tjsp atribui o mês da transição à taxa legal', base({ regime: 'tjsp', contagemJuros: 'mescheio',
-  civel: { indice: 'nenhum' }, dataCalculo: '2024-09-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10160.53);
-caso('planilha TJSP: selic_tl atribui agosto à taxa legal sem duplicar o mês', base({ regime: 'selic_tl', contagemJuros: 'mescheio',
-  civel: { indice: 'nenhum' }, dataCalculo: '2024-10-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10219.15);
+caso('planilha TJSP: taxa legal em mês cheio começa após o mês da transição', base({ regime: 'tjsp', contagemJuros: 'mescheio',
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-09-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10167.62);
+caso('planilha TJSP: selic_tl conta a taxa legal do mês seguinte à transição', base({ regime: 'selic_tl', contagemJuros: 'mescheio',
+  civel: { indice: 'nenhum' }, dataCalculo: '2024-10-15', parcelas: [{ vencimento: '2024-07-15', valor: 10000 }] }), 10229.05);
 assert.throws(() => E.calcular(base({ contagemJuros: 'invalida' })), /Contagem de juros desconhecida/);
 const defaultProRata = E.calcular(base({ regime: 'taxalegal', civel: { indice: 'nenhum' } })).totais.total;
 assert.equal(E.calcular(base({ regime: 'taxalegal', contagemJuros: 'prorata', civel: { indice: 'nenhum' } })).totais.total, defaultProRata);

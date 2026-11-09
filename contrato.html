@@ -225,12 +225,15 @@
         </div>
       </div>
       <div id="cartoes" class="metricas cartoes"></div>
-      <div id="metricas" class="metricas"></div>
-      <p id="alertaParcela" class="nota" role="status" hidden></p>
       <section class="subresultado">
         <h3>Pontos de atenção</h3>
         <ul id="achados" class="achados"></ul>
       </section>
+      <details class="detalhes">
+        <summary>Ver detalhes: valores do contrato</summary>
+        <div id="metricas" class="metricas"></div>
+        <p id="alertaParcela" class="nota" role="status" hidden></p>
+      </details>
       <details class="detalhes">
         <summary>Ver detalhes: fonte BACEN e hipóteses</summary>
         <p id="resumo" class="nota"></p>
@@ -241,7 +244,7 @@
         </label>
         <p id="bacenModalidadeAviso" class="nota" hidden></p>
         <p id="comparacao"></p>
-        <p class="nota">A média BACEN é referência agregada; o CET não é comparado com ela. As hipóteses e fundamentos dependem de revisão humana.</p>
+        <p class="nota">A média BACEN é referência agregada de novas operações e, pela nota metodológica do BACEN, inclui juros e encargos fiscais e operacionais. Por isso a taxa comparada é a do contrato sobre o valor liberado, com IOF e tarifas financiados (mesmo critério da calculadora do DOL). O CET com datas reais é mostrado à parte. As hipóteses e fundamentos dependem de revisão humana.</p>
       </details>
       <details class="detalhes">
         <summary>Ver detalhes: simulações</summary>
@@ -270,7 +273,7 @@
     <details class="painel metodologia">
       <summary>Metodologia e limitações</summary>
       <p>As prestações Price e SAC são calculadas por períodos mensais, com juros e valores em centavos. A taxa implícita é inferida do valor financiado e das parcelas uniformes; se houver encargos ou pagamentos irregulares, ela pode representar o custo global do fluxo, não juros remuneratórios isolados. O CET usa as datas fornecidas e ano de 365 dias, como estimativa informativa; não substitui a revisão normativa do fluxo completo.</p>
-      <p>As séries BACEN são médias agregadas de novas operações. Só há comparação quando existe observação da competência exata. Capital de giro, crédito para empresa, crédito rural, financiamento imobiliário, cheque especial, cartão e RMC/RCC ficam fora da comparação com médias de pessoa física; os demais cálculos continuam disponíveis.</p>
+      <p>A comparação com a média usa a taxa mensal que iguala o valor líquido liberado às parcelas informadas (critério da calculadora do DOL), de modo que IOF e tarifas financiados entram no custo; a taxa de juros informada no contrato aparece apenas como informação. As séries BACEN são médias agregadas de novas operações. Só há comparação quando existe observação da competência exata. Capital de giro, crédito para empresa, crédito rural, financiamento imobiliário, cheque especial, cartão e RMC/RCC ficam fora da comparação com médias de pessoa física; os demais cálculos continuam disponíveis.</p>
       <p>As regras jurídicas são sinalizações iniciais, não pareceres, e permanecem pendentes de validação jurídica institucional. Nenhum dado é enviado a serviços externos pelo navegador.</p>
     </details>
     <p class="nota"><a href="https://sturdy-succotash-gk6vowv.pages.github.io/regras/" target="_blank" rel="noopener">Regras de negócio</a></p>

@@ -176,6 +176,66 @@ async function servePage() {
   assert.strictEqual(await page.locator('#resultado').innerText(), regressionResult, 'recalcular mudou o resultado');
   await assertAccessible(page, 'depois do cálculo');
 
+  // Revisão de 08/11/2026: líquido presumido com encargos financiados, texto do semáforo verde,
+  // razão anual informativa e aviso de encargo por parcela alto.
+  const reviewPage = await browser.newPage();
+  reviewPage.on('pageerror', (error) => errors.push(error.message));
+  reviewPage.on('dialog', (dialog) => dialog.accept());
+  async function fillReviewCase(charges, extra) {
+    await reviewPage.goto(baseUrl + '/contrato.html');
+    await reviewPage.evaluate(() => {
+      window.ContratoSeriesBacen.observations['25471'] = [{ month: '2025-06', value: 2.07 }];
+    });
+    await reviewPage.locator('#maisOpcoes').evaluate((node) => { node.open = true; });
+    await reviewPage.locator('#modality').selectOption('vehicle_finance');
+    await reviewPage.locator('#contractDate').fill('2025-06-15');
+    await reviewPage.locator('#financedAmount').fill('40.000,00');
+    await reviewPage.locator('#installments').fill('48');
+    await reviewPage.locator('#installmentAmount').fill('1.400,00');
+    await reviewPage.locator('#monthlyRate').fill('2,49');
+    await reviewPage.locator('#amortization').selectOption('PRICE');
+    for (const [id, value] of Object.entries(extra || {})) await reviewPage.locator('#' + id).fill(value);
+    for (const [kind, amount, mode] of charges) {
+      await reviewPage.locator('#adicionarEncargo').click();
+      const row = reviewPage.locator('.encargo').last();
+      await row.locator('.tipo').selectOption(kind);
+      await row.locator('.valor').fill(amount);
+      await row.locator('.modo').selectOption(mode);
+    }
+    await reviewPage.locator('#calcularAnalise').click();
+    await reviewPage.locator('#resultado').waitFor({ state: 'visible' });
+    return reviewPage.locator('#cartoes').innerText();
+  }
+  const financedCharges = [['iof', '1.200,00', 'financed'], ['TAC', '800,00', 'financed']];
+  const presumedCards = await fillReviewCase(financedCharges);
+  assert.match(presumedCards, /menos os encargos financiados ou descontados da liberação \(R\$\s38\.000,00\)/);
+  const presumedCet = /CET estimado[^\n]*\n?\s*([\d.,]+% a\.a\.)/.exec(presumedCards);
+  assert.ok(presumedCet, 'CET não identificado com encargos financiados: ' + presumedCards);
+  const informedCards = await fillReviewCase(financedCharges, { netDisbursed: '38.000,00' });
+  assert.strictEqual(/CET estimado[^\n]*\n?\s*([\d.,]+% a\.a\.)/.exec(informedCards)[1], presumedCet[1],
+    'líquido presumido e informado devem dar o mesmo CET');
+  assert.doesNotMatch(informedCards, /valor líquido presumido/);
+  // Critério do DOL (08/11/2026): taxa sobre o valor liberado de R$ 38.000 em 48 x R$ 1.400 = 2,62% a.m.
+  // (o DOL mostra 2,61%); contra 2,07% dá 1,27x, faixa verde acima da média.
+  const semaforoVerde = await reviewPage.locator('#semaforoTexto').innerText();
+  assert.match(await reviewPage.locator('#semaforo').getAttribute('class'), /semaforo-green/);
+  assert.match(semaforoVerde, /Taxa do contrato: 1,27x a média BACEN/);
+  assert.match(semaforoVerde, /Acima da média, mas dentro da faixa verde/);
+  assert.match(informedCards, /Taxa do contrato \(sobre o valor liberado\)\s*2,62% a\.m\./);
+  const comparacaoDol = await reviewPage.locator('#comparacao').textContent();
+  assert.match(comparacaoDol, /calculada sobre o valor liberado de R\$\s38\.000,00/);
+  assert.match(comparacaoDol, /Em taxa anual equivalente: 36,38% a\.a\. contra 27,87% a\.a\./);
+  assert.match(comparacaoDol, /Juros remuneratórios informados no contrato: 2,49% a\.m\./);
+  assert.match(await reviewPage.locator('#simulacoes').textContent(),
+    /sobre R\$\s38\.000,00 liberados · a parcela paga é R\$\s[\d.,]+ maior/);
+  assert.match(await fillReviewCase([['iof', '500,00', 'unknown']]), /CET estimado[^\n]*\n?\s*Não identificável/,
+    'encargo de forma desconhecida não autoriza presumir o líquido');
+  assert.match(await fillReviewCase([['insurance', '2.400,00', 'recurring']], { netDisbursed: '40.000,00' }),
+    /somam R\$\s2\.400,00 por parcela .*Confira se foi digitado o valor de cada parcela/);
+  assert.doesNotMatch(await fillReviewCase([['insurance', '25,00', 'recurring']], { netDisbursed: '40.000,00' }),
+    /Confira se foi digitado o valor de cada parcela/);
+  await reviewPage.close();
+
   const cutoffPage = await browser.newPage();
   cutoffPage.on('pageerror', (error) => errors.push(error.message));
   for (const [kind, title, source] of [
@@ -249,7 +309,7 @@ async function servePage() {
   assert.match(lastPriceRow[2], /0,34/);
   assert.match(lastPriceRow[3], /33,67/);
   assert.match(lastPriceRow[4], /0,00/);
-  const priceMetrics = await page.locator('#metricas').innerText();
+  const priceMetrics = await page.locator('#metricas').textContent();
   assert.ok(priceMetrics.includes('Total das parcelas informadas'));
   assert.ok(priceMetrics.includes('102,00'));
 
@@ -597,7 +657,7 @@ async function servePage() {
   assert.strictEqual(await page.locator('#semaforoTexto').innerText(),
     'Modalidade sem média de pessoa física comparável nesta ferramenta (ex.: capital de giro, crédito para empresa, rural, cheque especial, cartão)');
   assert.strictEqual(await page.locator('#tabelaAmortizacao tr').count(), 24);
-  assert.ok((await page.locator('#metricas').innerText()).includes('Taxa de fluxo implícita (Price)'));
+  assert.ok((await page.locator('#metricas').textContent()).includes('Taxa de fluxo implícita (Price)'));
   assert.match(await page.locator('#cartoes').innerText(), /CET estimado \(dados presumidos\)[\s\S]*% a\.a\./);
   assert.match(await page.locator('#cartoes .nota').innerText(),
     /data de liberação não localizada no documento; data do contrato \(10\/03\/2025\)/);

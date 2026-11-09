@@ -529,6 +529,7 @@
   });
 
   /* ---------- Ajustes em prestações ---------- */
+  var ritosManuais = {};   // { 'p:AAAA-MM' | 'd:AAAA': 'prisao' | 'penhora' }: prestações movidas de rito (N42)
   var ajustes = [];   // [{ chave: 'p:AAAA-MM' | 'd:AAAA', tipo: 'rendimento' | 'valor', valor, texto, origem }]
   function ajustesMotor() {
     return ajustes.map(function (a) {
@@ -916,6 +917,12 @@
 
   /* ---------- Formulário ---------- */
   function termo() { return document.querySelector('input[name=termo]:checked').value; }
+  var NOTAS_RITO = {
+    ambos: 'Pela prisão vão as três últimas prestações antes do ajuizamento e as que vencerem depois; o restante vai pela penhora. A calculadora gera um demonstrativo para cada rito.',
+    prisao: 'Só entram as três últimas prestações antes do ajuizamento e as que vencerem depois. As mais antigas ficam fora e só poderiam ser cobradas pela penhora.',
+    penhora: 'Todo o débito vai pela penhora, inclusive as três últimas prestações, sem pedido de prisão (art. 528, § 8º, do CPC).',
+    '': 'Com a data do ajuizamento, a calculadora separa os ritos; sem ela, mostra um valor só.'
+  };
   function sincronizar() {
     var faz = tipo === 'fazenda', pen = tipo === 'pensao', reg = $('regime').value;
     cada(document.querySelectorAll('[data-so]'), function (el) { el.hidden = el.getAttribute('data-so') !== tipo; });
@@ -924,6 +931,9 @@
     $('campoContagem').hidden = faz || !(reg === 'tjsp' || reg === 'fixa' || reg === 'duas');
     $('campoDuas').hidden = faz || reg !== 'duas';
     $('campoDuasTaxa2').hidden = $('duasDepois').value !== 'fixa';
+    var regimeTaxaLegal = reg === 'tjsp' || reg === 'taxalegal' || reg === 'selic_tl' ||
+      (reg === 'duas' && $('duasDepois').value === 'taxalegal');
+    $('avisoMesCheioTaxaLegal').hidden = faz || !regimeTaxaLegal || $('contagemJuros').value !== 'mescheio';
     var troca = $('trocaIndice').checked;
     $('campoTrocaMes').hidden = !troca; $('campoTrocaIndice').hidden = !troca;
     var compOk = reg === 'fixa' || reg === 'duas';
@@ -945,10 +955,14 @@
     $('opcaoMulta').classList.toggle('opcao-desativada', faz);
     $('opcaoMulta').title = faz ? 'Não se aplica contra a Fazenda Pública (art. 534, § 2º, do CPC)' : '';
     $('honorariosPct').disabled = !$('honorarios').checked;
-    var com523 = !faz && ($('multa').checked || $('honorarios').checked);
+    var ritoExec = pen ? $('ritoExecucao').value : '', soPrisao = ritoExec === 'prisao';
+    $('legendaEncargos').parentNode.hidden = soPrisao;
+    $('campoAjuizamento').hidden = ritoExec === 'penhora';
+    $('notaRito').textContent = NOTAS_RITO[ritoExec];
+    var com523 = !faz && !soPrisao && ($('multa').checked || $('honorarios').checked);
     $('campoPrazo523').hidden = $('notaPrazo523').hidden = !com523;
     $('prazo523').required = com523;
-    $('legendaEncargos').textContent = pen && iso('dataAjuizamento') ? 'Art. 523, § 1º, do CPC (sobre o rito da penhora)' : 'Art. 523, § 1º, do CPC';
+    $('legendaEncargos').textContent = pen && (ritoExec === 'ambos' || (ritoExec === '' && iso('dataAjuizamento'))) ? 'Art. 523, § 1º, do CPC (sobre o rito da penhora)' : 'Art. 523, § 1º, do CPC';
     $('descricaoAba').textContent = DESCRICOES[tipo];
     $('vazio').textContent = pen
       ? 'Informe ao menos um período da pensão, com início e valor, e clique em "Preencher prestações".'
@@ -1014,6 +1028,7 @@
   }
   function coletar() {
     var parcelas = [], pagamentos = [];
+    var soPrisao = tipo === 'pensao' && $('ritoExecucao').value === 'prisao';   // no rito da prisão não há multa nem honorários do art. 523
     cada(listaP.children, function (li) {
       var v = iso(li.querySelector('.p-venc')), val = li.querySelector('.p-valor').value;
       var obrigacao = li.querySelector('.p-obrigacao').value.trim();
@@ -1037,13 +1052,15 @@
       posEC136: $('posEC136').value,
       termoJuros: termo(),
       dataJuros: iso('dataJuros'),
-      multa: $('multa').checked,
-      honorarios: $('honorarios').checked,
+      multa: $('multa').checked && !soPrisao,
+      honorarios: $('honorarios').checked && !soPrisao,
       honorariosPct: lerNumero($('honorariosPct').value),
-      prazo523: tipo !== 'fazenda' && ($('multa').checked || $('honorarios').checked) ? iso('prazo523') : '',
+      prazo523: tipo !== 'fazenda' && !soPrisao && ($('multa').checked || $('honorarios').checked) ? iso('prazo523') : '',
       periodos: tipo === 'pensao' ? coletarPeriodos() : [],
       ajustes: tipo === 'pensao' ? ajustesMotor() : [],
       dataAjuizamento: tipo === 'pensao' ? iso('dataAjuizamento') : '',
+      ritoExecucao: tipo === 'pensao' ? $('ritoExecucao').value : '',
+      ritosManuais: tipo === 'pensao' ? Object.assign({}, ritosManuais) : {},
       jurosDuas: { taxa1: lerNumero($('duasTaxa1').value), ate: iso('duasAte'), depois: $('duasDepois').value, taxa2: lerNumero($('duasTaxa2').value) },
       civel: tipo === 'particular' ? {
         indice: $('indiceCorrecao').value,
@@ -1081,7 +1098,7 @@
         tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, contagemDias: e.contagemDias,
         contagemJuros: e.contagemJuros, posEC136: e.posEC136,
         termoJuros: e.termoJuros, dataJuros: e.dataJuros, multa: $('multa').checked, honorarios: e.honorarios,
-        honorariosPct: $('honorariosPct').value, prazo523: iso('prazo523'), dataAjuizamento: iso('dataAjuizamento'), pdfDetalhado: $('pdfDetalhado').checked,
+        honorariosPct: $('honorariosPct').value, prazo523: iso('prazo523'), dataAjuizamento: iso('dataAjuizamento'), ritoExecucao: $('ritoExecucao').value, pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
         periodos: coletarPeriodosBrutos(),
         parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde, p.obrigacao]; }),
@@ -1090,7 +1107,7 @@
         origemAjuizamento: $('origemAjuizamento').dataset.origem || '',
         importacao: importacao,
         anterior: anterior, historico: historico, dataAtualizada: dataAtualizada, pdfAtualizacao: $('pdfAtualizacao').checked,
-        ajustes: ajustes, indicesSalvos: indicesSalvos, perfilCalculo: perfilCalculo, tabelaVisivel: tabelaVisivel
+        ajustes: ajustes, ritosManuais: ritosManuais, indicesSalvos: indicesSalvos, perfilCalculo: perfilCalculo, tabelaVisivel: tabelaVisivel
       }));
       localStorage.setItem(CHAVE_ASSINATURA, JSON.stringify(assinatura()));
     } catch (_) { /* sem armazenamento: segue sem salvar */ }
@@ -1151,6 +1168,9 @@
       $('honorariosPct').value = s.honorariosPct || '10';
       porIso('prazo523', s.prazo523 || '');
       porIso('dataAjuizamento', s.dataAjuizamento || '');
+      // Caso gravado antes da pergunta do rito continua como estava; tela nova fica com o padrão do formulário.
+      if (s.ritoExecucao != null) $('ritoExecucao').value = s.ritoExecucao;
+      else if ((s.periodos || []).length || (s.parcelas || []).length) $('ritoExecucao').value = '';
       if (s.pdfDetalhado === false) $('pdfDetalhado').checked = false;
       $('procUnidade').value = s.unidade || ''; $('procCidade').value = s.cidade || ''; $('procAutor').value = s.autor || '';
       (s.periodos || []).forEach(function (p) { novoPeriodo(p); });
@@ -1162,6 +1182,7 @@
       anterior = s.anterior || null; historico = s.historico || []; dataAtualizada = s.dataAtualizada || '';
       if (s.pdfAtualizacao === false) $('pdfAtualizacao').checked = false;
       ajustes = Array.isArray(s.ajustes) ? s.ajustes : [];
+      ritosManuais = s.ritosManuais && typeof s.ritosManuais === 'object' ? s.ritosManuais : {};
       indicesSalvos = s.indicesSalvos || null;
       tabelaVisivel = s.tabelaVisivel != null ? !!s.tabelaVisivel : (s.periodos || []).some(function (p) { return p && p.inicio; }) || (s.parcelas || []).length > 0;
     } else {
@@ -1353,6 +1374,17 @@
     }
     return it;
   }
+  function notaResultadoRito(res) {
+    var texto = '';
+    if (res.recorte === 'prisao') {
+      var f = res.foraDoRecorte;
+      texto = 'Demonstrativo só do rito da prisão.' + (f.parcelas ? ' ' + f.parcelas + (f.parcelas === 1 ? ' parcela ficou' : ' parcelas ficaram') + ' de fora (' + moeda(f.total) + '). Para incluir alguma, escolha "Prisão e penhora" e mova a prestação na memória de cálculo.' : '');
+    } else if (res.ritoExecucao === 'penhora') {
+      texto = 'Demonstrativo pelo rito da penhora, com todas as parcelas e sem pedido de prisão.';
+    }
+    if (res.ajuizamentoPresumido) texto += (texto ? ' ' : '') + 'Sem data de ajuizamento: foi usada a data do cálculo (' + brIso(res.ajuizamentoUsado) + ') como ajuizamento previsto.';
+    return texto ? '<p class="sub nota-ritos">' + esc(texto) + '</p>' : '';
+  }
   function faixa(linhas) {
     if (!linhas.length) return 'nenhuma prestação';
     return linhas.length + (linhas.length === 1 ? ' prestação' : ' prestações') + ', de ' + brIso(linhas[0].vencimento) + ' a ' + brIso(linhas[linhas.length - 1].vencimento);
@@ -1386,9 +1418,15 @@
         itens.push({ texto: e.ajustes.length + (e.ajustes.length === 1 ? ' prestação ajustada' : ' prestações ajustadas') + ' manualmente (' +
           e.ajustes.map(function (a) { return rotuloAjuste(a.chave); }).join(', ') + '). Confira com os holerites ou a decisão que justifica cada uma.' });
       }
-      if (res.rito) {
+      if (res.rito || res.recorte === 'prisao') {
         var pr = res.linhas.filter(function (l) { return l.rito === 'prisao'; });
-        itens.push({ texto: 'Rito da prisão: ' + faixa(pr) + ' (ajuizamento em ' + brIso(e.dataAjuizamento) + ').' });
+        itens.push({ texto: 'Rito da prisão: ' + faixa(pr) + (res.ajuizamentoPresumido
+          ? ' (sem data de ajuizamento: usada a data do cálculo, ' + brIso(res.ajuizamentoUsado) + ', como ajuizamento previsto). Se a execução for ajuizada em outro mês, informe a data e confira as prestações.'
+          : (res.ajuizamentoFuturo ? ' (ajuizamento previsto para ' : ' (ajuizamento em ') + brIso(res.ajuizamentoUsado) + ').') });
+        var movidas = res.linhas.filter(function (l) { return l.ritoManual; });
+        if (movidas.length) itens.push({ texto: movidas.length + (movidas.length === 1 ? ' prestação movida' : ' prestações movidas') + ' de rito manualmente. Confira a decisão que justifica cada uma.' });
+      } else if (res.ritoExecucao === 'penhora') {
+        itens.push({ texto: 'Execução só pelo rito da penhora: todas as parcelas entram neste demonstrativo, sem pedido de prisão. Confira se é essa a opção da parte.' });
       } else {
         itens.push({ texto: 'Sem data de ajuizamento, o débito aparece num valor só. Informe a data para separar o rito da prisão e o da penhora.' });
       }
@@ -1425,16 +1463,25 @@
     html += '<div class="metrica metrica-total"><div class="metrica-valor">' + moeda(t.total) + '</div><div class="metrica-rotulo">Total devido em ' + brIso(e.dataCalculo) + (aConferir ? ' · a conferir' : '') + '</div></div>';
     $('metricas').innerHTML = html;
 
-    $('ritos').hidden = !res.rito;
+    var notaRes = notaResultadoRito(res);
+    $('ritos').hidden = !res.rito && !notaRes;
+    $('rotuloPdf').textContent = res.rito ? 'PDF único com os dois ritos' : 'Gerar demonstrativo em PDF';
+    $('pdf').className = res.rito ? 'q-btn-outline' : 'q-btn';
+    if (!res.rito) $('ritos').innerHTML = notaRes;
     if (res.rito) {
+      var botoesRito = function (r, vazio) {
+        var d = vazio ? ' disabled' : '';
+        return '<div class="rito-acoes"><button type="button" class="q-btn" data-doc-rito="' + r + '" data-acao="pdf"' + d + '><svg class="ic"><use href="#i-pdf"/></svg>Gerar PDF</button>' +
+          '<button type="button" class="q-btn-outline" data-doc-rito="' + r + '" data-acao="copiar"' + d + '><svg class="ic"><use href="#i-copy"/></svg>Copiar para o Word</button></div>';
+      };
       var pr = res.linhas.filter(function (l) { return l.rito === 'prisao'; });
       var pe = res.linhas.filter(function (l) { return l.rito === 'penhora'; });
       var extra = (t.multa || t.honorarios) ? ' Inclui ' + [t.multa ? 'multa de ' + moeda(t.multa) : '', t.honorarios ? 'honorários de ' + moeda(t.honorarios) : ''].filter(Boolean).join(' e ') + '.' : '';
       $('ritos').innerHTML =
         '<div class="rito"><div class="rito-cab"><span class="badge badge-prisao">Rito da prisão</span><span class="sub">art. 528, § 3º e § 7º, do CPC</span></div>' +
-        '<div class="rito-valor">' + moeda(t.prisao) + '</div><span class="sub">' + esc(faixa(pr)) + '.</span></div>' +
+        '<div class="rito-valor">' + moeda(t.prisao) + '</div><span class="sub">' + esc(faixa(pr)) + '.</span>' + botoesRito('prisao', !pr.length) + '</div>' +
         '<div class="rito"><div class="rito-cab"><span class="badge badge-penhora">Rito da penhora</span><span class="sub">art. 528, § 8º, e art. 523 do CPC</span></div>' +
-        '<div class="rito-valor">' + moeda(t.totalPenhora) + '</div><span class="sub">' + esc(pe.length ? pe.length + (pe.length === 1 ? ' parcela' : ' parcelas') + ' (' + moeda(t.penhora) + ').' : 'Nenhuma parcela.') + esc(extra) + '</span></div>';
+        '<div class="rito-valor">' + moeda(t.totalPenhora) + '</div><span class="sub">' + esc(pe.length ? pe.length + (pe.length === 1 ? ' parcela' : ' parcelas') + ' (' + moeda(t.penhora) + ').' : 'Nenhuma parcela.') + esc(extra) + '</span>' + botoesRito('penhora', !pe.length) + '</div>' + notaRes;
     }
 
     var tab = $('memoria');
@@ -1450,6 +1497,11 @@
       var sit = l.quitada ? '<span class="badge badge-ok">Quitada</span>'
         : (l.pago > 0 ? '<span class="badge badge-alerta">Paga em parte</span>' : '<span class="badge badge-neutro">Em aberto</span>');
       var rito = l.rito === 'prisao' ? '<span class="badge badge-prisao">Prisão</span>' : '<span class="badge badge-penhora">Penhora</span>';
+      if (res.rito && l.origem === 'pensao') {
+        var destino = l.rito === 'prisao' ? 'penhora' : 'prisão';
+        rito += ' <button type="button" class="btn-mover-rito" data-chave="' + l.chave + '" title="Mover para o rito da ' + destino + '" aria-label="Mover a prestação ' + l.n + ' para o rito da ' + destino + '">mover</button>' +
+          (l.ritoManual ? '<span class="sub rito-ajustado">movida manualmente</span>' : '');
+      }
       var ajustada = pen && ajustes.some(function (a) { return a.chave === l.chave; });
       corpo += '<tr class="com-detalhe' + (l.quitada ? ' quitada' : '') + (ajustada ? ' ajustada' : '') + '">' +
         '<td>' + l.n + (pen && l.origem === 'pensao' ? ' <button type="button" class="q-btn-icone btn-ajuste" data-chave="' + l.chave + '" title="Ajustar esta prestação" aria-label="Ajustar a prestação ' + l.n + '"><svg class="ic"><use href="#i-edit"/></svg></button>' : '') +
@@ -1498,7 +1550,18 @@
     $('alternarDetalhes').setAttribute('aria-pressed', String(!!detalhesVisiveis));
   }
   $('alternarDetalhes').addEventListener('click', function () { detalhesVisiveis = !detalhesVisiveis; aplicarDetalhes(); });
+  function moverRito(chave) {
+    var l = ultimo && ultimo.linhas.filter(function (x) { return x.chave === chave; })[0];
+    if (!l) return;
+    var novo = l.rito === 'prisao' ? 'penhora' : 'prisao';
+    if (novo === l.ritoAuto) delete ritosManuais[chave]; else ritosManuais[chave] = novo;
+    recalcular();
+    var b = $('memoria').querySelector('.btn-mover-rito[data-chave="' + chave + '"]');
+    if (b) b.focus();
+  }
   $('memoria').addEventListener('click', function (ev) {
+    var mover = ev.target.closest('.btn-mover-rito');
+    if (mover) { moverRito(mover.dataset.chave); return; }
     var b = ev.target.closest('.btn-ajuste');
     if (b) editarPorChave(b.dataset.chave);
   });
@@ -1523,7 +1586,16 @@
         if (e.periodos.some(function (p) { return p.reajuste === 'sm'; })) c.push('Valor fixo reajustado pelo salário mínimo: a cada 12 meses da data-base, o valor acompanha a proporção entre o salário mínimo vigente no mês do reajuste e o da data-base.');
         if (e.ajustes && e.ajustes.length) c.push('Prestações ajustadas: nos meses indicados no anexo, a prestação foi apurada sobre o rendimento informado para o mês (13º, férias ou outra verba) ou pelo valor informado, no lugar do apurado pela base.');
         if (e.periodos.some(function (p) { return p.decimo; })) c.push('13º: prestação extra com a mesma base, vencida em 20 de dezembro (Lei 4.749/65, art. 1º), nos períodos em que o título prevê incidência.');
-        if (res && res.rito) c.push('Rito da prisão: as três prestações da pensão vencidas antes do ajuizamento (' + brIso(e.dataAjuizamento) + ') e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ). As demais parcelas, inclusive as avulsas, vão para o rito da penhora.');
+        var refAjuiz = res && res.ajuizamentoUsado ? brIso(res.ajuizamentoUsado) + (res.ajuizamentoPresumido ? ', data deste cálculo, tomada como ajuizamento previsto' : (res.ajuizamentoFuturo ? ', data prevista' : '')) : '';
+        var regraPrisao = 'as três prestações da pensão vencidas antes do ajuizamento (' + refAjuiz + ') e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ).';
+        if (res && res.rito) c.push('Rito da prisão: ' + regraPrisao + ' As demais parcelas, inclusive as avulsas, vão para o rito da penhora.');
+        if (res && res.recorte === 'prisao') c.push('Rito da prisão: ' + regraPrisao + ' As demais parcelas não integram este demonstrativo.');
+        if (res && res.recorte === 'penhora') c.push('Rito da penhora (art. 528, § 8º, do CPC): parcelas não abrangidas pelo rito da prisão, ou seja, as prestações anteriores às três últimas antes do ajuizamento (' + refAjuiz + ') e as parcelas avulsas.');
+        var movidasDoc = res ? res.linhas.filter(function (l) { return l.ritoManual; }) : [];
+        if (movidasDoc.length) c.push('Rito alterado manualmente em relação à regra geral: ' + movidasDoc.map(function (l) {
+          return 'parcela ' + l.n + ', vencida em ' + brIso(l.vencimento) + ', para o rito da ' + (l.rito === 'prisao' ? 'prisão' : 'penhora');
+        }).join('; ') + '.');
+        if (res && res.ritoExecucao === 'penhora') c.push('Execução pelo rito da penhora (art. 528, § 8º, do CPC): todas as parcelas, sem pedido de prisão civil.');
       }
       c.push(textoCorrecao(e));
       if (e.regime === 'tjsp') c.push('Juros simples de 0,5% ao mês até 10/01/2003 (CC/1916, art. 1.062), 1% ao mês de 11/01/2003 a 28/08/2024 (CC/2002, art. 406 c/c CTN, art. 161, § 1º) e, a partir de 29/08/2024 (Lei 14.905/2024), taxa legal, sem lacuna nem sobreposição de dias; confira o título e a hipótese jurídica aplicável.');
@@ -1535,8 +1607,13 @@
       if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
       if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 28/08/2024; a partir de 29/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital.');
       var comp = e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas');
+      var usaTaxaLegal = e.regime === 'tjsp' || e.regime === 'taxalegal' || e.regime === 'selic_tl' ||
+        (e.regime === 'duas' && e.jurosDuas.depois !== 'fixa');
       if (e.regime !== 'nenhum') c.push((comp ? 'Juros compostos, com capitalização mensal, nas taxas fixas: (1 + taxa)^(meses + dias ÷ 30) − 1; taxa legal e Selic sempre simples. ' : 'Juros simples sobre o capital corrigido. ') +
-        (mesCheio ? 'Taxas fixas: meses completos pelos limites mensais da planilha TJSP (critério pendente de validação). Taxa legal e Selic: taxas mensais nos meses completos entre os limites mensais. ' :
+        (mesCheio ? 'Taxas fixas: meses completos pelos limites mensais da planilha TJSP (critério pendente de validação). ' +
+          (usaTaxaLegal ? 'Taxa legal: taxas mensais do mês seguinte ao início até o mês do cálculo, inclusive, conforme a Extenso do TJSP. ' : '') +
+          'Selic: meses completos entre os limites mensais. ' +
+          (usaTaxaLegal ? 'A Resolução CMN 5.171/2024 (art. 6º, parágrafo único) prevê pro rata para a taxa legal; mês cheio é uma convenção de contadoria e deve ser usado apenas se o título determinar. ' : '') :
           (e.contagemDias === 'corridos' ? 'Taxa fixa: meses completos de data a data, mais os dias corridos restantes ÷ 30. ' :
             'Taxa fixa: dias contados em mês comercial de 30 dias (função DIAS360, como nas planilhas do TJSP) ÷ 30. ') +
           'Taxa legal e Selic: soma das taxas mensais, proporcional aos dias corridos de cada mês (Res. CMN 5.171/2024, arts. 6º e 7º).'));
@@ -1560,7 +1637,7 @@
         (mesPag ? 'sem indicação, na ' + (temObrigacao ? 'obrigação' : 'parcela') + ' com vencimento no mesmo mês do pagamento; o excedente, ou o pagamento feito em mês sem parcela em aberto, é imputado' : 'depois') + ' nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada ' + (temObrigacao ? 'obrigação, consideradas todas as suas frações' : 'parcela') + ', primeiro nos juros e encargos, depois no capital (art. 354).');
     }
     if ((e.multa && e.tipo !== 'fazenda') || e.honorarios) {
-      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && res.rito ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) +
+      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && (res.rito || res.recorte === 'penhora') ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) +
         (e.prazo523 ? ' Data final informada: ' + brIso(e.prazo523) + '. Pagamentos posteriores ao prazo com encargos selecionados são bloqueados até que o saldo constituído possa ser recomposto sem duplicidade.' : ''));
     }
     var st = I.estado();
@@ -1599,15 +1676,23 @@
     return t + '.';
   }
 
+  var NOMES_RITO_DOC = { prisao: 'Rito da prisão (art. 528, §§ 3º e 7º, do CPC)', penhora: 'Rito da penhora (art. 528, § 8º, e art. 523 do CPC)' };
+  function textoRecorte(res) {
+    if (res.recorte === 'prisao') return 'Este demonstrativo abrange apenas as prestações exigíveis pelo rito da prisão.' + (res.ritoExecucao === 'prisao' ? '' : ' As demais parcelas são objeto de execução própria, pelo rito da penhora.');
+    return 'Este demonstrativo abrange apenas as parcelas do rito da penhora. As prestações exigíveis pelo rito da prisão são objeto de execução própria.';
+  }
+
   /* Conteúdo do demonstrativo, sem moldura: usado no PDF e na cópia para o Word. */
   function conteudoDemonstrativo(res, detalhado) {
     var e = res.entrada, t = res.totais, faz = e.tipo === 'fazenda', pen = e.tipo === 'pensao';
     var titulos = { pensao: 'Demonstrativo de débito alimentar', particular: 'Demonstrativo de débito', fazenda: 'Demonstrativo de débito da Fazenda Pública' };
-    var h = '<div class="doc-titulo"><h1>' + titulos[e.tipo] + '</h1><p>Valores atualizados até ' + brIso(e.dataCalculo) + '</p></div>';
+    var ritoDoc = res.recorte || (res.ritoExecucao === 'penhora' ? 'penhora' : '');
+    var h = '<div class="doc-titulo"><h1>' + titulos[e.tipo] + '</h1>' + (ritoDoc ? '<p><b>' + NOMES_RITO_DOC[ritoDoc] + '</b></p>' : '') + '<p>Valores atualizados até ' + brIso(e.dataCalculo) + '</p></div>';
     h += atualizacaoDoc(res);
+    if (res.recorte) h += '<p>' + esc(textoRecorte(res)) + '</p>';
 
     var ident = [['Processo', $('procNumero').value], ['Exequente', $('procExequente').value], ['Executado', $('procExecutado').value]];
-    if (pen && e.dataAjuizamento) ident.push(['Ajuizamento da execução', brIso(e.dataAjuizamento)]);
+    if (pen && e.dataAjuizamento) ident.push([res.ajuizamentoFuturo ? 'Ajuizamento previsto' : 'Ajuizamento da execução', brIso(e.dataAjuizamento)]);
     ident = ident.filter(function (i) { return i[1] && String(i[1]).trim(); });
     if (ident.length) {
       h += '<table class="ident">' + ident.map(function (i) { return '<tr><th>' + i[0] + '</th><td>' + esc(i[1]) + '</td></tr>'; }).join('') + '</table>';
@@ -1649,12 +1734,13 @@
       h += '<h2>Imputação dos pagamentos</h2><p>Critério: ' + esc(NOMES_IMPUTACAO[res.imputacao]) + '.</p><table class="dados"><thead><tr><th>Pagamento</th><th>Data</th><th class="num">Valor</th><th>Parcela</th><th class="num">Juros</th>' + (faz ? '<th class="num">Encargos</th>' : '') + '<th class="num">Capital</th></tr></thead><tbody>';
       res.pagamentos.forEach(function (p) {
         p.aplicacoes.forEach(function (a, i) {
-          h += '<tr><td>' + (i ? '' : p.n) + '</td><td>' + (i ? '' : brIso(p.data)) + '</td><td class="num">' + (i ? '' : moeda(p.valor)) + '</td><td>' + a.parcela +
+          h += '<tr><td>' + (i ? '' : p.n + (p.dividido ? '*' : '')) + '</td><td>' + (i ? '' : brIso(p.data)) + '</td><td class="num">' + (i ? '' : moeda(p.valor)) + '</td><td>' + a.parcela +
             '</td><td class="num">' + moeda(a.juros) + '</td>' + (faz ? '<td class="num">' + moeda(a.encargos) + '</td>' : '') + '<td class="num">' + moeda(a.capital) + '</td></tr>';
         });
         if (p.sobra > 0) h += '<tr><td></td><td></td><td></td><td colspan="' + (faz ? 4 : 3) + '">Excedente de ' + moeda(p.sobra) + '</td></tr>';
       });
       h += '</tbody></table>';
+      if (res.pagamentos.some(function (p) { return p.dividido; })) h += '<p class="miudo">* Pagamento imputado em parte nas parcelas do outro rito; aqui aparece só a parte imputada neste demonstrativo.</p>';
     }
     if (res.avisos.length) h += '<h2>Observações</h2><ul class="lista-doc">' + res.avisos.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>';
     h += '<h2>Critérios</h2><ul class="lista-doc criterios-doc">' + criterios(e, res).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>';
@@ -1698,24 +1784,34 @@
     return box.innerHTML;
   }
 
-  $('pdf').addEventListener('click', function () {
-    if (!ultimo) return;
+  function gerarPdf(res) {
+    if (!res) return;
     if (importacao && !importacao.revisado && !confirm('Os dados importados do Copilot ainda não foram marcados como revisados. Gerar o demonstrativo mesmo assim?')) return;
-    $('impressao').innerHTML = montarDemonstrativo(ultimo, $('pdfDetalhado').checked);
+    $('impressao').innerHTML = montarDemonstrativo(res, $('pdfDetalhado').checked);
     var tituloAntes = document.title, proc = $('procNumero').value.trim();
-    document.title = 'Demonstrativo de débito' + (proc ? ' - ' + proc : '') + ' - ' + ultimo.entrada.dataCalculo;
+    var ritoDoc = res.recorte || (res.ritoExecucao === 'penhora' ? 'penhora' : '');
+    // O título vira o nome sugerido do arquivo: cada rito sai com o seu.
+    document.title = 'Demonstrativo de débito' + (ritoDoc ? ' - Rito da ' + (ritoDoc === 'prisao' ? 'prisão' : 'penhora') : '') + (proc ? ' - ' + proc : '') + ' - ' + res.entrada.dataCalculo;
     var restaurarTitulo = function () { document.title = tituloAntes; window.removeEventListener('afterprint', restaurarTitulo); };
     window.addEventListener('afterprint', restaurarTitulo);
     mostrarAviso('Na janela de impressão, escolha "Salvar como PDF".');
     var logo = $('impressao').querySelector('.doc-logo');
     var imprimir = function () { setTimeout(function () { window.print(); }, 50); };
     if (logo && !logo.complete) { logo.onload = imprimir; logo.onerror = imprimir; } else imprimir();
+  }
+  $('pdf').addEventListener('click', function () { gerarPdf(ultimo); });
+  $('ritos').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-doc-rito]');
+    if (!b || !ultimo || !ultimo.rito) return;
+    var recorte = E.recortarRito(ultimo, b.getAttribute('data-doc-rito'));
+    if (b.getAttribute('data-acao') === 'pdf') gerarPdf(recorte); else copiarDemonstrativo(recorte);
   });
 
   /* ---------- Copiar e CSV ---------- */
   function memoriaTexto(res) {
     var e = res.entrada, faz = e.tipo === 'fazenda';
     var linhas = ['Memória de cálculo – atualização em ' + brIso(e.dataCalculo), ''];
+    if (res.recorte) linhas.splice(1, 0, NOMES_RITO_DOC[res.recorte]);
     res.linhas.forEach(function (l) {
       linhas.push('Parcela ' + l.n + ' – vencimento ' + brIso(l.vencimento) + ' – valor original ' + moeda(l.valor) + (l.descricao ? ' (' + l.descricao + ')' : '') + (l.obrigacao ? ' – ' + identidadeObrigacao(l) : '') + (l.rito ? ' – rito da ' + (l.rito === 'prisao' ? 'prisão' : 'penhora') : ''));
       l.eventos.forEach(function (ev) { linhas.push('  ' + ev); });
@@ -1735,9 +1831,10 @@
     avisoTimer = setTimeout(function () { $('avisoAcao').textContent = ''; }, 6000);
   }
 
-  $('copiar').addEventListener('click', function () {
-    if (!ultimo) return;
-    var html = demonstrativoParaWord(ultimo), txt = memoriaTexto(ultimo);
+  $('copiar').addEventListener('click', function () { copiarDemonstrativo(ultimo); });
+  function copiarDemonstrativo(res) {
+    if (!res) return;
+    var html = demonstrativoParaWord(res), txt = memoriaTexto(res);
     var ok = function () { mostrarAviso('Memória copiada. Cole no Word ou no editor da peça.'); };
     var falhou = function () { mostrarAviso('O navegador bloqueou a cópia.'); };
     if (navigator.clipboard && window.ClipboardItem) {
@@ -1748,7 +1845,7 @@
     } else if (navigator.clipboard) {
       navigator.clipboard.writeText(txt).then(ok, falhou);
     }
-  });
+  }
 
   function baixar(nome, conteudo, tipoMime) {
     var blob = new Blob([conteudo], { type: tipoMime });
@@ -1918,6 +2015,8 @@
       L.push(['Ajuste', rotuloAjuste(a.chave) + ': ' + (a.rendimento != null ? 'rendimento do mês de ' + moeda(a.rendimento) : 'prestação de ' + moeda(a.valor)), a.origem]);
     });
     if (d.ajuizamento) L.push(['Ajuizamento', brIso(d.ajuizamento.data), d.ajuizamento.origem]);
+    if (d.ritoExecucao) L.push(['Rito da execução', { ambos: 'prisão e penhora, em execuções separadas', prisao: 'só prisão', penhora: 'só penhora' }[d.ritoExecucao], null]);
+    if (d.ritosManuais) L.push(['Prestações movidas de rito', Object.keys(d.ritosManuais).length + '', null]);
     d.parcelas.forEach(function (p, i) { L.push([(d.tipo === 'pensao' || !d.tipo ? 'Parcela avulsa ' : 'Parcela ') + (i + 1), brIso(p.vencimento) + ' – ' + moeda(p.valor) + (p.descricao ? ' (' + p.descricao + ')' : '') + (p.obrigacao ? ' – ' + identidadeObrigacao(p) : ''), p.origem]); });
     if (d.pagamentos.length) L.push(['Imputação', NOMES_IMPUTACAO[d.imputacao === 'automatica' ? 'automatica' : 'mes'], null]);
     d.pagamentos.forEach(function (p, i) { L.push(['Pagamento ' + (i + 1), brIso(p.data) + ' – ' + moeda(p.valor), p.origem]); });
@@ -1992,6 +2091,8 @@
     if (!listaPe.children.length) novoPeriodo({ dia: '10', base: 'pct_sm' });
     porIso('dataAjuizamento', d.ajuizamento ? d.ajuizamento.data : '');
     marcarOrigem($('origemAjuizamento'), d.ajuizamento ? d.ajuizamento.origem : '');
+    $('ritoExecucao').value = d.ritoExecucao || '';
+    ritosManuais = d.ritosManuais || {};
     listaP.innerHTML = '';
     d.parcelas.forEach(function (p) { marcarOrigem(novaParcela(p.vencimento, num(p.valor, 2), false, p.correcaoDesde, p.jurosDesde, p.obrigacao), p.origem + (p.descricao ? ' – ' + p.descricao : '')); });
     if (PAGINA === 'civel' && !listaP.children.length) novaParcela();
@@ -2115,6 +2216,8 @@
           rendimento: a.tipo === 'rendimento' ? a.valor : undefined, valor: a.tipo === 'valor' ? a.valor : undefined, origem: a.origem || undefined });
       }) : undefined,
       dataAjuizamento: e.tipo === 'pensao' && e.dataAjuizamento ? semVazio({ data: e.dataAjuizamento, origem: $('origemAjuizamento').dataset.origem || undefined }) : undefined,
+      ritoExecucao: e.tipo === 'pensao' && e.ritoExecucao ? e.ritoExecucao : undefined,
+      ritosManuais: e.tipo === 'pensao' && Object.keys(e.ritosManuais).length ? e.ritosManuais : undefined,
       outrasParcelas: e.parcelas.filter(function (p) { return p.vencimento && p.valor > 0; })
         .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined, obrigacao: p.obrigacao || undefined }); }),
       pagamentos: e.pagamentos.filter(function (p) { return p.data && p.valor > 0; })
@@ -2381,8 +2484,17 @@
     if (!anterior || !$('pdfAtualizacao').checked || res.entrada.dataCalculo <= anterior.dataCalculo) return '';
     var a = anterior, e = res.entrada;
     var novas = res.linhas.filter(function (l) { return l.vencimento > a.dataCalculo; });
-    var pags = e.pagamentos.filter(function (p) { return p.data > a.dataCalculo && p.valor > 0; });
-    var t = 'Este demonstrativo atualiza o cálculo de ' + brIso(a.dataCalculo) + ', que apurou ' + moeda(a.total) + '. Desde então, ' +
+    var totalAnterior = a.total;
+    if (res.recorte) {
+      totalAnterior = res.recorte === 'prisao' ? a.totalPrisao : a.totalPenhora;
+      if (totalAnterior == null) return '';
+    }
+    var pags = res.recorte
+      ? res.pagamentos.filter(function (p) { return p.data > a.dataCalculo; }).map(function (p) {
+          return { valor: p.aplicacoes.reduce(function (s, x) { return s + x.juros + x.encargos + x.capital; }, 0) };
+        })
+      : e.pagamentos.filter(function (p) { return p.data > a.dataCalculo && p.valor > 0; });
+    var t = 'Este demonstrativo atualiza o cálculo de ' + brIso(a.dataCalculo) + ', que apurou ' + moeda(totalAnterior) + '. Desde então, ' +
       (novas.length ? 'venceram ' + novas.length + (novas.length === 1 ? ' prestação' : ' prestações') + ' (' + moeda(novas.reduce(function (s, l) { return s + l.valor; }, 0)) + ' em valores originais)' : 'não venceram prestações novas') +
       (pags.length ? (pags.length === 1 ? ' e foi lançado 1 pagamento' : ' e foram lançados ' + pags.length + ' pagamentos') + ' (' + moeda(pags.reduce(function (s, p) { return s + p.valor; }, 0)) + ')' : ' e não houve pagamento') +
       '. O débito atualizado até ' + brIso(e.dataCalculo) + ' é de ' + moeda(res.totais.total) + '.';
@@ -2411,8 +2523,9 @@
     else gerais.push(['Critério após 10/09/2025', e.posEC136 === 'ipca2' ? 'IPCA + 2% a.a., limitado à Selic' : 'Selic']);
     if (faz || e.regime !== 'nenhum') gerais.push(['Termo inicial dos juros', e.termoJuros === 'data' ? brIso(e.dataJuros) : 'vencimento de cada parcela']);
     if (e.pagamentos.length) gerais.push(['Imputação dos pagamentos', NOMES_IMPUTACAO[res.imputacao]]);
-    if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) : 'não informado']);
-    if (!faz) gerais.push(['Art. 523, § 1º', (e.multa ? 'multa de 10%' : 'sem multa') + '; ' + (e.honorarios ? 'honorários de ' + num(e.honorariosPct, e.honorariosPct % 1 ? 2 : 0) + '%' : 'sem honorários') +
+    if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) + (res.ajuizamentoFuturo ? ' (previsto)' : '') : (res.ajuizamentoPresumido ? 'não informado; usada a data do cálculo como ajuizamento previsto' : 'não informado')]);
+    if (pen && res.ritoExecucao) gerais.push(['Rito da execução', { ambos: 'prisão e penhora, em execuções separadas', prisao: 'só prisão', penhora: 'só penhora' }[res.ritoExecucao]]);
+    if (!faz && res.recorte !== 'prisao' && res.ritoExecucao !== 'prisao') gerais.push(['Art. 523, § 1º', (e.multa ? 'multa de 10%' : 'sem multa') + '; ' + (e.honorarios ? 'honorários de ' + num(e.honorariosPct, e.honorariosPct % 1 ? 2 : 0) + '%' : 'sem honorários') +
       (e.prazo523 && (e.multa || e.honorarios) ? '; fim do prazo em ' + brIso(e.prazo523) : '')]);
     gerais.push(['Total apurado', moeda(res.totais.total)]);
     if (res.rito) gerais.push(['Rito da prisão / rito da penhora', moeda(res.totais.prisao) + ' / ' + moeda(res.totais.totalPenhora)]);
