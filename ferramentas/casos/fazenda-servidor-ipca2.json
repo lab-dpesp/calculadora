@@ -1,0 +1,8 @@
+{
+  "formato": "calcjur-copilot",
+  "versao": 1,
+  "tipo": "fazenda",
+  "fazenda": { "natureza": "servidor", "posEC136": "ipca2" },
+  "outrasParcelas": [{ "vencimento": "2020-06-10", "valor": 10000 }],
+  "pagamentos": []
+}

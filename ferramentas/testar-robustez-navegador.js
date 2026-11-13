@@ -52,7 +52,7 @@ async function novaPagina(url) {
   page.on('pageerror', (e) => page.erros.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') page.erros.push(m.text()); });
   await page.goto(baseUrl + '/' + url);
-  await page.waitForSelector('#calcular, #formContrato');
+  await page.waitForSelector('#form, #formContrato');
   return page;
 }
 async function baixar(page, seletor) {
@@ -81,8 +81,10 @@ async function preencherContrato(page, c) {
   }
 }
 async function calcularContrato(page) {
-  await page.click('#calcularAnalise');
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => {
+    const result = document.getElementById('resultado');
+    return !result.hidden && document.getElementById('resultadoDesatualizado').hidden;
+  });
 }
 async function exportBloqueado(page) {
   return page.evaluate(() => ['imprimir', 'baixarCsv', 'baixarJson'].map((id) => {
@@ -107,13 +109,17 @@ teste('A1 contrato: edição, encargo, amortização e erro bloqueiam a exporta�
   await page.fill('#monthlyRate', '6');
   assert.ok(await page.locator('#resultadoDesatualizado').isVisible());
   assert.match(await page.locator('#resultadoDesatualizado').innerText(), /Dados alterados — recalcule antes de exportar/);
-  assert.deepStrictEqual(await exportBloqueado(page), [true, true, true]);
+  await calcularContrato(page);
+  assert.ok(await page.locator('#resultadoDesatualizado').isHidden(), 'o resultado é atualizado automaticamente');
+  assert.deepStrictEqual(await exportBloqueado(page), [false, false, false]);
   await page.fill('#monthlyRate', '5,5');
-  assert.deepStrictEqual(await exportBloqueado(page), [true, true, true], 'voltar ao valor anterior não libera sem recalcular');
+  await calcularContrato(page);
+  assert.ok(await page.locator('#resultadoDesatualizado').isHidden());
+  assert.deepStrictEqual(await exportBloqueado(page), [false, false, false], 'o resultado acompanha a edição automaticamente');
 
   // Erro no recálculo mantém o bloqueio; corrigir e recalcular exporta só o último resultado válido.
   await page.fill('#installments', '2.5');
-  await page.click('#calcularAnalise');
+  await page.locator('#formContrato').evaluate((form) => form.requestSubmit());
   assert.match(await page.locator('#erro').innerText(), /deve ser inteiro/);
   assert.deepStrictEqual(await exportBloqueado(page), [true, true, true]);
   await page.fill('#installments', '24');
@@ -287,8 +293,9 @@ async function abrirCalc(page, nome, texto) {
   await page.waitForFunction(() => document.getElementById('avisoArquivo').textContent);
 }
 async function estadoCalc(page) {
-  await page.click('#calcular');
-  await page.waitForTimeout(150);
+  await page.waitForFunction(() => !document.getElementById('resultado').hidden);
+  const criterios = page.locator('.criterios-resultado');
+  if (!await criterios.evaluate((node) => node.open)) await criterios.locator('summary').click();
   return { campos: await campos(page, 'main'), total: await page.locator('.metrica-total .metrica-valor').innerText(),
     criterios: await page.locator('#criterios').innerText() };
 }
@@ -370,6 +377,7 @@ teste('índices institucionais: origem e versão aparecem no cálculo e no .calc
   const caso = lerCaso('civel-tjsp.calcjur');
   delete caso.calculoAnterior; delete caso.indices;
   await abrirCalc(page, 'caso.calcjur', JSON.stringify(caso));
+  await page.locator('.criterios-resultado > summary').click();
   assert.match(await page.locator('#criterios').innerText(), /pacote institucional versão 1 \(fonte: CTI/);
   const salvo = JSON.parse(await baixar(page, '#salvarCalculo'));
   assert.strictEqual(salvo.indices.fonte, 'pacote institucional');
@@ -422,7 +430,7 @@ teste('A4/B1 débitos: índices de arquivo importado continuam "arquivo importad
   };
   await conferir(page, 'importado');
   await page.reload();
-  await page.waitForSelector('#calcular');
+  await page.waitForSelector('#form, #formContrato');
   await conferir(page, 'recarregado');
   const salvo = JSON.parse(await baixar(page, '#salvarCalculo'));
   assert.strictEqual(salvo.indices.fonte, 'arquivo importado');

@@ -63,6 +63,12 @@ function generatedCase(index) {
 function assertNoBadOutput(text) {
   assert.ok(!/\b(?:NaN|Infinity|undefined)\b/.test(text), 'resultado contém valor inválido');
 }
+async function aguardarResultado(page) {
+  await page.waitForFunction(() => {
+    const result = document.getElementById('resultado');
+    return !result.hidden && document.getElementById('resultadoDesatualizado').hidden;
+  });
+}
 async function assertAccessible(page, stage) {
   const result = await page.evaluate(async () => window.axe.run(document, {
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }
@@ -159,8 +165,7 @@ async function servePage() {
   await page.locator('#installments').fill('24');
   await page.locator('#installmentAmount').fill('700,00');
   await page.locator('#monthlyRate').fill('5,5');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   const regressionCards = await page.locator('#cartoes').innerText();
   assert.match(regressionCards, /72,17% a\.a\./, 'CET presumido não bate com o caso da issue');
   assert.match(regressionCards, /dados presumidos/);
@@ -172,7 +177,6 @@ async function servePage() {
   assert.match(await page.locator('#semaforo').getAttribute('class'), /semaforo-gray/);
   assert.match(await page.locator('#semaforoTexto').innerText(), /Sem observação BACEN exata|Médias BACEN não carregadas/);
   const regressionResult = await page.locator('#resultado').innerText();
-  await page.locator('#calcularAnalise').click();
   assert.strictEqual(await page.locator('#resultado').innerText(), regressionResult, 'recalcular mudou o resultado');
   await assertAccessible(page, 'depois do cálculo');
 
@@ -202,8 +206,7 @@ async function servePage() {
       await row.locator('.valor').fill(amount);
       await row.locator('.modo').selectOption(mode);
     }
-    await reviewPage.locator('#calcularAnalise').click();
-    await reviewPage.locator('#resultado').waitFor({ state: 'visible' });
+    await aguardarResultado(reviewPage);
     return reviewPage.locator('#cartoes').innerText();
   }
   const financedCharges = [['iof', '1.200,00', 'financed'], ['TAC', '800,00', 'financed']];
@@ -219,13 +222,15 @@ async function servePage() {
   // (o DOL mostra 2,61%); contra 2,07% dá 1,27x, faixa verde acima da média.
   const semaforoVerde = await reviewPage.locator('#semaforoTexto').innerText();
   assert.match(await reviewPage.locator('#semaforo').getAttribute('class'), /semaforo-green/);
-  assert.match(semaforoVerde, /Taxa do contrato: 1,27x a média BACEN/);
+  assert.match(semaforoVerde, /Taxa efetiva mensal: 1,27x a média BACEN \(faixas internas: 1,30x e 1,50x; não são limites do BACEN nem do STJ\)/);
   assert.match(semaforoVerde, /Acima da média, mas dentro da faixa verde/);
-  assert.match(informedCards, /Taxa do contrato \(sobre o valor liberado\)\s*2,62% a\.m\./);
+  assert.match(informedCards, /Taxa efetiva mensal \(sobre o valor liberado\)\s*2,62% a\.m\./);
   const comparacaoDol = await reviewPage.locator('#comparacao').textContent();
   assert.match(comparacaoDol, /calculada sobre o valor liberado de R\$\s38\.000,00/);
   assert.match(comparacaoDol, /Em taxa anual equivalente: 36,38% a\.a\. contra 27,87% a\.a\./);
-  assert.match(comparacaoDol, /Juros remuneratórios informados no contrato: 2,49% a\.m\./);
+  // Orientação do Nudecon (10/11/2026): só a taxa efetiva mensal; os juros informados (2,49%) não aparecem.
+  assert.doesNotMatch(comparacaoDol, /Juros remuneratórios informados|2,49%/);
+  assert.doesNotMatch(await reviewPage.locator('#metricas').textContent(), /Taxa de fluxo implícita/);
   assert.match(await reviewPage.locator('#simulacoes').textContent(),
     /sobre R\$\s38\.000,00 liberados · a parcela paga é R\$\s[\d.,]+ maior/);
   assert.match(await fillReviewCase([['iof', '500,00', 'unknown']]), /CET estimado[^\n]*\n?\s*Não identificável/,
@@ -255,7 +260,7 @@ async function servePage() {
       await cutoffPage.locator('#encargos .tipo').selectOption(kind);
       await cutoffPage.locator('#encargos .valor').fill('1,00');
       await cutoffPage.locator('#encargos .modo').selectOption('upfront');
-      await cutoffPage.locator('#calcularAnalise').click();
+      await aguardarResultado(cutoffPage);
       assert.ok(await cutoffPage.locator('#erro').isHidden(), await cutoffPage.locator('#erro').innerText());
       await cutoffPage.locator('#resultado').waitFor({ state: 'visible' });
       const specific = cutoffPage.locator('#achados > li').filter({ hasText: title });
@@ -299,8 +304,7 @@ async function servePage() {
   await page.locator('#installmentAmount').fill('34,00');
   await page.locator('#monthlyRate').fill('1');
   await page.locator('#amortization').selectOption('PRICE');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.match(await page.locator('#cartoes .nota').innerText(), /primeiro vencimento presumido em 10\/03\/2025/);
   await page.getByText('Ver detalhes: memória de amortização').click();
   assert.match(await page.locator('#ajusteFinalPrice').innerText(), /aumentada em.*0,01.*não altera as parcelas documentadas/);
@@ -324,8 +328,7 @@ async function servePage() {
   await page.locator('#monthlyRate').fill('1');
   await page.locator('#statedCet').fill('10');
   await page.locator('#amortization').selectOption('SAC');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.match(await page.locator('#cartoes').innerText(), /CET estimado \(dados presumidos; parcelas SAC simuladas\).*incompleto/s);
   assert.match(await page.locator('#cartoes .nota').innerText(), /não informadas individualmente/);
   assert.match(await page.locator('#achados').innerText(), /CET estimado com dados incompletos/);
@@ -382,7 +385,7 @@ async function servePage() {
   assert.match(await page.locator('#encargosInadimplencia').innerText(), /Cláusula V\.1, p\. 2/);
   assert.strictEqual(await page.locator('#encargos img, #encargos script').count(), 0);
   assert.strictEqual(await page.evaluate(() => window.__contractCopilotXss), 0);
-  await page.locator('#calcularAnalise').click();
+  await aguardarResultado(page);
   assert.ok(await page.locator('#erro').isHidden(), await page.locator('#erro').innerText());
   await page.locator('#resultado').waitFor({ state: 'visible' });
   assert.ok(await page.locator('#revisao').isHidden());
@@ -407,9 +410,8 @@ async function servePage() {
     });
     const field = validationPage.locator('#amortization');
     const modal = validationPage.getByRole('dialog', { name: 'Selecione o sistema de amortização' });
-    const calculateButton = validationPage.locator('#calcularAnalise');
     await field.selectOption('');
-    await calculateButton.click();
+    await validationPage.locator('#formContrato').evaluate((form) => form.requestSubmit());
     await validationPage.waitForFunction(() => document.activeElement.id === 'installments');
     assert.match(await validationPage.locator('#erro').innerText(), /parcelas/i);
     assert.strictEqual(await validationPage.evaluate(() => document.activeElement.id), 'installments');
@@ -420,8 +422,7 @@ async function servePage() {
     await validationPage.locator('#installments').fill('24');
     await validationPage.locator('#installmentAmount').fill('700');
     await validationPage.locator('#monthlyRate').fill('5,5');
-    await calculateButton.click();
-    await validationPage.locator('#resultado').waitFor({ state: 'visible' });
+    await aguardarResultado(validationPage);
     assert.ok(await modal.isHidden(), 'sistema desconhecido não deve solicitar escolha');
     assert.ok(await field.getAttribute('aria-invalid') === null);
     await assertAccessible(validationPage, 'campo vazio inválido em ' + width);
@@ -437,8 +438,7 @@ async function servePage() {
     assert.strictEqual(await field.getAttribute('aria-invalid'), null, 'nova importação manteve erro anterior');
     assert.ok(await validationPage.locator('#amortizationHelp').isHidden());
     assert.ok(await validationPage.locator('#revisao').isHidden(), 'pendência complementar não deve bloquear');
-    await calculateButton.click();
-    await validationPage.locator('#resultado').waitFor({ state: 'visible' });
+    await aguardarResultado(validationPage);
     assert.ok(await modal.isHidden(), 'amortização desconhecida não deve solicitar escolha');
     assert.strictEqual(await field.inputValue(), 'unknown', 'sistema importado alterado');
     assert.strictEqual(await validationPage.locator('#tabelaAmortizacao tbody tr').count(), 0,
@@ -454,8 +454,7 @@ async function servePage() {
       assert.strictEqual(await field.getAttribute('aria-invalid'), null);
       assert.strictEqual(await field.getAttribute('aria-describedby'), null);
       assert.ok(await validationPage.locator('#amortizationError').isHidden());
-      await calculateButton.click();
-      await validationPage.locator('#resultado').waitFor({ state: 'visible' });
+      await aguardarResultado(validationPage);
       assert.ok(await modal.isHidden());
       assert.ok(await validationPage.locator('#erro').isHidden());
     }
@@ -494,8 +493,8 @@ async function servePage() {
   await page.getByRole('button', { name: 'Preencher a calculadora' }).click();
   assert.strictEqual(await page.locator('#problem').inputValue(), '');
   assert.strictEqual(await page.locator('#evidenceSource').inputValue(), '');
-  assert.strictEqual(await page.locator('#contractDate').inputValue(), '2025-06-04');
-  assert.strictEqual(await page.locator('#disbursementDate').inputValue(), '2025-06-04');
+  assert.strictEqual(await page.locator('#contractDate').inputValue(), '04/06/2025');
+  assert.strictEqual(await page.locator('#disbursementDate').inputValue(), '04/06/2025');
   assert.strictEqual(await page.locator('#amortization').inputValue(), 'unknown');
   assert.strictEqual(await page.locator('#capitalization').inputValue(), '');
   assert.ok(await page.locator('#revisao').isHidden(), 'informação não acionável mostrou cartão de revisão');
@@ -506,11 +505,10 @@ async function servePage() {
   assert.match(await page.locator('#disbursementDateHelp').innerText(),
     /data do contrato \(04\/06\/2025\) como data operacional/);
   assert.ok(await page.locator('#disbursementDate').isEnabled());
-  assert.match(await page.locator('#calcularAnalise').innerText(), /Concluir revisão e calcular/);
+  assert.ok(await page.locator('#calcularAnalise').isHidden(), 'dados sem pendência bloqueante calculam automaticamente');
   assert.match(await page.locator('#encargosInadimplencia').innerText(), /1,00% ao mês/);
   assert.match(await page.locator('#encargosInadimplencia').innerText(), /2,00% incidência única/);
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.ok(await page.locator('#resultadoRevisao').isHidden(), 'informação não acionável exigiu confirmação');
   assert.ok(await page.locator('#revisao').isHidden());
   const [substituteDateDownload] = await Promise.all([
@@ -521,7 +519,6 @@ async function servePage() {
   assert.ok(substituteDateResult.result.assumptions.some((item) =>
     /data de liberação não localizada no documento; data do contrato \(04\/06\/2025\)/.test(item)));
   await page.locator('#disbursementDate').fill('2025-06-05');
-  await page.locator('#calcularAnalise').click();
   const [editedDateDownload] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar JSON' }).click()
   ]);
@@ -529,8 +526,7 @@ async function servePage() {
   assert.strictEqual(editedDateResult.input.disbursementDate, '2025-06-05');
   assert.ok(editedDateResult.result.assumptions.some((item) => /data operacional alterada para 05\/06\/2025/.test(item)));
   await page.locator('#contractDate').fill('');
-  assert.strictEqual(await page.locator('#disbursementDate').inputValue(), '2025-06-05');
-  await page.locator('#calcularAnalise').click();
+  assert.strictEqual(await page.locator('#disbursementDate').inputValue(), '05/06/2025');
   const [clearedContractDateDownload] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar JSON' }).click()
   ]);
@@ -547,7 +543,7 @@ async function servePage() {
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(roundTripInput))
   });
-  await page.waitForFunction(() => document.getElementById('disbursementDate').value === '2025-06-06');
+  await page.waitForFunction(() => document.getElementById('disbursementDate').value === '06/06/2025');
   const [roundTripDownload] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar JSON' }).click()
   ]);
@@ -581,8 +577,7 @@ async function servePage() {
   assert.match(await page.locator('#erro').innerText(), /Pendência bloqueante/);
   await page.locator('#installmentAmount').fill('620,64');
   assert.ok(await page.locator('#revisao').isHidden(), 'editar o campo deve resolver a pendência correspondente');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
 
   const fieldlessBlock = JSON.parse(JSON.stringify(nullableBlock));
   fieldlessBlock.pendencias = [{
@@ -599,7 +594,6 @@ async function servePage() {
   assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'resolverPendencia-0');
   await page.locator('#resolverPendencia-0').click();
   assert.ok(await page.locator('#revisao').isHidden());
-  await page.locator('#calcularAnalise').click();
   await page.locator('#resultado').waitFor({ state: 'visible' });
 
   const containerBlock = JSON.parse(JSON.stringify(nullableBlock));
@@ -617,7 +611,6 @@ async function servePage() {
   assert.strictEqual(await page.evaluate(() => document.activeElement.id), 'resolverPendencia-0');
   await page.locator('#resolverPendencia-0').click();
   assert.ok(await page.locator('#revisao').isHidden());
-  await page.locator('#calcularAnalise').click();
   await page.locator('#resultado').waitFor({ state: 'visible' });
 
   await page.goto(baseUrl + '/contrato.html');
@@ -648,8 +641,7 @@ async function servePage() {
   await page.getByRole('button', { name: 'Ler dados' }).click();
   assert.ok(await page.locator('#errosCopilot').isHidden());
   await page.getByRole('button', { name: 'Preencher a calculadora' }).click();
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.match(await page.locator('#resumo').textContent(), /1022-CAPITAL DE GIRO/);
   assert.match(await page.locator('#resumo').textContent(), /Correspondência BACEN: exata/);
   assert.match(await page.locator('#resumo').textContent(), /série ainda não validada/);
@@ -657,7 +649,7 @@ async function servePage() {
   assert.strictEqual(await page.locator('#semaforoTexto').innerText(),
     'Modalidade sem média de pessoa física comparável nesta ferramenta (ex.: capital de giro, crédito para empresa, rural, cheque especial, cartão)');
   assert.strictEqual(await page.locator('#tabelaAmortizacao tr').count(), 24);
-  assert.ok((await page.locator('#metricas').textContent()).includes('Taxa de fluxo implícita (Price)'));
+  assert.ok(!(await page.locator('#metricas').textContent()).includes('Taxa de fluxo implícita'));
   assert.match(await page.locator('#cartoes').innerText(), /CET estimado \(dados presumidos\)[\s\S]*% a\.a\./);
   assert.match(await page.locator('#cartoes .nota').innerText(),
     /data de liberação não localizada no documento; data do contrato \(10\/03\/2025\)/);
@@ -681,8 +673,7 @@ async function servePage() {
   await page.getByRole('button', { name: 'Ler dados' }).click();
   assert.ok(await page.locator('#errosCopilot').isHidden());
   await page.getByRole('button', { name: 'Preencher a calculadora' }).click();
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   await page.getByText('Ver detalhes: fonte BACEN e hipóteses', { exact: true }).click();
   assert.strictEqual(await page.locator('#bacenModalidadeSelection option').count(), 3);
   assert.match(await page.locator('#resumo').textContent(), /Correspondência BACEN: ambigua/);
@@ -732,8 +723,7 @@ async function servePage() {
   await page.locator('#installments').fill('24');
   await page.locator('#installmentAmount').fill('700,00');
   await page.locator('#monthlyRate').fill('5,5');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.strictEqual(await page.locator('#seriesCandidatas tbody tr').count(), 2);
   assert.match(await page.locator('#semaforoTexto').innerText(),
     /Modalidade não identificada com precisão\. Selecione manualmente uma série/);
@@ -769,8 +759,7 @@ async function servePage() {
   await page.locator('#installments').fill('24');
   await page.locator('#financedAmount').fill('10.000,00');
   await page.locator('#contractDate').fill('2025-03-10');
-  await page.locator('#calcularAnalise').click();
-  await page.locator('#resultado').waitFor({ state: 'visible' });
+  await aguardarResultado(page);
   assert.strictEqual(await page.locator('#resultado').innerText(), regressionResult,
     'ordem de preenchimento alterou o resultado');
 
@@ -886,7 +875,7 @@ async function servePage() {
   await type(page.locator('#installments'), 12);
   await type(page.locator('#installmentAmount'), '100');
   await type(page.locator('#financedAmount'), '5,', true);
-  await page.locator('#calcularAnalise').click();
+  await page.locator('#formContrato').evaluate((form) => form.requestSubmit());
   assert.ok(await page.locator('#erro').isVisible());
   assert.match(await page.locator('#erro').innerText(), /inválido/);
 
@@ -913,8 +902,7 @@ async function servePage() {
         await page.locator('#maisOpcoes').evaluate((node) => { node.open = false; });
       }
 
-      await page.locator('#calcularAnalise').click();
-      await page.locator('#resultado').waitFor({ state: 'visible' });
+      await aguardarResultado(page);
       assertNoBadOutput(await page.locator('#resultado').innerText());
       assert.ok(await page.locator('#erro').isHidden());
 
@@ -970,7 +958,7 @@ async function servePage() {
         : financial.schedulePrice(data.principalCents, changedRate, data.installments);
       await type(page.locator('#installmentAmount'), monetaryInput(changedSchedule[0].installmentCents));
       await type(page.locator('#monthlyRate'), String(changedRatePercent).replace('.', ','));
-      await page.locator('#calcularAnalise').click();
+      await aguardarResultado(page);
       assert.ok(await page.locator('#erro').isHidden(), await page.locator('#erro').innerText());
       assertNoBadOutput(await page.locator('#resultado').innerText());
     } catch (error) {

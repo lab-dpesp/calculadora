@@ -55,10 +55,10 @@ function pacoteInstitucional() {
 }
 
 (async function () {
-  await test('importação: perfis 1/2/3/4 são preservados; novo cálculo usa 4 e resultado antigo sem perfil usa 1', function () {
+  await test('importação: perfis 1–5 são preservados; novo cálculo usa 5 e resultado antigo sem perfil usa 1', function () {
     const caso = { formato: 'calcjur-copilot', versao: 1, tipo: 'particular', outrasParcelas: [{ vencimento: '2024-01-01', valor: 500 }] };
-    assert.strictEqual(copilot.ler(caso).dados.perfilCalculo, 4);
-    for (const perfilCalculo of [1, 2, 3, 4]) {
+    assert.strictEqual(copilot.ler(caso).dados.perfilCalculo, 5);
+    for (const perfilCalculo of [1, 2, 3, 4, 5]) {
       const r = copilot.ler({ ...caso, perfilCalculo });
       assert.deepStrictEqual(r.erros, []);
       assert.strictEqual(r.dados.perfilCalculo, perfilCalculo);
@@ -66,7 +66,7 @@ function pacoteInstitucional() {
     const anterior = { ...caso, calculoAnterior: { dataCalculo: '2025-01-01', total: 500 } };
     assert.strictEqual(copilot.ler(anterior).dados.perfilCalculo, 1);
     assert.strictEqual(copilot.ler({ ...anterior, perfilCalculo: 2 }).dados.perfilCalculo, 2);
-    assert.match(copilot.ler({ ...caso, perfilCalculo: 5 }).erros.join(' '), /Perfil de cálculo desconhecido/);
+    assert.match(copilot.ler({ ...caso, perfilCalculo: 6 }).erros.join(' '), /Perfil de cálculo desconhecido/);
   });
 
   await test('importação: obrigação explícita é texto de até 80 caracteres, sem inferência nas parcelas antigas', function () {
@@ -252,6 +252,141 @@ function pacoteInstitucional() {
     delete dup.series.igpm;
     await I.importar(JSON.stringify(dup));
     assert.strictEqual(I.estado().fonte, 'arquivo', 'duplicata com o mesmo valor e série opcional ausente são aceitas');
+  });
+
+  await test('agentes do Copilot: abaixo de 8.000 caracteres; exemplo da atualização importa no perfil 5', function () {
+    const fs = require('fs');
+    const ROOT = path.resolve(__dirname, '..');
+    for (const nome of ['agente-copilot-calculadora.txt', 'agente-copilot-atualizacao.txt', 'agente-copilot-contrato.txt', 'agente-copilot-cartao.txt']) {
+      const tamanho = [...fs.readFileSync(path.join(ROOT, nome), 'utf8')].length;
+      assert.ok(tamanho < 8000, nome + ' tem ' + tamanho + ' caracteres; o Construtor de Agentes do 365 aceita até 8.000');
+    }
+    const texto = fs.readFileSync(path.join(ROOT, 'agente-copilot-atualizacao.txt'), 'utf8');
+    const bloco = /```json\n([\s\S]*?)\n```/.exec(texto)[1];
+    const r = copilot.ler(bloco);
+    assert.deepStrictEqual(r.erros, []);
+    assert.strictEqual(r.dados.perfilCalculo, 5, 'atualização a partir de PDF ou planilha entra no perfil atual');
+    assert.strictEqual(r.dados.ritoExecucao, 'ambos');
+    assert.ok(r.dados.calculoAnterior, 'exemplo traz o cálculo anterior para comparação');
+  });
+
+  await test('cartão: exemplo do agente importa sem preencher o mês faltante ou converter saque em compra', function () {
+    const fs = require('fs');
+    const leitor = require('../cartao/copilot-cartao.js');
+    const texto = fs.readFileSync(path.resolve(__dirname, '../agente-copilot-cartao.txt'), 'utf8');
+    const bloco = /```json\n([\s\S]*?)\n```/.exec(texto)[1];
+    const r = leitor.ler(bloco);
+    assert.deepStrictEqual(r.erros, []);
+    assert.strictEqual(r.dados.tipo, 'cartao');
+    assert.strictEqual(r.dados.convenio, 'inss');
+    assert.deepStrictEqual(r.dados.saques.map((s) => s.valor), [2500, 1000]);
+    assert.deepStrictEqual(r.dados.descontos.map((s) => s.competencia), ['2021-02', '2021-04']);
+    assert.deepStrictEqual(r.dados.compras.map((s) => s.valor), [80]);
+    assert.strictEqual(r.dados.taxaBancoMensal, 2.7);
+    const arquivo = require('../cartao/arquivo.js').validar(bloco);
+    assert.deepStrictEqual(arquivo.erros, []);
+    assert.strictEqual(arquivo.dados.taxaBancoMensal, 2.7, 'taxa extraída chega ao motor para R07');
+    assert.ok(r.dados.pendencias.some((p) => /sem data/.test(p)));
+    const exemplo = JSON.parse(bloco);
+    for (const campo of ['saques', 'compras']) {
+      for (const data of ['2021-02-29', '2021-04-31', '2021-13-01', '', null]) {
+        assert.ok(leitor.ler({ ...exemplo, [campo]: [{ data, valor: 100 }] }).erros.length);
+      }
+    }
+    for (const valor of [NaN, Infinity, -1, 0, true, '100', 1e13, 1.001]) {
+      assert.ok(leitor.ler({ ...exemplo, saques: [{ data: '2021-01-01', valor }] }).erros.length);
+    }
+    assert.ok(leitor.ler({ ...exemplo, descontos: [exemplo.descontos[0], exemplo.descontos[0]] }).erros.length);
+    assert.ok(leitor.ler({ ...exemplo, saques: Array(1001).fill(exemplo.saques[0]) }).erros.length);
+    assert.ok(leitor.ler({ ...exemplo, convenio: 'constructor' }).erros.length);
+    assert.ok(leitor.ler({ ...exemplo, versao: 2 }).erros.length);
+    assert.deepStrictEqual(leitor.ler({ ...exemplo, convenio: null, taxaBancoMensal: null, dataCalculo: null }).erros, []);
+    const semData = leitor.ler({ ...exemplo, dataCalculo: null,
+      pendencias: ['Informar a data do cálculo.', 'Falta a data do cálculo', 'Saque de 05/2021 sem data no extrato.'] });
+    assert.ok(!semData.avisos.some((a) => /data do cálculo/i.test(a)), 'sem data, a tela usa hoje: não é aviso');
+    assert.deepStrictEqual(semData.dados.pendencias, ['Saque de 05/2021 sem data no extrato.'],
+      'pedido de data do cálculo do agente sai das pendências; as demais ficam');
+    const antigo = { ...exemplo, taxaBanco: 2.8 };
+    delete antigo.taxaBancoMensal;
+    assert.strictEqual(leitor.ler(antigo).dados.taxaBancoMensal, 2.8, 'compatibilidade do primeiro texto do agente');
+    assert.ok(leitor.ler({ ...exemplo, taxaBanco: 3 }).erros.length, 'não escolher silenciosamente taxa divergente');
+  });
+
+  await test('tetos INSS: fontes oficiais, vigências sem sobreposição e lacunas declaradas', function () {
+    const D = require('../data.js'), T = D.TETOS_INSS;
+    const dataValida = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) &&
+      Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
+    const seguinte = (d) => new Date(Date.parse(d) + 86400000).toISOString().slice(0, 10);
+    assert.ok(dataValida(T.inicioPesquisa) && dataValida(T.conferidoAte));
+    assert.ok(T.vigencias.length > 0);
+    for (const v of T.vigencias) {
+      assert.ok(dataValida(v.inicio) && (v.fim === null || dataValida(v.fim)));
+      assert.ok(Number.isFinite(v.emprestimo) && v.emprestimo > 0);
+      assert.ok(Number.isFinite(v.cartao) && v.cartao > 0);
+      assert.match(v.ato, /(?:INSS|CNPS).*\d/);
+      assert.ok(dataValida(v.dataAto), v.ato);
+      assert.match(v.fonte, /^https:\/\/(?:www\.)?(?:gov\.br|in\.gov\.br)\//);
+      assert.ok(v.vigencia && v.vigencia.length > 20);
+    }
+    const intervalos = T.vigencias.concat(T.lacunas).sort((a, b) => a.inicio.localeCompare(b.inicio));
+    let proximo = T.inicioPesquisa;
+    for (const v of intervalos) {
+      assert.strictEqual(v.inicio, proximo, 'sem sobreposição nem lacuna não declarada');
+      const fim = v.fim === null ? T.conferidoAte : v.fim;
+      assert.ok(dataValida(fim) && fim >= v.inicio && fim <= T.conferidoAte);
+      if (!v.ato) assert.ok(v.motivo && v.motivo.length > 20);
+      proximo = seguinte(fim);
+    }
+    assert.strictEqual(proximo, seguinte(T.conferidoAte));
+  });
+
+  await test('tetos INSS: consulta exata, bloqueio N35 e ausência de referência para R07 sem fonte', function () {
+    const D = require('../data.js'), T = D.TETOS_INSS;
+    const teto = require('../cartao/tetos-inss.js');
+    // Gabaritos literais dos atos, independentes das linhas da tabela.
+    for (const [dia, emprestimo, cartao] of [
+      ['2020-03-22', 2.08, 3], ['2020-03-23', 1.8, 2.7],
+      ['2021-12-09', 1.8, 2.7], ['2021-12-10', 2.14, 3.06],
+      ['2023-03-15', 2.14, 3.06], ['2023-03-16', 1.7, 2.62],
+      ['2023-03-30', 1.7, 2.62], ['2023-03-31', 1.97, 2.89],
+      ['2023-08-20', 1.97, 2.89],
+      ['2024-05-06', 1.68, 2.49], ['2024-05-28', 1.68, 2.49]
+    ]) {
+      const linha = teto.obter(dia, 'inss');
+      assert.deepStrictEqual([linha.emprestimo, linha.cartao], [emprestimo, cartao], dia);
+    }
+    for (const v of T.vigencias) {
+      assert.strictEqual(teto.obter(v.inicio, 'inss').cartao, v.cartao);
+      assert.strictEqual(teto.exigirEmprestimo(v.inicio, 'inss'), v.emprestimo);
+      assert.strictEqual(teto.obter(v.fim || T.conferidoAte, 'inss').emprestimo, v.emprestimo);
+    }
+    for (const dia of T.lacunas.flatMap((l) => [l.inicio, l.fim]).concat(['1900-01-01', '2099-01-01', '2024-02-30', '2024-13-01', '2024-01', null])) {
+      assert.strictEqual(teto.obter(dia, 'inss'), null, 'R07 não deve aparecer sem referência');
+      assert.throws(() => teto.exigirEmprestimo(dia, 'inss'), /N35/);
+    }
+    for (const convenio of ['publico', 'privado', 'constructor', null]) {
+      assert.strictEqual(teto.obter(T.vigencias[0].inicio, convenio), null);
+      assert.throws(() => teto.exigirEmprestimo(T.vigencias[0].inicio, convenio), /N35/);
+    }
+    const copia = teto.obter(T.vigencias[0].inicio, 'inss');
+    copia.cartao = 99;
+    assert.notStrictEqual(teto.obter(T.vigencias[0].inicio, 'inss').cartao, 99);
+  });
+
+  await test('atualização diária e pacote SGS preservam tetos INSS, atos, fontes e lacunas', async function () {
+    const fs = require('fs'), vm = require('vm');
+    const { I, D } = carregarIndices({});
+    const antes = JSON.stringify(D.TETOS_INSS);
+    await I.iniciar();
+    I._aplicar(pacoteValido().series);
+    assert.strictEqual(JSON.stringify(D.TETOS_INSS), antes);
+    const original = fs.readFileSync(path.resolve(__dirname, '../data.js'), 'utf8');
+    const { serializar } = require('./atualizar-indices.js');
+    const novo = serializar(D, original.slice(0, original.indexOf('var DADOS = {')));
+    const contexto = { module: { exports: {} } };
+    vm.runInNewContext(novo, contexto);
+    assert.strictEqual(JSON.stringify(contexto.module.exports.TETOS_INSS), antes);
+    assert.deepStrictEqual(Object.keys(contexto.module.exports).sort(), Object.keys(D).sort());
   });
 
   console.log('Todos os ' + passed + ' testes de robustez (revisão #46) passaram.');

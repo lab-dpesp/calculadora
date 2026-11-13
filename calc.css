@@ -8,7 +8,7 @@
 
 :root {
   --primaria: #4C9A2A;
-  --primaria-escura: #3F8223;
+  --primaria-escura: #3A7A1E;
   --primaria-clara: rgba(76, 154, 42, .08);
   --sucesso: #14A651;
   --alerta: #E9A820;
@@ -16,11 +16,11 @@
   --erro: #C10015;
   --erro-fundo: #FDECEE;
   --texto: #000;
-  --texto-2: #616161;   /* grey-8: rótulos de seção */
-  --texto-3: #757575;   /* grey-7: legendas */
+  --texto-2: #4F5B54;
+  --texto-3: #4F5B54;
   --rotulo: rgba(0, 0, 0, .6);
-  --borda: rgba(0, 0, 0, .12);
-  --borda-campo: rgba(0, 0, 0, .24);
+  --borda: #DDE3DD;
+  --borda-campo: #DDE3DD;
   --fundo: #fff;
   --hover: rgba(0, 0, 0, .04);
   --hover-borda: rgba(0, 0, 0, .87);
@@ -37,9 +37,9 @@
 
 /* Tema escuro: escolhido no botão do topo ou, em "automático", conforme o sistema. O PDF é sempre claro. */
 :root[data-tema="escuro"] {
-  --primaria: #72C850;
-  --primaria-escura: #86D467;
-  --primaria-clara: rgba(114, 200, 80, .14);
+  --primaria: #82CE62;
+  --primaria-escura: #2A5C14;
+  --primaria-clara: rgba(130, 206, 98, .14);
   --sucesso: #3CC47A;
   --alerta: #E8B13E;
   --alerta-fundo: #33290F;
@@ -54,7 +54,7 @@
   --fundo: #151A17;
   --hover: rgba(255, 255, 255, .06);
   --hover-borda: rgba(255, 255, 255, .8);
-  --texto-botao: #0E1A0B;
+  --texto-botao: #fff;
   --origem-texto: #F1DE9E;
   --origem-fundo: #362E13;
   --revisao-fundo: #221D10;
@@ -64,9 +64,9 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]):not([data-tema="escuro"]) {
-  --primaria: #72C850;
-    --primaria-escura: #86D467;
-    --primaria-clara: rgba(114, 200, 80, .14);
+  --primaria: #82CE62;
+  --primaria-escura: #2A5C14;
+  --primaria-clara: rgba(130, 206, 98, .14);
     --sucesso: #3CC47A;
     --alerta: #E8B13E;
     --alerta-fundo: #33290F;
@@ -81,7 +81,7 @@
     --fundo: #151A17;
     --hover: rgba(255, 255, 255, .06);
     --hover-borda: rgba(255, 255, 255, .8);
-    --texto-botao: #0E1A0B;
+    --texto-botao: #fff;
     --origem-texto: #F1DE9E;
     --origem-fundo: #362E13;
     --revisao-fundo: #221D10;
@@ -243,6 +243,7 @@ button, input, select { font: inherit; color: inherit; }
   padding: 10px 12px; border-bottom: 1px solid var(--borda); white-space: nowrap; background: var(--fundo);
 }
 .q-tabela td { padding: 8px 12px; border-bottom: 1px solid var(--borda); vertical-align: top; white-space: nowrap; }
+#comparacaoFazenda .q-tabela td:first-child { white-space: normal; }
 .q-tabela tbody tr:last-child td { border-bottom: 0; }
 .q-tabela .num { text-align: right; }
 .q-tabela tr.com-detalhe td { border-bottom: 0; padding-bottom: 2px; }
@@ -586,6 +587,78 @@ tr.ajustada td:first-child { box-shadow: inset 3px 0 0 var(--alerta); }
 @media (max-width: 700px) {
   .acoes-form .q-btn-grande { width: 100%; justify-content: center; }
   .pe-linha .q-campo-mes, .pe-linha .q-campo-qtd { flex: 1 1 40%; }
+}
+
+/* Formulário contínuo, com apenas a tabela e o resultado em cartões. */
+#form > .painel {
+  border: 0; border-radius: 0; padding: 0; margin: 0 0 24px; background: transparent;
+}
+#form .cartao, #form .cartao-pagamentos {
+  border: 0; border-top: 1px solid var(--linha-comum); border-radius: 0;
+  padding: 12px 0 0; margin: 14px 0 0; background: transparent;
+}
+#form #cartaoParcelas { padding-top: 0; }
+#form .cartao-cab { margin-bottom: 8px; }
+#form .painel-juros { border: 0; border-top: 1px solid var(--linha-comum); border-radius: 0; padding: 12px 0; }
+#form .painel-juros > summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+#form .painel-juros .resumo-juros { color: var(--texto-secundario-comum); }
+#form .avancadas, #form #painelRequisitorio, #form #painelProcesso {
+  border: 0; border-top: 1px solid var(--linha-comum); border-radius: 0; padding: 12px 0;
+}
+#form .recolhivel > summary { min-height: 44px; }
+.titulo-se-precisar { padding-top: 20px; border-top: 1px solid var(--linha-comum); }
+#painelResultado { border: 1px solid var(--linha-comum); border-radius: 12px; padding: 20px; }
+#painelResultado > .painel-titulo { margin-bottom: 8px; font-size: 15px; color: var(--texto-secundario-comum); }
+#vazio { padding: 8px 0 18px; font-size: 15px; color: var(--texto-secundario-comum); }
+#erro { margin: 8px 0 12px; }
+#resultado { display: flex; flex-direction: column; gap: 16px; }
+#resultado .avisos { order: 4; }
+#resultado .metricas { order: 1; display: flex; flex-direction: column; gap: 0; }
+#resultado .metrica-total {
+  order: -1; display: block; border: 0; border-bottom: 1px solid var(--linha-comum);
+  border-radius: 0; padding: 0 0 14px; margin-bottom: 8px; background: transparent;
+}
+#resultado .metrica-total .metrica-valor { color: var(--cor-acao); font-size: 34px; line-height: 1.15; }
+#resultado .metrica-total .metrica-rotulo { font-size: 13px; color: var(--texto-secundario-comum); }
+.composicao-linha {
+  display: flex; justify-content: space-between; gap: 16px; padding: 7px 0;
+  border-bottom: 1px solid var(--linha-comum); font-size: 14px;
+}
+.composicao-linha span:last-child { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+#resultado .detalhes-fazenda { order: 2; border-top: 1px solid var(--linha-comum); padding-top: 12px; }
+#resultado .ritos { order: 3; }
+#resultado .acoes-resultado { order: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#resultado .acoes-resultado > #pdf { min-height: 48px; }
+#resultado .avisos { font-size: 12px; color: var(--texto-secundario-comum); }
+#resultado .aviso { padding: 6px 0; border: 0; border-radius: 0; background: transparent; }
+#resultado .badge-alerta, #resultado .badge-conferir { color: #7A4A00; background: #FFF9EC; border: 1px solid #E3C98F; }
+#resultado .memoria-texto { order: 6; border-top: 1px solid var(--linha-comum); padding-top: 12px; }
+.memoria-parcela { padding: 10px 0; border-bottom: 1px solid var(--linha-comum); }
+.memoria-parcela h4 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.memoria-parcela ul { margin: 4px 0; padding-left: 20px; }
+.memoria-parcela li { white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+.memoria-parcela-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.mais-opcoes-resultado { order: 5; }
+.mais-opcoes-resultado > summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--cor-acao); font-weight: 600; }
+.mais-opcoes-resultado[open] > .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.criterios-resultado { order: 7; }
+#resultado .tabela-rolagem { display: none; }
+#resultado #comparacaoFazenda { order: 2; }
+#resultado .conferencia { order: 8; }
+#form .nota[data-so="fazenda"] { padding: 8px 0; }
+.importar-copilot { border-style: dashed; border-color: var(--cor-marca); }
+.link-indices, .nota a { color: var(--cor-acao); }
+@media (max-width: 700px) {
+  #painelResultado { padding: 16px; }
+  #resultado .metrica-total {
+    position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; margin: 0;
+    padding: 8px 16px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid var(--linha-comum);
+    border-bottom: 0; background: var(--fundo); box-shadow: 0 -4px 16px rgb(0 0 0 / 10%);
+  }
+  #resultado .metrica-total .metrica-valor { font-size: 22px; line-height: 1.1; }
+  #resultado .metrica-total .metrica-rotulo { font-size: 11px; }
+  #resultado { padding-bottom: 68px; }
+  .acoes-arquivo[open] > div { background: var(--fundo); }
   .resumo-juros { padding-left: 0; }
   .alterar-juros { margin-left: 16px; }
 }

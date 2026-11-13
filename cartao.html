@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR" data-calculadora="cartao">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Cartão consignado (RMC/RCC)</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="contrato/contrato.css">
+  <link rel="stylesheet" href="compartilhado.css">
+  <link rel="stylesheet" href="cartao/cartao.css">
+  <script src="tema.js"></script>
+  <script src="compartilhado.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true"><symbol id="i-tema" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></symbol><symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2zm7 11l1 2.9 2.9 1-2.9 1L19 21l-1-2.9-2.9-1 2.9-1L19 13z"/></symbol></svg>
+  <header class="topo">
+    <div class="marca"><img class="logo-topo" src="icons/logo-dpesp.png" alt="Defensoria Pública do Estado de São Paulo"><div class="marca-texto"><h1>Calculadora de Débitos Judiciais</h1></div></div>
+    <div class="topo-dir">
+      <span class="sub indices-cabecalho">Índices até <span id="indiceContratoAte">carregando…</span></span>
+      <a class="link-indices" href="calc.html#painelIndices">Índices e fontes</a>
+      <details class="acoes-arquivo"><summary>Ações</summary><div>
+        <button type="button" class="secundario" id="novoCalculo">Novo</button>
+        <button type="button" class="secundario" id="abrirCalculo">Abrir</button>
+        <button type="button" class="secundario" id="salvarCalculo" disabled>Salvar</button>
+      </div></details>
+      <a class="secundario" id="novaAba" href="cartao.html" target="_blank" rel="noopener" hidden>Abrir em nova aba</a>
+      <button type="button" class="secundario btn-tema" id="btnTema" aria-label="Tema claro ou escuro" title="Tema claro ou escuro"><svg class="icone-tema" aria-hidden="true"><use href="#i-tema"></use></svg><span id="rotuloTema" class="sr" aria-hidden="true">Automático</span></button>
+    </div>
+  </header>
+  <nav class="nav-calc" aria-label="Calculadoras">
+    <a href="calc.html" data-calc="pensao">Pensão alimentícia</a>
+    <a href="calc.html?calc=civel" data-calc="civel">Débito cível</a>
+    <a href="calc.html?calc=fazenda" data-calc="fazenda">Fazenda Pública</a>
+    <a href="contrato.html" data-calc="contrato">Contrato bancário</a>
+    <a href="cartao.html" data-calc="cartao" aria-current="page">Cartão consignado</a>
+  </nav>
+  <main class="pagina">
+    <h2 class="titulo-cartao">Cartão consignado (RMC/RCC)</h2>
+    <p class="aviso">Simulação para conferência. Conversão em empréstimo e nulidade são cenários, não conclusões jurídicas. Regras R01–R09 pendentes de validação pelo contador. Tema 1.414/STJ: confira o caso concreto e a prescrição.</p>
+    <div class="area-calculo">
+      <div class="area-entrada">
+        <div class="ic-caixa">
+          <details class="importar-copilot" id="painelCopilot">
+            <summary><span class="ic-titulo"><svg class="ic-icone" aria-hidden="true"><use href="#i-spark"></use></svg>Preencher com os dados extraídos pelo Copilot</span></summary>
+            <div class="ic-corpo">
+              <label class="ic-campo"><span class="ic-rotulo">Resposta do Copilot</span><textarea id="textoCopilot" rows="6" placeholder="Cole a resposta completa com o bloco calcjur-copilot, tipo cartao."></textarea></label>
+              <p class="nota">Leitura local, sem enviar documentos. O Copilot extrai; a calculadora calcula. Confira HISCRE, contracheques e faturas.</p>
+              <div class="ic-acoes"><button type="button" class="ic-btn" id="lerCopilot">Ler dados</button><button type="button" class="ic-btn-flat" id="limparCopilot">Limpar</button></div>
+              <div class="ic-previa" id="previaCopilot" hidden>
+                <div class="ic-erro" id="errosCopilot" role="alert" hidden></div><div class="ic-avisos" id="avisosCopilot" role="status"></div>
+                <div class="ic-rotulo-secao">O que será preenchido</div>
+                <div class="ic-tabela"><table id="tabCopilot"><thead><tr><th>Item</th><th>Dado</th><th>Origem informada pelo Copilot</th></tr></thead><tbody></tbody></table></div>
+                <div class="ic-acoes"><button type="button" class="ic-btn" id="aplicarCopilot" disabled>Preencher a calculadora</button></div>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div id="mensagemArquivo" class="aviso" role="status" hidden></div>
+        <section id="revisao" class="painel revisao" hidden>
+          <h2>Dados importados — a conferir</h2><ul id="revisaoPendencias"></ul>
+          <p>As fontes e pendências serão preservadas no arquivo e no demonstrativo. Confira os documentos e corrija os campos antes de concluir.</p>
+          <button type="button" class="secundario" id="concluirRevisao">Concluir revisão</button>
+        </section>
+        <form id="formCartao" autocomplete="off" novalidate>
+          <section class="painel">
+            <h2><span class="passo-numero">1</span>Identificação e critérios</h2>
+            <div class="grade">
+              <label>Processo / atendimento<input id="processo" maxlength="200"></label>
+              <label>Consumidor(a) / credor(a)<input id="credor" maxlength="500"></label>
+              <label>Banco / devedor(a)<input id="devedor" maxlength="500"></label>
+              <label>Convênio<select id="convenio" required><option value="inss">INSS</option><option value="publico">Servidor público</option><option value="privado">Empregado privado</option><option value="">Não informado — confirme</option></select></label>
+              <label>Data do cálculo<input id="dataCalculo" type="date" required></label>
+              <label>Data da citação (opcional)<input id="dataCitacao" type="date"></label>
+              <label>Taxa de conversão<select id="criterioTaxa"><option value="media_bacen">Média BACEN por saque (padrão)</option><option value="teto_inss">Teto de empréstimo INSS na data do saque</option><option value="informada">Taxa mensal informada</option></select></label>
+              <label id="campoTaxaInformada" hidden>Taxa de conversão (% ao mês)<input id="taxaInformadaMensal" inputmode="decimal" placeholder="Ex.: 1,80" disabled></label>
+              <label>Taxa cobrada pelo banco (% ao mês)<input id="taxaBancoMensal" inputmode="decimal" placeholder="Opcional; não altera a conta"></label>
+              <label>Considerar descontos desde (opcional)<input id="considerarDesde" type="month"></label>
+              <label>Critério de restituição destacado<select id="criterioDobro"><option value="modulado">Dobro desde 30/03/2021 (padrão provisório)</option><option value="simples">Restituição simples</option><option value="dobro_total">Tudo em dobro</option></select></label>
+            </div>
+            <p class="nota">BACEN: séries 25468 (INSS), 25467 (público) e 25466 (privado), na competência de cada saque. Sem observação exata, o cálculo é bloqueado. O teto INSS é uma tabela parcial, sem estimativa nas lacunas.</p>
+            <p class="nota">Sem citação, o indébito recebe só correção monetária. O recorte dos descontos é uma escolha manual: a calculadora não decide prescrição nem corta parcelas automaticamente.</p>
+          </section>
+          <section class="painel">
+            <h2><span class="passo-numero">2</span>Saques recebidos</h2>
+            <p class="nota">Informe a data real de cada saque, inclusive os complementares. Não use a margem reservada como desconto.</p>
+            <div id="saques" class="lancamentos"></div>
+            <button type="button" class="secundario" id="adicionarSaque">Adicionar saque</button>
+          </section>
+          <section class="painel">
+            <h2><span class="passo-numero">3</span>Descontos efetivamente pagos</h2>
+            <details class="gerador"><summary>Gerar descontos iguais</summary>
+              <div class="grade">
+                <label>Competência inicial<input id="inicioDescontos" type="month"></label>
+                <label>Competência final<input id="fimDescontos" type="month"></label>
+                <label>Valor mensal (R$)<input id="valorDescontos" inputmode="decimal" placeholder="Ex.: 150,00"></label>
+              </div>
+              <p class="nota">Substitui a lista abaixo. Gere apenas competências comprovadas e depois ajuste os valores diferentes.</p>
+              <button type="button" class="secundario" id="gerarDescontos">Gerar descontos</button>
+            </details>
+            <details class="gerador"><summary>Colar duas colunas de uma planilha</summary>
+              <label for="textoDescontos">Competência e valor, uma linha por desconto</label>
+              <textarea id="textoDescontos" rows="4" placeholder="01/2020&#9;150,00&#10;02/2020&#9;150,00"></textarea>
+              <p class="nota">Aceita MM/AAAA ou AAAA-MM e valor brasileiro (1.234,56), separados por tabulação, ponto e vírgula ou espaço. Substitui a lista. Não inclua cabeçalho.</p>
+              <button type="button" class="secundario" id="colarDescontos">Usar descontos colados</button>
+            </details>
+            <div id="erroDescontos" class="erro" role="alert" hidden></div>
+            <div id="descontos" class="lancamentos"></div>
+            <button type="button" class="secundario" id="adicionarDesconto">Adicionar desconto</button>
+          </section>
+          <details class="painel" id="painelCompras"><summary>Compras comprovadas (opcional)</summary>
+            <p class="nota">Sem fatura não presuma inexistência de compras. Seguros não têm campo próprio neste módulo.</p>
+            <label class="opcao"><input id="comprasNoSaldo" type="checkbox" checked>Incluir compras no saldo (padrão)</label>
+            <p class="nota">Desmarcar exclui as compras dos dois cenários; a escolha ficará registrada.</p>
+            <div id="compras" class="lancamentos"></div>
+            <button type="button" class="secundario" id="adicionarCompra">Adicionar compra</button>
+          </details>
+          <section class="painel"><h2>Observações e fontes</h2><label for="observacoes">Anotações para conferência e demonstrativo</label><textarea id="observacoes" rows="3" maxlength="10000"></textarea><ul id="fontesImportadas" class="nota"></ul></section>
+        </form>
+      </div>
+      <div class="area-resultado">
+        <div id="estadoCalculo" class="aviso" role="status">O resultado aparece automaticamente ao informar pelo menos um saque.</div>
+        <div id="erroCalculo" class="erro" role="alert" hidden></div>
+        <section class="painel resultado" id="resultado" hidden aria-label="Resultado do cartão consignado">
+          <h2>Como está × Como ficaria</h2>
+          <p class="nota">Valores na data do cálculo. Não há compensação automática entre restituição e saldo.</p>
+          <div id="resumoConversao"></div>
+          <div id="resumoNulidade"></div>
+          <section id="alertasCartao" class="alertas-cartao" aria-label="Pontos de atenção"></section>
+          <details class="detalhes"><summary>Memória mensal — conversão</summary><div id="memoriaConversao" class="tabela-wrap"></div></details>
+          <details class="detalhes"><summary>Memória mensal — nulidade</summary><div id="memoriaNulidade" class="tabela-wrap"></div></details>
+          <details class="detalhes"><summary>Critérios, fontes e limitações</summary><div id="criteriosTela"></div></details>
+          <div class="acoes"><button type="button" class="primario" id="imprimir">Imprimir / Salvar PDF</button><button type="button" class="secundario" id="copiarWord">Copiar para o Word</button></div>
+          <p id="estadoCopia" class="nota" role="status"></p>
+        </section>
+      </div>
+    </div>
+    <p class="versao">Ferramenta de apoio à conferência da Defensoria Pública de SP. Nenhum dado deste caso é enviado a um servidor.</p>
+    <p class="nota"><a href="https://sturdy-succotash-gk6vowv.pages.github.io/regras/" target="_blank" rel="noopener">Regras de negócio</a></p>
+  </main>
+  <input id="arquivoCalculo" type="file" accept=".calcjur,.json,application/json" hidden aria-label="Arquivo de cálculo">
+  <article id="demonstrativo" aria-label="Demonstrativo para impressão"></article>
+  <script src="data.js"></script>
+  <script src="engine.js"></script>
+  <script src="contrato/catalogo-bacen.js"></script>
+  <script src="contrato/series-bacen.js"></script>
+  <script src="contrato/bacen.js"></script>
+  <script src="cartao/tetos-inss.js"></script>
+  <script src="cartao/engine.js"></script>
+  <script src="cartao/arquivo.js"></script>
+  <script src="copilot.js"></script>
+  <script src="cartao/copilot-cartao.js"></script>
+  <script src="cartao/app.js"></script>
+</body>
+</html>

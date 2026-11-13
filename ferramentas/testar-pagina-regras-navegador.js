@@ -11,7 +11,16 @@ const { renderizar } = require('./gerar-pagina-regras');
 test('busca, download, impressão completa, navegação mobile e acessibilidade', async () => {
   const documento = fs.readFileSync(path.join(__dirname, '..', 'REGRAS-DE-NEGOCIO.md'), 'utf8');
   const html = await renderizar(documento, 'a'.repeat(40), '2026-10-31T02:45:40Z');
-  const total = [...documento.matchAll(/^\| ((?:N|C)\d{2}|JUR_\d{3}) \|/gm)].length;
+  // Conta todas as linhas de corpo das tabelas do Markdown (inclui o quadro
+  // "Validação pelo contador", cujas linhas podem citar várias regras, como
+  // "N10, N11"). Linha de cabeçalho é a que vem antes da linha separadora.
+  const linhasMd = documento.split('\n');
+  const separador = /^\|\s*:?-{3,}/;
+  const corpo = linhasMd.filter((linha, i) => linha.startsWith('|')
+    && !separador.test(linha)
+    && !separador.test(linhasMd[i + 1] || ''));
+  const total = corpo.length;
+  const comN10 = corpo.filter((linha) => /\bN10\b/.test(linha)).length;
   const server = http.createServer((req, res) => {
     if (req.url === '/regras/') {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -34,7 +43,8 @@ test('busca, download, impressão completa, navegação mobile e acessibilidade'
     await page.goto(`http://127.0.0.1:${server.address().port}/regras/`);
     assert.equal(await page.locator('tbody tr:visible').count(), total);
     await page.locator('#busca').fill('N10');
-    assert.equal(await page.locator('tbody tr:visible').count(), 2);
+    assert.ok(comN10 >= 2);
+    assert.equal(await page.locator('tbody tr:visible').count(), comN10);
     assert.ok((await page.locator('tbody tr:visible').first().innerText()).includes('29/08/2024'));
     await page.locator('#busca').fill('pensao');
     assert.ok(await page.locator('tbody tr:visible').count() > 1);
@@ -58,6 +68,13 @@ test('busca, download, impressão completa, navegação mobile e acessibilidade'
       .getByText('Contratos de consumidor', { exact: true }).click();
     assert.equal(await page.evaluate(() => document.querySelector(location.hash).textContent),
       'Contratos de consumidor');
+    await page.getByRole('navigation', { name: 'Seções das regras' })
+      .getByText('Cartão consignado (RMC/RCC)', { exact: true }).click();
+    assert.equal(await page.evaluate(() => document.querySelector(location.hash).textContent),
+      'Cartão consignado (RMC/RCC)');
+    await page.locator('#busca').fill('R07');
+    assert.ok(await page.locator('tbody tr:visible').count() >= 2);
+    await page.locator('#limpar').click();
     await page.addScriptTag({ path: require.resolve('axe-core') });
     const resultado = await page.evaluate(() => axe.run());
     assert.deepEqual(resultado.violations.map((item) => ({ id: item.id, impact: item.impact })), []);

@@ -725,4 +725,156 @@ caso('N40 copilot.js: campo imputacao, padrão e arquivos salvos antes da opçã
   ['qualquer', 'constructor', '1', '!!!', true].forEach(v => assert.ok(C.ler(bloco({ imputacao: v })).erros.some(x => /Critério de imputação desconhecido/.test(x)), v));
 });
 
+/* ---------------- N50: índice ainda não divulgado limita o trecho, com aviso, em vez de bloquear ---------------- */
+// Corta as tabelas num mês e restaura depois. Objetos novos, porque o motor guarda em cache os fatores por tabela.
+function comTabelasAte(cortes, fn) {
+  const antes = {};
+  Object.keys(cortes).forEach(tab => {
+    antes[tab] = D[tab];
+    D[tab] = Object.fromEntries(Object.entries(D[tab]).filter(([m]) => m <= cortes[tab]));
+  });
+  try { return fn(); } finally { Object.keys(antes).forEach(tab => { D[tab] = antes[tab]; }); }
+}
+
+caso('N50 Tabela Prática e taxa legal sem o mês do cálculo: limita com aviso (gabarito à mão)', () => {
+  const e = civel({ regime: 'tjsp', civel: undefined, dataCalculo: '2026-08-15', parcelas: [{ vencimento: '2025-01-10', valor: 1000 }] });
+  const F = D.FATORES_TJSP, TL = D.TAXA_LEGAL;
+  const capital = r2(1000 * F['2026-06'] / F['2025-01']);
+  const pct = proRataF(m => (m <= '2026-06' ? TL[m] : null), '2025-01-10', '2026-08-15');
+  const r = comTabelasAte({ FATORES_TJSP: '2026-06', TAXA_LEGAL: '2026-06' }, () => calc(e));
+  quase(r.totais.capital, capital, 'capital até o último fator');
+  quase(r.totais.juros, r2(1000 * F['2026-06'] / F['2025-01'] * pct / 100), 'taxa legal até 30/06/2026');
+  assert.ok(r.avisos.some(a => /correção pela Tabela Prática foi aplicada até o fator de 06\/2026/.test(a)), 'aviso da correção');
+  assert.ok(r.avisos.some(a => /taxa legal foi aplicada até 30\/06\/2026/.test(a)), 'aviso da taxa legal');
+  assert.ok(r.linhas[0].eventos.some(x => /último mês disponível na tabela/.test(x)), 'memória registra o limite');
+  // Com a tabela completa, o mesmo cálculo não traz esses avisos e o total é maior ou igual.
+  const cheio = calc(e);
+  assert.ok(!cheio.avisos.some(a => /foi aplicada até/.test(a)));
+  assert.ok(cheio.totais.total >= r.totais.total);
+});
+
+caso('N50 índice mensal (IPCA) sem a variação do mês anterior ao cálculo: limita na última variação', () => {
+  const e = civel({ civel: { indice: 'ipca' }, dataCalculo: '2026-08-15', parcelas: [{ vencimento: '2025-01-10', valor: 1000 }] });
+  let f = 1;
+  Object.keys(D.IPCA).sort().forEach(m => { if (m >= '2025-01' && m <= '2026-05') f *= 1 + D.IPCA[m] / 100; });
+  const r = comTabelasAte({ IPCA: '2026-05' }, () => calc(e));
+  quase(r.totais.capital, r2(1000 * Math.max(1, f)), 'IPCA de 01/2025 a 05/2026');
+  assert.ok(r.avisos.some(a => /correção pelo IPCA foi aplicada até a variação de 05\/2026/.test(a)));
+  // Os juros fixos não dependem da tabela: 1% a.m. de 10/01/2025 a 15/08/2026 = 19 meses e 5 dias (DIAS360).
+  quase(r.totais.juros, r2(r.totais.capital * (19 + 5 / 30) / 100), 'juros fixos até a data do cálculo');
+});
+
+caso('N50 pagamento e vencimento depois do último fator não bloqueiam; mês anterior ao início da tabela continua bloqueando', () => {
+  const e = civel({ regime: 'tjsp', civel: undefined, dataCalculo: '2026-08-15', imputacao: 'mes',
+    parcelas: [{ vencimento: '2025-01-10', valor: 1000 }, { vencimento: '2026-07-10', valor: 500 }], pagamentos: [{ data: '2026-07-20', valor: 300 }] });
+  const r = comTabelasAte({ FATORES_TJSP: '2026-06', TAXA_LEGAL: '2026-06' }, () => calc(e));
+  assert.equal(r.totais.pagamentos, 300);
+  quase(r.linhas[1].capital + r.linhas[1].juros, 200, 'parcela posterior ao último fator fica no nominal, sem correção nem taxa legal');
+  erroCom(() => comTabelasAte({ FATORES_TJSP: '2026-06' }, () => calc(civel({ regime: 'tjsp', civel: undefined, dataCalculo: '2026-08-15',
+    parcelas: [{ vencimento: '1990-01-10', valor: 1000 }] }))), /não tem o fator da Tabela Prática de 01\/1990/);
+});
+
+caso('N50 não alcança a Fazenda Pública: fator ausente continua bloqueando', () => {
+  erroCom(() => comTabelasAte({ FATORES_IPCAE: '2015-06' }, () => calc(fazenda({ dataCalculo: '2016-03-10', parcelas: [{ vencimento: '2014-01-10', valor: 1000 }] }))),
+    /IPCA-E|tabela/i);
+});
+
+/* ---------------- N51: termo final próprio da correção e dos juros por parcela ---------------- */
+function fatorIPCA(de, ate) {   // variações de "de" até o mês anterior a "ate", como a Tabela Prática
+  let f = 1;
+  Object.keys(D.IPCA).sort().forEach(m => { if (m >= de && m < ate) f *= 1 + D.IPCA[m] / 100; });
+  return f;
+}
+
+caso('N51 juros até: 1% a.m. só até o fim dos juros (gabarito à mão)', () => {
+  const r = calc(civel({ dataCalculo: '2024-06-15', parcelas: [{ vencimento: '2023-01-15', valor: 10000, jurosAte: '2023-07-15' }] }));
+  assert.equal(r.totais.juros, 600);   // 15/01 a 15/07/2023: 180 dias comerciais = 6%
+  assert.equal(r.totais.total, 10600);
+  assert.ok(r.linhas[0].eventos.some(x => /Termo final próprio desta parcela: juros até 15\/07\/2023/.test(x)));
+  assert.equal(r.linhas[0].jurosAte, '2023-07-15');
+});
+
+caso('N51 correção até: IPCA para no fim da correção e os juros seguem sobre o capital corrigido (gabarito à mão)', () => {
+  const r = calc(civel({ civel: { indice: 'ipca' }, dataCalculo: '2024-01-10', parcelas: [{ vencimento: '2023-01-10', valor: 10000, correcaoAte: '2023-07-10' }] }));
+  const capital = r2(10000 * fatorIPCA('2023-01', '2023-07'));
+  quase(r.totais.capital, capital, 'capital corrigido só até 07/2023');
+  quase(r.totais.juros, r2(10000 * fatorIPCA('2023-01', '2023-07') * 0.12), 'juros de 12 meses comerciais sobre o capital corrigido');
+});
+
+caso('N51 juros até com correção seguindo até o cálculo (gabarito à mão)', () => {
+  const r = calc(civel({ civel: { indice: 'ipca' }, dataCalculo: '2024-01-10', parcelas: [{ vencimento: '2023-01-10', valor: 10000, jurosAte: '2023-07-10' }] }));
+  const f = fatorIPCA('2023-01', '2024-01');
+  quase(r.totais.capital, r2(10000 * f), 'correção até 01/2024');
+  quase(r.totais.juros, r2(10000 * f * 0.06), 'juros de 6 meses, corrigidos com o capital');
+});
+
+caso('N51 correção e juros até a mesma data equivalem ao cálculo naquela data (TJSP, taxa legal e Selic)', () => {
+  ['tjsp', 'selic', 'selic_tl', 'taxalegal'].forEach(regime => {
+    const base = { regime, civel: undefined, parcelas: [{ vencimento: '2023-03-20', valor: 5000 }] };
+    const ate = calc(civel(Object.assign({}, base, { dataCalculo: '2025-02-14' })));
+    const termo = calc(civel(Object.assign({}, base, { dataCalculo: '2026-06-30',
+      parcelas: [{ vencimento: '2023-03-20', valor: 5000, correcaoAte: '2025-02-14', jurosAte: '2025-02-14' }] })));
+    quase(termo.totais.total, ate.totais.total, regime);
+  });
+  // Selic: o fim da correção encerra também a Selic, mesmo sem fim dos juros.
+  const s1 = calc(civel({ regime: 'selic', civel: undefined, dataCalculo: '2025-02-14', parcelas: [{ vencimento: '2023-03-20', valor: 5000 }] }));
+  const s2 = calc(civel({ regime: 'selic', civel: undefined, dataCalculo: '2026-06-30', parcelas: [{ vencimento: '2023-03-20', valor: 5000, correcaoAte: '2025-02-14' }] }));
+  quase(s2.totais.total, s1.totais.total, 'selic com fim da correção');
+});
+
+caso('N51 depósito judicial: pagamento depois do termo final quita o saldo congelado', () => {
+  const p = { vencimento: '2023-01-15', valor: 10000, correcaoAte: '2023-07-15', jurosAte: '2023-07-15' };
+  const r = calc(civel({ dataCalculo: '2024-06-15', parcelas: [p], pagamentos: [{ data: '2024-01-15', valor: 10600 }] }));
+  assert.equal(r.totais.total, 0);
+  assert.equal(r.totais.sobra, 0);
+  const pensao = calc({ tipo: 'pensao', dataCalculo: '2024-06-15', regime: 'tjsp', termoJuros: 'vencimento', periodos: [],
+    parcelas: [p], pagamentos: [], multa: false, honorarios: false });
+  assert.ok(pensao.linhas[0].eventos.some(x => /fica parada no valor dessa data/.test(x)));
+});
+
+caso('N51 validações: fim antes do início, depois do cálculo, Fazenda e frações com termos diferentes', () => {
+  erroCom(() => calc(civel({ parcelas: [{ vencimento: '2023-01-15', valor: 100, jurosAte: '2023-01-10' }] })), /fim dos juros .* anterior ao início/);
+  erroCom(() => calc(civel({ parcelas: [{ vencimento: '2023-01-15', valor: 100, correcaoAte: '2025-01-10' }] })), /fim da correção .* posterior à data do cálculo/);
+  erroCom(() => calc(fazenda({ parcelas: [{ vencimento: '2023-01-15', valor: 100, jurosAte: '2024-01-10' }] })), /termos finais próprios ainda não estão disponíveis na Fazenda/);
+  erroCom(() => calc(civel({ parcelas: [{ vencimento: '2023-01-15', valor: 100, obrigacao: 'X', jurosAte: '2023-06-01' }, { vencimento: '2023-01-15', valor: 100, obrigacao: 'X' }] })),
+    /mesmos termos de correção e juros/);
+  // Frações com o mesmo termo final: atualizadas como uma obrigação, mesmo total das duas metades.
+  const juntas = calc(civel({ parcelas: [{ vencimento: '2023-01-15', valor: 100, obrigacao: 'X', jurosAte: '2023-07-15' }, { vencimento: '2023-01-15', valor: 100, obrigacao: 'X', jurosAte: '2023-07-15' }] }));
+  assert.equal(juntas.totais.total, 212);
+});
+
+/* ---------------- N52: parcelas vincendas pelo valor nominal ---------------- */
+caso('N52 cível: vincenda só com "vincendasAte"; nominal, fora da base do art. 523 (gabarito à mão)', () => {
+  const base = { dataCalculo: '2024-06-15', parcelas: [{ vencimento: '2024-01-15', valor: 1000 }, { vencimento: '2024-08-15', valor: 500 }] };
+  erroCom(() => calc(civel(base)), /posterior à data do cálculo. Para incluir parcelas vincendas/);
+  erroCom(() => calc(civel(Object.assign({ vincendasAte: '2024-07-31' }, base))), /posterior à data do cálculo e à data informada para as vincendas \(31\/07\/2024\)/);
+  const r = calc(civel(Object.assign({ vincendasAte: '2024-08-31', multa: true, prazo523: '2024-05-01' }, base)));
+  assert.equal(r.linhas[1].vincenda, true);
+  assert.equal(r.linhas[1].total, 500);
+  assert.equal(r.totais.vincendas, 500);
+  assert.equal(r.totais.subtotal, 1000 + 50 + 500);   // 1% a.m. por 5 meses sobre R$ 1.000,00 (sem correção) e a vincenda nominal
+  assert.equal(r.totais.multa, 105);                    // 10% só sobre a parcela vencida
+  assert.ok(r.avisos.some(a => /1 parcela vincenda .* R\$ 500,00, sem correção nem juros/.test(a)));
+  erroCom(() => calc(civel({ vincendasAte: '2024-08-31', dataCalculo: '2024-06-15', parcelas: [{ vencimento: '2024-08-15', valor: 500, jurosDesde: '2024-08-15' }] })),
+    /parcela vincenda entra pelo valor nominal/);
+  erroCom(() => calc(fazenda({ vincendasAte: '2026-12-31', parcelas: [{ vencimento: '2026-01-15', valor: 100 }] })), /vincendas não se aplicam à Fazenda/);
+});
+
+caso('N52 pensão: prestações geradas até "vincendasAte" e rito da prisão com as vencidas no curso do processo', () => {
+  const per = [{ inicio: '2026-01', fim: null, dia: 10, base: 'fixo', quantidade: 1000 }];
+  const e = { tipo: 'pensao', dataCalculo: '2026-06-15', regime: 'tjsp', termoJuros: 'vencimento', periodos: per, parcelas: [], pagamentos: [],
+    multa: false, honorarios: false, ritoExecucao: 'ambos', dataAjuizamento: '2026-08-01' };
+  const sem = calc(e), com = calc(Object.assign({ vincendasAte: '2026-09-30' }, e));
+  assert.equal(sem.linhas.length, 6);
+  assert.equal(com.linhas.length, 9);
+  assert.equal(com.totais.vincendas, 3000);
+  assert.ok(com.linhas.slice(6).every(l => l.vincenda && l.total === 1000));
+  // Prisão: as três anteriores ao ajuizamento previsto (05, 06 e 07/2026) e as vencidas no curso (08 e 09/2026).
+  assert.deepEqual(com.linhas.filter(l => l.rito === 'prisao').map(l => l.vencimento.slice(0, 7)), ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09']);
+  // Sem vincendas, a de 07/2026 só ocupa lugar entre as três últimas (N42), sem entrar no valor.
+  assert.deepEqual(sem.linhas.filter(l => l.rito === 'prisao').map(l => l.vencimento.slice(0, 7)), ['2026-05', '2026-06']);
+  quase(com.totais.prisao, sem.totais.prisao + 3000, 'prisão soma as três vincendas pelo nominal');
+  quase(com.totais.penhora, sem.totais.penhora, 'penhora não muda');
+});
+
 console.log(process.exitCode ? 'Falharam testes da revisão.' : 'Todos os ' + n + ' testes da revisão passaram.');

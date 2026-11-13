@@ -6,6 +6,8 @@
  * Dois modelos de planilha (campo "modelo" do gabarito):
  *   extenso  "Atualização Monetária e Juros Moratórios - Extenso", com a contagem registrada no gabarito. No mês cheio,
  *            todos os critérios devem coincidir ao centavo, salvo diferenças recalculadas de agosto/2024 e N04.
+ *            Os casos são calculados no perfil atual (5), o mesmo dos cálculos novos na tela; nele a N04 deixa de
+ *            aparecer porque não há arredondamento intermediário. Diferença sem explicação falha em qualquer critério.
  *   simples  "Cálculo Simples". Só a correção monetária tem de ser igual; os juros são relatados, sem derrubar o teste,
  *            porque a planilha usa outra contagem na mudança de agosto de 2024 e uma fórmula própria de pro rata.
  *
@@ -16,6 +18,8 @@
  *     juros iniciados em 30 ou 31/08/2024 usa a sua taxa de agosto (Selic menos INPC), não a do Banco Central;
  *   - no pro rata, a taxa legal histórica em `taxalegal` e a Selic da Extenso podem contar meses inteiros; só classificar
  *     como diferença conhecida quando a soma mensal recalculada coincidir com a taxa informada pela planilha;
+ *   - Selic de 07/2026: o acumulado da planilha Extenso soma 1,21%, enquanto a tabela mensal dela e o Banco Central
+ *     trazem 1,22%; só classificar assim quando a soma refeita com 1,21% coincidir com o percentual do gabarito;
  *   - Cálculo Simples: 1% a.m. até 27/08/2024 e taxa legal desde 28/08/2024, com fórmula própria de pro rata (que fica
  *     negativa com cálculo entre 01 e 27/08/2024).
  */
@@ -29,6 +33,7 @@ const REL = process.argv[3] || ARQ.replace(/\.json$/, '') .replace(/gabarito/, '
 const g = JSON.parse(fs.readFileSync(ARQ, 'utf8'));
 const MODELO = g.modelo || 'simples';
 const r2 = E.util.r2;
+const EPS = 1e-9;   // folga de ponto flutuante nas comparações em reais
 const REGIME = MODELO === 'extenso' ? { tjsp: 'tjsp', taxalegal: 'taxalegal', fixa: 'fixa', selic: 'selic' } : { 2: 'tjsp', 3: 'taxalegal', 4: 'fixa' };
 const CONTAGEM_JUROS = g.contagemJuros === 'mescheio' ? 'mescheio' : 'prorata';
 const NOME = { tjsp: 'Tabela Prática + 1% até 28/08/2024 + taxa legal (padrão)', taxalegal: 'Tabela Prática + taxa legal em todo o período',
@@ -58,16 +63,38 @@ function taxaLegalExtensoMesCheio(ini, calculo, regime, taxaAgostoTJ) {
   return somaMeses(mesSeguinte(inicioLegal.slice(0, 7)), mesSeguinte(calculo.slice(0, 7)), m =>
     m === '2024-08' && taxaAgostoTJ ? TL_AGO_TJ : DADOS.TAXA_LEGAL[m]);
 }
-function taxaMesInteiroExtenso(ini, calculo, serie, taxaAgostoTJ) {
-  return somaMeses(ini.slice(0, 7), calculo.slice(0, 7), m =>
-    m === '2024-08' && taxaAgostoTJ ? TL_AGO_TJ : DADOS[serie][m]);
+// Taxa legal histórica (`taxalegal`, pro rata) como a Extenso calcula: meses inteiros do mês seguinte ao início até o
+// mês do cálculo, inclusive; com cálculo a partir de 30/08/2024, desconta do mês do cálculo a fração
+// (dias do mês - dia do cálculo + 1) / dias do mês. Agosto/2024 com a taxa da planilha. Achado na análise de 10/11/2026.
+const diasNoMes = m => { const [a, b] = m.split('-').map(Number); return new Date(Date.UTC(a, b, 0)).getUTCDate(); };
+function taxaLegalHistoricaExtenso(ini, calculo) {
+  const mesCalc = calculo.slice(0, 7);
+  let pct = somaMeses(mesSeguinte(ini.slice(0, 7)), mesSeguinte(mesCalc), m => m === '2024-08' ? TL_AGO_TJ : DADOS.TAXA_LEGAL[m]);
+  if (calculo >= '2024-08-30') {
+    const tx = mesCalc === '2024-08' ? TL_AGO_TJ : DADOS.TAXA_LEGAL[mesCalc] || 0, D = diasNoMes(mesCalc);
+    pct -= tx * (D - Number(calculo.slice(8)) + 1) / D;
+  }
+  return pct;
 }
+// Meses em que o acumulado da Selic na planilha Extenso difere da série do Banco Central (e da tabela mensal da
+// própria planilha). Achado na análise de 09/11/2026: 07/2026 = 1,21 no acumulado; BCB = 1,22.
+const SELIC_ACUMULADO_PLANILHA = { '2026-07': 1.21 };
+function taxaMesInteiroExtenso(ini, calculo, serie, taxaAgostoTJ, selicDaPlanilha) {
+  return somaMeses(ini.slice(0, 7), calculo.slice(0, 7), m =>
+    m === '2024-08' && taxaAgostoTJ ? TL_AGO_TJ :
+    serie === 'SELIC' && selicDaPlanilha && m in SELIC_ACUMULADO_PLANILHA ? SELIC_ACUMULADO_PLANILHA[m] : DADOS[serie][m]);
+}
+// A Selic da planilha só difere da do Banco Central se algum mês do período estiver em SELIC_ACUMULADO_PLANILHA.
+const selicPlanilhaDifere = (ini, calculo) =>
+  Math.abs(taxaMesInteiroExtenso(ini, calculo, 'SELIC', false, true) - taxaMesInteiroExtenso(ini, calculo, 'SELIC', false)) >= 1e-9;
 
 const C = {
   piso: 'deflação (piso do valor nominal, Tema 678/STJ)',
   cor: 'correção',
   ago: 'agosto de 2024 (dias 29 a 31/08)',
   meses: 'meses inteiros, sem pro rata die (taxa legal antes de 30/08/2024 ou Selic)',
+  legalHist: 'taxa legal histórica (fórmula mensal da Extenso, opção taxalegal)',
+  selicPlanilha: 'Selic de 07/2026 no acumulado da planilha (1,21% × 1,22% do BCB)',
   n04: 'arredondamento por rubrica (N04)',
   negativa: 'taxa legal negativa na planilha',
   fixos: 'contagem dos dias (1% a.m.)',
@@ -81,7 +108,7 @@ g.casos.forEach((c, i) => {
   const reg = REGIME[c.opcao];
   const ini = c.jurosDesde > c.vencimento ? c.jurosDesde : c.vencimento;
   const e = { tipo: 'particular', dataCalculo: c.dataCalculo, regime: reg, taxaFixa: 1,
-    contagemJuros: CONTAGEM_JUROS,
+    contagemJuros: CONTAGEM_JUROS, perfilCalculo: E.perfilCalculoAtual,
     termoJuros: c.jurosDesde > c.vencimento ? 'data' : 'vencimento', dataJuros: c.jurosDesde,
     parcelas: [{ vencimento: c.vencimento, valor: c.valor }], pagamentos: [] };
   let t;
@@ -105,10 +132,11 @@ g.casos.forEach((c, i) => {
   const toleranciaTotal = CONTAGEM_JUROS === 'mescheio' ? 0 : 0.02;
   const discrepanciaTaxa = Math.abs(fixos - tjFix) >= 1e-4 ||
     (reg === 'tjsp' || reg === 'taxalegal') && Math.abs(legal - tjLeg) >= 1e-4;
+  // Até R$ 0,01 de folga, pelo arredondamento de cada rubrica; EPS evita falso negativo de ponto flutuante.
   const impactoTaxaConfere = pctPlanilha =>
-    Math.abs(d.dif - r2(t.capital * (legal - pctPlanilha) / 100)) <= 0.01;
+    Math.abs(d.dif - r2(t.capital * (legal - pctPlanilha) / 100)) <= 0.01 + EPS;
   const impactoSelicConfere = pctPlanilha =>
-    Math.abs(d.dif - r2(t.juros - t.capital * pctPlanilha / 100)) <= 0.01;
+    Math.abs(d.dif - r2(t.juros - t.capital * pctPlanilha / 100)) <= 0.01 + EPS;
   if (Math.abs(d.dif) > toleranciaTotal || d.causas.length ||
       MODELO === 'extenso' && CONTAGEM_JUROS === 'mescheio' && discrepanciaTaxa) {
     const okFix = Math.abs(fixos - tjFix) < 1e-4;
@@ -122,7 +150,12 @@ g.casos.forEach((c, i) => {
             d.causas.push(C.ago);
           else if (!okTJ || Math.abs(esperadoBCB - tjLeg) >= 1e-4) d.causas.push(C.legal);
         } else if (reg === 'selic' &&
-            Math.abs(taxaMesInteiroExtenso(ini, c.dataCalculo, 'SELIC', false) - tjPct) >= 1e-4) d.causas.push(C.outra);
+            Math.abs(taxaMesInteiroExtenso(ini, c.dataCalculo, 'SELIC', false) - tjPct) >= 1e-4) {
+          const comPlanilha = taxaMesInteiroExtenso(ini, c.dataCalculo, 'SELIC', false, true);
+          if (selicPlanilhaDifere(ini, c.dataCalculo) && Math.abs(comPlanilha - tjPct) < 1e-4 && impactoSelicConfere(comPlanilha))
+            d.causas.push(C.selicPlanilha);
+          else d.causas.push(C.outra);
+        }
       } else {
         let espLeg = legal;
         if (reg === 'tjsp' || reg === 'taxalegal') {
@@ -133,7 +166,10 @@ g.casos.forEach((c, i) => {
         const okLeg = Math.abs(legal - tjLeg) < 1e-4, okAgo = Math.abs(espLeg - tjLeg) < 1e-4;
         if (reg === 'selic') {
           const mesesSelic = taxaMesInteiroExtenso(ini, c.dataCalculo, 'SELIC', false);
+          const mesesSelicPlanilha = taxaMesInteiroExtenso(ini, c.dataCalculo, 'SELIC', false, true);
           if (Math.abs(mesesSelic - tjPct) < 1e-4 && impactoSelicConfere(mesesSelic)) d.causas.push(C.meses);
+          else if (selicPlanilhaDifere(ini, c.dataCalculo) && Math.abs(mesesSelicPlanilha - tjPct) < 1e-4 &&
+              impactoSelicConfere(mesesSelicPlanilha)) d.causas.push(C.meses, C.selicPlanilha);
           else d.causas.push(C.outra);
         } else if (reg === 'taxalegal' && ini < '2024-08-30') {
           const mesesLegal = taxaMesInteiroExtenso(ini, c.dataCalculo, 'TAXA_LEGAL', true);
@@ -142,6 +178,8 @@ g.casos.forEach((c, i) => {
             if (Math.abs(taxaMesInteiroExtenso(ini, c.dataCalculo, 'TAXA_LEGAL', false) - mesesLegal) >= 1e-4)
               d.causas.push(C.ago);
           } else if (!okLeg && okAgo && impactoTaxaConfere(espLeg)) d.causas.push(C.ago);
+          else if (!okLeg && Math.abs(taxaLegalHistoricaExtenso(ini, c.dataCalculo) - tjLeg) < 1e-4 &&
+              impactoTaxaConfere(taxaLegalHistoricaExtenso(ini, c.dataCalculo))) d.causas.push(C.legalHist);
           else if (!okLeg) d.causas.push(C.legal);
         } else if (!okLeg && okAgo && impactoTaxaConfere(espLeg)) d.causas.push(C.ago);
         else if (!okLeg && reg !== 'selic') d.causas.push(C.legal);
@@ -190,6 +228,8 @@ const EXPLICA = {
       '%. A classificação só é feita quando a soma dos meses efetivamente contados, substituindo agosto pela taxa da planilha, confere com o percentual do gabarito.'
     : 'A calculadora conta a taxa legal desde 29/08/2024, dia seguinte ao último dia de 1% a.m. (28/08/2024). A planilha Extenso não conta juros de 29 a 31/08/2024 quando os juros começam até 29/08 (só a partir de 01/09); para juros iniciados em 30 ou 31/08, usa a sua taxa de agosto (' + String(TL_AGO_TJ).replace('.', ',') + '%, Selic menos INPC) em vez da do Banco Central (' + String(TL_AGO_BCB).replace('.', ',') + '%). Refazendo a nossa conta assim, todos estes casos batem.',
   [C.meses]: 'A planilha Extenso conta meses inteiros, sem pro rata die. Esta causa só é atribuída quando a soma mensal refeita com os meses e taxas da planilha coincide com o percentual informado no gabarito.',
+  [C.legalHist]: 'Na opção taxa legal em todo o período, a planilha Extenso soma meses inteiros a partir do mês seguinte ao início dos juros até o mês do cálculo e, com cálculo a partir de 30/08/2024, desconta só a fração final do mês do cálculo. A calculadora conta pro rata die no início e no fim. Só é classificado assim quando a soma refeita por essa fórmula coincide com o percentual do gabarito. Lembrete: a opção taxalegal só vale se o título determinar (a Lei 14.905/2024 não retroage).',
+  [C.selicPlanilha]: 'O acumulado da Selic na planilha Extenso usa 1,21% em 07/2026, enquanto a tabela mensal da própria planilha e o Banco Central trazem 1,22%. A calculadora usa a série do Banco Central. Só é classificado assim quando a soma refeita com 1,21% coincide com o percentual do gabarito; se o TJSP corrigir a planilha, estes casos passam a bater sozinhos.',
   [C.n04]: 'Os totais diferem em R$ 0,01 porque a planilha soma valores internos sem arredondar cada rubrica, enquanto a calculadora aplica N04. A diferença foi confirmada pela soma dos valores corrigido e juros do gabarito arredondados separadamente.',
   [C.negativa]: 'Com data do cálculo entre 01/08/2024 e 27/08/2024, a fórmula da planilha desconta a fração do mês e a taxa legal fica negativa.',
   [C.fixos]: MODELO === 'simples' ? 'A planilha Cálculo Simples encerra o 1% a.m. em 27/08/2024 (um dia antes da calculadora).' : 'A contagem dos dias do 1% a.m. difere da planilha (DIAS360).',
@@ -214,7 +254,7 @@ fs.writeFileSync(REL, L.join('\n'));
 const falhaCor = res.filter(d => d.causas.indexOf(C.cor) >= 0);
 const falhaJur = MODELO === 'extenso' ? res.filter(d => CONTAGEM_JUROS === 'mescheio'
   ? d.causas.some(k => k === C.legal || k === C.fixos || k === C.meses || k === C.outra)
-  : (d.reg === 'tjsp' || d.reg === 'fixa') && d.causas.some(k => k === C.legal || k === C.fixos || k === C.outra)) : [];
+  : d.causas.some(k => k === C.legal || k === C.fixos || k === C.outra)) : [];
 if (pulados) console.log(pulados + ' caso(s) pulados: a planilha tem índice de um mês que a tabela da calculadora ainda não tem.');
 console.log(TITULO + ': ' + res.length + ' casos; total igual à planilha: ' + iguais.length + '; correção sem divergência: ' + (res.length - falhaCor.length) + '.');
 Object.keys(causas).forEach(k => console.log('  ' + k + ': ' + causas[k].length + ' caso(s)'));
@@ -224,6 +264,6 @@ if (falhaCor.length || erros.length || falhaJur.length) {
   console.log('Falhou: a correção tem de ser igual à da planilha, nenhum caso pode ser recusado' +
     (MODELO === 'extenso' ? (CONTAGEM_JUROS === 'mescheio'
       ? ' e todos os critérios de mês cheio têm de bater ao centavo, salvo agosto/2024 e N04 recalculados.'
-      : ' e, no regime padrão e na taxa fixa, o total tem de bater salvo as diferenças de critério conhecidas.') : '.'));
+      : ' e, em todos os critérios, o total tem de bater salvo as diferenças de critério conhecidas e recalculadas.') : '.'));
   process.exit(1);
 }

@@ -14,35 +14,42 @@
 <body>
   <svg width="0" height="0" aria-hidden="true"><symbol id="i-tema" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></symbol><symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2zm7 11l1 2.9 2.9 1-2.9 1L19 21l-1-2.9-2.9-1 2.9-1L19 13z"/></symbol></svg>
   <header class="topo">
-    <div class="topo-titulos">
-      <div class="marca">
-        <img class="logo-topo" src="icons/logo-dpesp.png" alt="Defensoria Pública do Estado de São Paulo">
-        <div class="marca-texto">
-          <h1>Calculadora de Débitos Judiciais</h1>
-        </div>
-      </div>
-      <p class="subtitulo">Análise de contrato bancário: ferramenta de apoio à triagem. Os resultados devem ser conferidos.</p>
+    <div class="marca">
+      <img class="logo-topo" src="icons/logo-dpesp.png" alt="Defensoria Pública do Estado de São Paulo">
+      <div class="marca-texto"><h1>Calculadora de Débitos Judiciais</h1></div>
     </div>
-    <div class="topo-acoes">
+    <div class="topo-dir">
+      <span class="sub indices-cabecalho">Índices até <span id="indiceContratoAte">carregando…</span></span>
+      <a class="link-indices" href="calc.html#painelIndices">Índices e fontes</a>
+      <details class="acoes-arquivo">
+        <summary>Ações</summary>
+        <div>
+          <button type="button" class="secundario" id="novoCalculo" title="Começar uma análise nova">Novo</button>
+          <button type="button" class="secundario" id="abrirCalculo" title="Abrir uma análise salva em JSON">Abrir</button>
+          <button type="button" class="secundario" id="salvarCalculo" title="Salvar esta análise em JSON" disabled>Salvar</button>
+        </div>
+      </details>
       <a class="secundario" id="novaAba" href="contrato.html" target="_blank" rel="noopener" hidden>Abrir em nova aba</a>
-      <button type="button" class="secundario btn-tema" id="btnTema" title="Tema da tela: automático, claro ou escuro">
-        <svg class="icone-tema" aria-hidden="true"><use href="#i-tema"></use></svg><span id="rotuloTema">Automático</span>
+      <button type="button" class="secundario btn-tema" id="btnTema" aria-label="Tema claro ou escuro" title="Tema claro ou escuro">
+        <svg class="icone-tema" aria-hidden="true"><use href="#i-tema"></use></svg><span id="rotuloTema" class="sr" aria-hidden="true">Automático</span>
       </button>
     </div>
   </header>
   <nav class="nav-calc" aria-label="Calculadoras">
     <a href="calc.html" data-calc="pensao">Pensão alimentícia</a>
-    <a href="calc.html?calc=civel" data-calc="civel">Débito cível e Fazenda Pública</a>
+    <a href="calc.html?calc=civel" data-calc="civel">Débito cível</a>
+    <a href="calc.html?calc=fazenda" data-calc="fazenda">Fazenda Pública</a>
     <a href="contrato.html" data-calc="contrato">Contrato bancário</a>
+    <a href="cartao.html" data-calc="cartao">Cartão consignado</a>
   </nav>
   <main class="pagina">
-    <p class="aviso aviso-escuro" role="note"><strong>Análise preliminar, não é conclusão jurídica.</strong> Não informe nome, CPF ou nº do processo; os dados ficam no seu dispositivo.</p>
-
+    <div class="area-calculo">
+    <div class="area-entrada">
     <div class="ic-caixa">
     <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação: Importar do Copilot" title="Explicação">i</button><span class="ajuda">Cole o bloco de extração do contrato. O Copilot não calcula; confira as fontes antes de preencher.</span>
     <details class="importar-copilot" id="painelCopilot">
       <summary>
-        <span class="ic-titulo"><svg class="ic-icone" aria-hidden="true"><use href="#i-spark"/></svg>Importar do Copilot</span>
+        <span class="ic-titulo"><svg class="ic-icone" aria-hidden="true"><use href="#i-spark"/></svg>Preencher com os dados extraídos pelo Copilot</span>
       </summary>
       <div class="ic-corpo">
         <label class="ic-campo">
@@ -80,7 +87,7 @@
 
     <form id="formContrato" autocomplete="off" novalidate>
       <section class="painel">
-        <h2>Dados do contrato</h2>
+        <h2><span class="passo-numero">1</span>O contrato</h2>
         <div class="grade">
           <div class="campo-modalidade">
             <label for="modality">Modalidade</label>
@@ -109,7 +116,7 @@
             <span class="campo-origem" data-origem="payrollSubtype"></span>
           </label>
           <label>Data do contrato
-            <input id="contractDate" type="date">
+            <input id="contractDate" type="text" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
             <span class="campo-origem" data-origem="contractDate"></span>
           </label>
           <label>Valor financiado (R$)
@@ -131,8 +138,8 @@
           <div class="campo-modalidade">
             <label for="amortization">Sistema de amortização</label>
             <select id="amortization">
-              <option value="unknown" selected>Desconhecido / irregular — usar parcelas informadas</option>
-              <option value="PRICE">Price</option>
+              <option value="unknown" selected>Não sei</option>
+              <option value="PRICE">Price (parcelas iguais)</option>
               <option value="SAC">SAC</option>
               <option value="">Não informado</option>
             </select>
@@ -145,7 +152,7 @@
       </section>
 
       <details class="painel mais-opcoes" id="maisOpcoes">
-        <summary>Mais opções</summary>
+        <summary><span class="passo-numero">2</span>Se precisar</summary>
         <div class="grade">
           <label>Principal questão
             <select id="problem">
@@ -162,8 +169,9 @@
               <option value="">Sem classificação</option>
             </select>
           </label>
+          <h3 class="subtitulo-grupo">Valor liberado e datas</h3>
           <label>Data da liberação do crédito
-            <input id="disbursementDate" type="date">
+            <input id="disbursementDate" type="text" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
             <span id="disbursementDateHelp" class="nota" hidden>Data efetiva não localizada no documento; permanece desconhecida.</span>
             <span class="campo-origem" data-origem="disbursementDate"></span>
           </label>
@@ -172,7 +180,7 @@
             <span class="campo-origem" data-origem="netDisbursed"></span>
           </label>
           <label>Vencimento da primeira parcela
-            <input id="firstDueDate" type="date">
+            <input id="firstDueDate" type="text" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
             <span class="campo-origem" data-origem="firstDueDate"></span>
           </label>
           <label>CET informado (% ao ano)
@@ -189,7 +197,7 @@
             <span class="campo-origem" data-origem="capitalization"></span>
           </label>
         </div>
-        <h3 class="titulo-encargos">Encargos informados</h3>
+        <h3 class="subtitulo-grupo">IOF, tarifas e seguro</h3>
         <p class="nota">Encargos são informações complementares. Informe apenas os identificados; o modo de pagamento altera o fluxo financeiro.</p>
         <div id="encargos" class="encargos"></div>
         <div id="grupoEncargosInadimplencia" hidden>
@@ -202,14 +210,24 @@
 
       <div id="erro" class="erro" role="alert" hidden></div>
       <div class="acoes">
-        <button type="submit" class="primario" id="calcularAnalise">Calcular análise</button>
-        <button type="button" class="secundario" id="reiniciar">Reiniciar análise</button>
+        <button type="submit" class="primario" id="calcularAnalise" hidden>Concluir revisão</button>
+        <button type="button" class="secundario" id="reiniciar" hidden>Reiniciar análise</button>
       </div>
     </form>
-
+    </div>
+    <div class="area-resultado">
+    <section class="painel resultado-vazio" id="vazioContrato" aria-live="polite">
+      <h2>Resultado</h2>
+      <p>Preencha os dados principais do contrato para ver a análise.</p>
+      <p class="nota"><strong>Análise preliminar, não é conclusão jurídica.</strong> Ela mostra a comparação com a média do Banco Central, o CET estimado, os pontos de atenção e a memória de amortização. Não informe nome, CPF ou nº do processo; os dados ficam no seu dispositivo.</p>
+    </section>
     <section id="resultado" class="painel resultado" hidden aria-live="polite">
       <p id="resultadoRevisao" class="nota pendente-revisao" hidden></p>
       <p id="resultadoDesatualizado" class="nota resultado-desatualizado" role="status" hidden>Dados alterados — recalcule antes de exportar. Este resultado não corresponde mais ao formulário; imprimir e exportar ficam bloqueados até um novo cálculo válido.</p>
+      <div class="metrica metrica-total">
+        <strong id="totalContratoValor"></strong>
+        <span>Total das parcelas informadas</span>
+      </div>
       <div id="semaforo" class="semaforo semaforo-gray" role="status">
         <span id="semaforoIcone" class="semaforo-icone" aria-hidden="true">?</span>
         <div>
@@ -251,9 +269,10 @@
         <div id="simulacoes" class="metricas"></div>
         <p class="nota">Cenários dependem das premissas e não representam valor devido ou recuperável.</p>
       </details>
-      <details class="detalhes">
+      <details class="detalhes memoria-amortizacao">
         <summary>Ver detalhes: memória de amortização</summary>
         <p id="ajusteFinalPrice" class="nota" hidden></p>
+        <div id="memoriaTextoContrato" class="memoria-texto-contrato"></div>
         <div class="tabela-wrap">
           <table>
             <thead><tr><th>Parcela</th><th>Prestação</th><th>Juros</th><th>Amortização</th><th>Saldo</th></tr></thead>
@@ -269,11 +288,13 @@
       </div>
       <p class="versao">Versão do cálculo 1.0.0 · regras 1.0.0 · apoio à triagem, sujeito a revisão por defensor(a).</p>
     </section>
+    </div>
+    </div>
 
     <details class="painel metodologia">
       <summary>Metodologia e limitações</summary>
-      <p>As prestações Price e SAC são calculadas por períodos mensais, com juros e valores em centavos. A taxa implícita é inferida do valor financiado e das parcelas uniformes; se houver encargos ou pagamentos irregulares, ela pode representar o custo global do fluxo, não juros remuneratórios isolados. O CET usa as datas fornecidas e ano de 365 dias, como estimativa informativa; não substitui a revisão normativa do fluxo completo.</p>
-      <p>A comparação com a média usa a taxa mensal que iguala o valor líquido liberado às parcelas informadas (critério da calculadora do DOL), de modo que IOF e tarifas financiados entram no custo; a taxa de juros informada no contrato aparece apenas como informação. As séries BACEN são médias agregadas de novas operações. Só há comparação quando existe observação da competência exata. Capital de giro, crédito para empresa, crédito rural, financiamento imobiliário, cheque especial, cartão e RMC/RCC ficam fora da comparação com médias de pessoa física; os demais cálculos continuam disponíveis.</p>
+      <p>As prestações Price e SAC são calculadas por períodos mensais, com juros e valores em centavos. Sem juros informados, o cronograma Price usa a taxa implícita do valor financiado e das parcelas uniformes, que não é exibida. O CET usa as datas fornecidas e ano de 365 dias, como estimativa informativa; não substitui a revisão normativa do fluxo completo.</p>
+      <p>A comparação com a média usa a taxa mensal que iguala o valor líquido liberado às parcelas informadas (taxa efetiva mensal, critério da calculadora do DOL), de modo que IOF e tarifas financiados entram no custo. Só essa taxa é exibida, como orientou o Nudecon em 10/11/2026; os juros informados no contrato servem apenas para montar o cronograma e os cenários. O semáforo usa a razão das taxas mensais (até 1,3x verde, até 1,5x amarelo, acima vermelho); são faixas internas de triagem, não limites do BACEN ou do STJ, que admite revisão dos juros só em situações excepcionais (REsp 1.061.530/RS). A taxa anual equivalente aparece como informação complementar. As séries BACEN são médias agregadas de novas operações. Só há comparação quando existe observação da competência exata. Capital de giro, crédito para empresa, crédito rural, financiamento imobiliário, cheque especial, cartão e RMC/RCC ficam fora da comparação com médias de pessoa física; os demais cálculos continuam disponíveis.</p>
       <p>As regras jurídicas são sinalizações iniciais, não pareceres, e permanecem pendentes de validação jurídica institucional. Nenhum dado é enviado a serviços externos pelo navegador.</p>
     </details>
     <p class="nota"><a href="https://sturdy-succotash-gk6vowv.pages.github.io/regras/" target="_blank" rel="noopener">Regras de negócio</a></p>

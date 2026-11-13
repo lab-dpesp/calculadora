@@ -6,18 +6,28 @@
   var CHAVE = 'calcjur:transferencia', VALIDADE = 5 * 60 * 1000;
   var PAGINAS = {
     pensao: { url: 'calc.html', nome: 'Pensão alimentícia' },
-    civel: { url: 'calc.html?calc=civel', nome: 'Débito cível e Fazenda Pública' },
-    contrato: { url: 'contrato.html', nome: 'Contrato bancário' }
+    civel: { url: 'calc.html?calc=civel', nome: 'Débito cível' },
+    fazenda: { url: 'calc.html?calc=fazenda', nome: 'Fazenda Pública' },
+    contrato: { url: 'contrato.html', nome: 'Contrato bancário' },
+    cartao: { url: 'cartao.html', nome: 'Cartão consignado' }
   };
   var $ = function (id) { return document.getElementById(id); };
 
   function paginaAtual() {
     var fixa = document.documentElement.getAttribute('data-calculadora');
     if (fixa) return fixa;
-    return /(?:^|[?&])calc=civel(?:&|$)/.test(location.search) ? 'civel' : 'pensao';
+    var match = location.search.match(/(?:^|[?&])calc=(civel|fazenda)(?:&|$)/);
+    return match ? match[1] : 'pensao';
   }
   var pagina = paginaAtual();
   if (!document.documentElement.getAttribute('data-calculadora')) document.documentElement.setAttribute('data-calculadora', pagina);
+  function ajustarMenuAcoes() {
+    var menu = document.querySelector('.acoes-arquivo');
+    if (menu) menu.open = !window.matchMedia('(max-width: 700px)').matches;
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ajustarMenuAcoes);
+  else ajustarMenuAcoes();
+  window.addEventListener('resize', ajustarMenuAcoes);
 
   /* Calculadora a que um texto colado pertence: 'contrato', 'pensao', 'civel' ou '' (não identificado).
    * Bloco da calculadora de débitos sem tipo reconhecível vai para a pensão, onde a leitura aponta o problema. */
@@ -33,10 +43,12 @@
     if (!tipo) return 'pensao';
     var t = tipo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (t === 'pensao' || t === 'pensao alimenticia' || t === 'alimentos') return 'pensao';
-    if (t === 'particular' || t === 'fazenda' || t === 'civel' || t === 'debito civel') return 'civel';
+    if (t === 'fazenda') return 'fazenda';
+    if (t === 'cartao') return 'cartao';
+    if (t === 'particular' || t === 'civel' || t === 'debito civel') return 'civel';
     return 'pensao';
   }
-  function destinoDoTipo(tipo) { return tipo === 'pensao' ? 'pensao' : 'civel'; }
+  function destinoDoTipo(tipo) { return tipo === 'cartao' ? 'cartao' : tipo === 'pensao' ? 'pensao' : tipo === 'fazenda' ? 'fazenda' : 'civel'; }
 
   /* Guarda os dados na aba e abre a outra calculadora; ela os lê ao carregar (receber). */
   function transferir(destino, dados) {
@@ -132,6 +144,24 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', marcarNavegacao);
   else marcarNavegacao();
+
+  function atualizarIndiceContrato() {
+    var alvo = $('indiceContratoAte');
+    var series = window.ContratoSeriesBacen;
+    if (!alvo || !series || !series.observations) return;
+    var meses = [];
+    Object.keys(series.observations).forEach(function (codigo) {
+      (series.observations[codigo] || []).forEach(function (observacao) {
+        if (observacao && /^\d{4}-\d{2}$/.test(observacao.month)) meses.push(observacao.month);
+      });
+    });
+    if (meses.length) {
+      var ultimo = meses.sort().pop().split('-');
+      alvo.textContent = ultimo[1] + '/' + ultimo[0];
+    } else alvo.textContent = 'sem série carregada';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', atualizarIndiceContrato);
+  else atualizarIndiceContrato();
 
   window.PainelCopilot = {
     pagina: pagina, paginas: PAGINAS, destinoDoTexto: destinoDoTexto, destinoDoTipo: destinoDoTipo,

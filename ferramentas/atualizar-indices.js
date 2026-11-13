@@ -66,14 +66,17 @@ const COMENTARIOS = {
   SALARIO_MINIMO: 'Salário mínimo nacional (SGS 1619): data de início de vigência e valor.',
   FATORES_TJSP: 'Tabela Prática do TJSP (Lei 14.905/2024): INPC até 08/2024, IPCA-15 desde 09/2024. Fator do mês m incorpora o índice de m-1.',
   TAXA_LEGAL: 'Taxa legal mensal, % a.m. (art. 406 do CC; Res. CMN 5.171/2024; SGS 29543, Selic menos IPCA-15). Antes de 08/2024, Selic do mês anterior menos a variação da Tabela Prática (fator em 4 casas, mínimo zero), como nas planilhas do TJSP.',
+  TAXA_LEGAL_INPC: 'Taxa legal previdenciária mensal, % a.m. (tabela SICOM/CJF; Resolução CJF 990/2026). Atualização não automatizada pelo SGS.',
   FATORES_IPCAE: 'IPCA-E acumulado (Tabela EC 113/2021 do TJSP), mesma convenção de defasagem da Tabela Prática.',
   JUROS_POUPANCA: 'Juros da poupança, % a.m. (art. 1º-F da Lei 9.494/97, red. Lei 11.960/2009), sem TR.',
-  SELIC: 'Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2008: EC 113/2021 na Fazenda e Selic como juros no débito cível.',
+  SELIC: 'Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2003 (01/2003 a 12/2007 da planilha do TJSP): EC 113/2021 na Fazenda e Selic como juros e correção no débito cível (Tema 1.368/STJ).',
   INPC: 'INPC mensal, % a.m. (SGS 188), usado no reajuste anual de pensão em valor fixo.',
   IPCA: 'IPCA mensal, % a.m. (SGS 433): período da EC 136/2025, reajuste anual de pensão em valor fixo e correção de débito cível pelo IPCA.',
-  IGPM: 'IGP-M mensal, % a.m. (SGS 189, FGV): correção de débito cível quando o título manda usar o IGP-M.'
+  IGPM: 'IGP-M mensal, % a.m. (SGS 189, FGV): correção de débito cível quando o título manda usar o IGP-M.',
+  UFESP: 'Fonte: SEFAZ-SP, Valores da UFESP. Manter apenas anos publicados; o motor pede o valor para ano ausente.',
+  RPV_MUNICIPIO_SAO_PAULO: 'Fonte: lista do TJSP "Pequeno Valor das Unidades Públicas Devedoras" (2026); não extrapolar para outros anos.'
 };
-const ORDEM_TABELAS = ['SALARIO_MINIMO', 'FATORES_TJSP', 'TAXA_LEGAL', 'FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'INPC', 'IPCA', 'IGPM'];
+const ORDEM_TABELAS = ['SALARIO_MINIMO', 'UFESP', 'RPV_MUNICIPIO_SAO_PAULO', 'FATORES_TJSP', 'TAXA_LEGAL', 'TAXA_LEGAL_INPC', 'FATORES_IPCAE', 'JUROS_POUPANCA', 'SELIC', 'INPC', 'IPCA', 'IGPM'];
 const ORDEM_CAMPOS = ['ultimoMes', 'ultimoMesSelic', 'indicesEmbutidosEm', 'inicioCC2002', 'vigenciaLei14905', 'inicioEC113', 'inicioEC136', 'inicioFazenda'];
 
 function tabela(nome, obj) {
@@ -97,6 +100,8 @@ function serializar(D, cabecalho) {
     return k === 'indicesEmbutidosEm' ? '  // Data em que estes índices foram conferidos com o Banco Central (a rotina diária da versão web reescreve esta linha).\n' + linha : linha;
   });
   const tabs = ORDEM_TABELAS.filter(function (k) { return D[k]; }).map(function (k) { return tabela(k, D[k]); });
+  // Tetos normativos não são série SGS: preservar integralmente, inclusive fontes e lacunas.
+  if (D.TETOS_INSS) tabs.unshift('  TETOS_INSS: ' + JSON.stringify(D.TETOS_INSS, null, 2).replace(/\n/g, '\n  '));
   return cabecalho + 'var DADOS = {\n' + campos.concat(tabs).join(',\n') + '\n};\nif (typeof module !== \'undefined\') module.exports = DADOS;\n';
 }
 

@@ -15,13 +15,15 @@ const BASE = '# Regras\n\n## Calculadora normal\n\nTexto.\n\n## Contratos de con
 test('publica todas as regras reais, limites e navegação por calculadora', async () => {
   const documento = fs.readFileSync(path.join(__dirname, '..', 'REGRAS-DE-NEGOCIO.md'), 'utf8');
   const html = await renderizar(documento, VERSAO, DATA);
-  const ids = [...documento.matchAll(/^\| ((?:N|C)\d{2}|JUR_\d{3}) \|/gm)].map((match) => match[1]);
+  const ids = [...documento.matchAll(/^\| ((?:N|C|R)\d{2}|JUR_\d{3}) \|/gm)].map((match) => match[1]);
   assert.ok(ids.length > 0);
-  assert.equal([...html.matchAll(/<td>((?:N|C)\d{2}|JUR_\d{3})<\/td>/g)].length, ids.length);
+  assert.equal([...html.matchAll(/<td>((?:N|C|R)\d{2}|JUR_\d{3})<\/td>/g)].length, ids.length);
   for (const id of ids) assert.ok(html.includes('<td>' + id + '</td>'), id);
   assert.ok(html.includes('Pendente de validação'));
   assert.ok(html.includes('approvalStatus: PENDING_HUMAN_REVIEW'));
   assert.ok(html.includes('href="#secao-2">Calculadora normal'));
+  assert.match(html, /href="#secao-\d+">Cartão consignado \(RMC\/RCC\)/);
+  assert.ok(html.includes('<td>R07</td>'));
   assert.ok(html.includes('datetime="' + DATA + '"'));
   assert.ok(html.includes(VERSAO.slice(0, 12)));
   assert.ok(html.includes('/blob/' + VERSAO + '/REGRAS-DE-NEGOCIO.md'));

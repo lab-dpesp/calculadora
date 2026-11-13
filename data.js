@@ -8,6 +8,7 @@
  * - SELIC (SGS 4390) x taxa legal divulgada pelo BCB: 26 meses, nenhuma divergência.
  * - TAXA_LEGAL de 01/2008 a 07/2024 x coluna "Selic menos correção" das planilhas do TJSP (out/2026): 199 meses, iguais.
  * - IGPM (SGS 189) e SELIC de 01/2008 a 11/2021 (SGS 4390) acrescentados em 10/2026 para as opções avançadas do débito cível.
+ * - SELIC de 01/2003 a 12/2007 (SGS 4390): aba ÍNDICES da planilha oficial do TJSP (Extenso.xlsm), em 11/2026, para o regime selic_tl desde o CC/2002 (Tema 1.368/STJ); os 225 meses comuns (01/2008 a 09/2026) conferem com a tabela embutida, sem divergência.
  * - FATORES_TJSP de 07/1994 a 12/2007 e SALARIO_MINIMO de 07/1994 a 03/2007: aba ÍNDICES da planilha oficial do TJSP (Extenso.xlsm), conferidos com a planilha de um defensor (out/2026), sem divergência.
  * - JUROS_POUPANCA: 0,5% a.m. ou 70% da meta Selic mensalizada (meta vigente no 1º dia do mês), conferido com a série da poupança.
  */
@@ -21,6 +22,91 @@ var DADOS = {
   inicioEC113: '2021-12-09',
   inicioEC136: '2025-09-10',
   inicioFazenda: '2009-07-01',
+  TETOS_INSS: {
+    "inicioPesquisa": "2015-01-01",
+    "conferidoAte": "2026-11-12",
+    "vigencias": [
+      {
+        "inicio": "2017-12-29",
+        "fim": "2020-03-22",
+        "emprestimo": 2.08,
+        "cartao": 3,
+        "ato": "IN INSS/PRES 92/2017",
+        "dataAto": "2017-12-28",
+        "fonte": "https://www.in.gov.br/en/web/dou/-/instrucao-normativa-n-92-de-28-de-dezembro-de-2017-1497872",
+        "vigencia": "Art. 3º: publicação em 29/12/2017. Não afirma primeiro início desses percentuais."
+      },
+      {
+        "inicio": "2020-03-23",
+        "fim": "2021-12-09",
+        "emprestimo": 1.8,
+        "cartao": 2.7,
+        "ato": "IN INSS/PRES 106/2020",
+        "dataAto": "2020-03-18",
+        "fonte": "https://www.in.gov.br/en/web/dou/-/instrucao-normativa-n-106-de-18-de-marco-de-2020-248807943",
+        "vigencia": "Art. 2º: 23/03/2020, não a publicação de 19/03."
+      },
+      {
+        "inicio": "2021-12-10",
+        "fim": "2023-03-15",
+        "emprestimo": 2.14,
+        "cartao": 3.06,
+        "ato": "IN PRES/INSS 125/2021; consolidação pela IN PRES/INSS 138, de 10/11/2022",
+        "dataAto": "2021-12-09",
+        "fonte": "https://www.in.gov.br/web/dou/-/instrucao-normativa-pres/inss-n-125-de-9-de-dezembro-de-2021-366060586",
+        "fonteComplementar": "https://www.in.gov.br/web/dou/-/instrucao-normativa-pres/inss-n-138-de-10-de-novembro-de-2022-443355349",
+        "vigencia": "Art. 2º da IN 125: publicação em 10/12/2021; IN 138 consolida os mesmos tetos nos arts. 12 e 15."
+      },
+      {
+        "inicio": "2023-03-16",
+        "fim": "2023-03-30",
+        "emprestimo": 1.7,
+        "cartao": 2.62,
+        "ato": "IN PRES/INSS 144/2023",
+        "dataAto": "2023-03-15",
+        "fonte": "https://www.gov.br/inss/pt-br/centrais-de-conteudo/legislacao/instrucao-normativa/2023/instrucao-normativa-pres-inss-no-144-de-15-de-marco-de-2023",
+        "vigencia": "Art. 2º: publicação em 16/03/2023."
+      },
+      {
+        "inicio": "2023-03-31",
+        "fim": "2023-08-20",
+        "emprestimo": 1.97,
+        "cartao": 2.89,
+        "ato": "IN PRES/INSS 146/2023",
+        "dataAto": "2023-03-30",
+        "fonte": "https://www.gov.br/inss/pt-br/centrais-de-conteudo/legislacao/instrucao-normativa/2023/instrucao-normativa-pres-inss-no-146-de-30-de-marco-de-2023",
+        "vigencia": "Art. 3º: publicação em 31/03/2023. Cobertura encerrada antes da publicação da Resolução CNPS 1.356, sem presumir sua implantação operacional."
+      },
+      {
+        "inicio": "2024-05-06",
+        "fim": "2024-05-28",
+        "emprestimo": 1.68,
+        "cartao": 2.49,
+        "ato": "Resolução CNPS/MPS 1.363/2024",
+        "dataAto": "2024-04-24",
+        "fonte": "https://www.gov.br/previdencia/pt-br/noticias/2024/maio/taxa-do-consignado-de-1-68-entra-em-vigor-nesta-segunda-feira-6",
+        "fonteComplementar": "https://www.in.gov.br/en/web/dou/-/resolucao-cnps/mps-n-1.363-de-24-de-abril-de-2024-*-557059892",
+        "vigencia": "Início operacional em 06/05 confirmado pela Previdência. Fim somente da cobertura documental, antes da publicação da Resolução 1.365 em 29/05; não afirma revogação."
+      }
+    ],
+    "lacunas": [
+      {
+        "inicio": "2015-01-01",
+        "fim": "2017-12-28",
+        "motivo": "Faltou conferir em fonte primária a sequência das Portarias INSS 623/2012, 1.016/2015, 536/2017 e 1.959/2017. A IN 80/2015 isolada não prova a continuidade dos dois tetos."
+      },
+      {
+        "inicio": "2023-08-21",
+        "fim": "2024-05-05",
+        "motivo": "Faltou comprovar os inícios operacionais das Resoluções CNPS 1.356, 1.359, 1.360, 1.361 e 1.362. Vigência de recomendação do CNPS e data de reunião não provam implantação pelo INSS."
+      },
+      {
+        "inicio": "2024-05-29",
+        "fim": "2026-11-12",
+        "motivo": "Faltou comprovar a implantação das Resoluções CNPS 1.365/2024, 1.367/2025 e 1.368/2025 e alterações posteriores. Não presumir dias úteis bancários ou expediente federal nem tratar notícia antiga atualizada em 2026 como ato novo."
+      }
+    ]
+  },
   // Salário mínimo nacional (SGS 1619): data de início de vigência e valor.
   SALARIO_MINIMO: {
     '1994-07-01': 64.79, '1994-09-01': 70, '1995-05-01': 100, '1996-05-01': 112,
@@ -33,6 +119,15 @@ var DADOS = {
     '2020-01-01': 1039, '2020-02-01': 1045, '2021-01-01': 1100, '2022-01-01': 1212,
     '2023-01-01': 1302, '2023-05-01': 1320, '2024-01-01': 1412, '2025-01-01': 1518,
     '2026-01-01': 1621
+  },
+  // Fonte: SEFAZ-SP, Valores da UFESP. Manter apenas anos publicados; o motor pede o valor para ano ausente.
+  UFESP: {
+    '2019': 26.53, '2020': 27.61, '2021': 29.09, '2022': 31.97,
+    '2023': 34.26, '2024': 35.36, '2025': 37.02, '2026': 38.42
+  },
+  // Fonte: lista do TJSP "Pequeno Valor das Unidades Públicas Devedoras" (2026); não extrapolar para outros anos.
+  RPV_MUNICIPIO_SAO_PAULO: {
+    '2026': 31667.41
   },
   // Tabela Prática do TJSP (Lei 14.905/2024): INPC até 08/2024, IPCA-15 desde 09/2024. Fator do mês m incorpora o índice de m-1.
   FATORES_TJSP: {
@@ -92,6 +187,13 @@ var DADOS = {
     '2025-01': 0.589427, '2025-02': 0.902209, '2025-03': 0, '2025-04': 0.321969, '2025-05': 0.6232, '2025-06': 0.775982, '2025-07': 0.83488, '2025-08': 0.942622, '2025-09': 1.305984, '2025-10': 0.736394, '2025-11': 1.093764, '2025-12': 0.851001,
     '2026-01': 0.96751, '2026-02': 0.962232, '2026-03': 0.155714, '2026-04': 0.768672, '2026-05': 0.198293, '2026-06': 0.450641, '2026-07': 0.706607, '2026-08': 1.154527, '2026-09': 1.499119, '2026-10': 0.37902
   },
+  // Taxa legal previdenciária mensal, % a.m. (tabela SICOM/CJF; Resolução CJF 990/2026). Atualização não automatizada pelo SGS.
+  TAXA_LEGAL_INPC: {
+    '2025-09': 1.377047, '2025-10': 0.696308, '2025-11': 1.245359, '2025-12': 1.022396,
+    '2026-01': 1.007812, '2026-02': 0.771148, '2026-03': 0.434588, '2026-04': 0.29933,
+    '2026-05': 0.277807, '2026-06': 0.4207, '2026-07': 0.978134, '2026-08': 1.225342,
+    '2026-09': 1.417659, '2026-10': 0.259544
+  },
   // IPCA-E acumulado (Tabela EC 113/2021 do TJSP), mesma convenção de defasagem da Tabela Prática.
   FATORES_IPCAE: {
     '2009-06': 27.658604, '2009-07': 27.763707, '2009-08': 27.824787, '2009-09': 27.888784, '2009-10': 27.941773, '2009-11': 27.992068, '2009-12': 28.115233,
@@ -129,8 +231,13 @@ var DADOS = {
     '2020-01': 0.2588, '2020-02': 0.2588, '2020-03': 0.2446, '2020-04': 0.2162, '2020-05': 0.2162, '2020-06': 0.1733, '2020-07': 0.1303, '2020-08': 0.1303, '2020-09': 0.1159, '2020-10': 0.1159, '2020-11': 0.1159, '2020-12': 0.1159,
     '2021-01': 0.1159, '2021-02': 0.1159, '2021-03': 0.1159, '2021-04': 0.159, '2021-05': 0.159, '2021-06': 0.2019, '2021-07': 0.2446, '2021-08': 0.2446, '2021-09': 0.3012, '2021-10': 0.3575, '2021-11': 0.4412, '2021-12': 0.4412
   },
-  // Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2008: EC 113/2021 na Fazenda e Selic como juros no débito cível.
+  // Selic mensal, % a.m. (SGS 4390). Só meses fechados. Desde 2003 (01/2003 a 12/2007 da planilha do TJSP): EC 113/2021 na Fazenda e Selic como juros e correção no débito cível (Tema 1.368/STJ).
   SELIC: {
+    '2003-01': 1.97, '2003-02': 1.83, '2003-03': 1.78, '2003-04': 1.87, '2003-05': 1.97, '2003-06': 1.86, '2003-07': 2.08, '2003-08': 1.77, '2003-09': 1.68, '2003-10': 1.64, '2003-11': 1.34, '2003-12': 1.37,
+    '2004-01': 1.27, '2004-02': 1.08, '2004-03': 1.38, '2004-04': 1.18, '2004-05': 1.23, '2004-06': 1.23, '2004-07': 1.29, '2004-08': 1.29, '2004-09': 1.25, '2004-10': 1.21, '2004-11': 1.25, '2004-12': 1.48,
+    '2005-01': 1.38, '2005-02': 1.22, '2005-03': 1.53, '2005-04': 1.41, '2005-05': 1.5, '2005-06': 1.59, '2005-07': 1.51, '2005-08': 1.66, '2005-09': 1.5, '2005-10': 1.41, '2005-11': 1.38, '2005-12': 1.47,
+    '2006-01': 1.43, '2006-02': 1.15, '2006-03': 1.42, '2006-04': 1.08, '2006-05': 1.28, '2006-06': 1.18, '2006-07': 1.17, '2006-08': 1.26, '2006-09': 1.06, '2006-10': 1.09, '2006-11': 1.02, '2006-12': 0.99,
+    '2007-01': 1.08, '2007-02': 0.87, '2007-03': 1.05, '2007-04': 0.94, '2007-05': 1.03, '2007-06': 0.91, '2007-07': 0.97, '2007-08': 0.99, '2007-09': 0.8, '2007-10': 0.93, '2007-11': 0.84, '2007-12': 0.84,
     '2008-01': 0.93, '2008-02': 0.8, '2008-03': 0.84, '2008-04': 0.9, '2008-05': 0.88, '2008-06': 0.96, '2008-07': 1.07, '2008-08': 1.02, '2008-09': 1.1, '2008-10': 1.18, '2008-11': 1.02, '2008-12': 1.12,
     '2009-01': 1.05, '2009-02': 0.86, '2009-03': 0.97, '2009-04': 0.84, '2009-05': 0.77, '2009-06': 0.76, '2009-07': 0.79, '2009-08': 0.69, '2009-09': 0.69, '2009-10': 0.69, '2009-11': 0.66, '2009-12': 0.73,
     '2010-01': 0.66, '2010-02': 0.59, '2010-03': 0.76, '2010-04': 0.67, '2010-05': 0.75, '2010-06': 0.79, '2010-07': 0.86, '2010-08': 0.89, '2010-09': 0.85, '2010-10': 0.81, '2010-11': 0.81, '2010-12': 0.93,

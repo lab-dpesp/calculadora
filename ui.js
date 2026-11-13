@@ -1,10 +1,10 @@
 (function () {
   'use strict';
   var E = window.CalcEngine, U = E.util, D = E.dados, I = window.Indices, PC = window.PainelCopilot;
-  /* Calculadora desta página: pensão alimentícia (calc.html) ou débito cível e Fazenda Pública (calc.html?calc=civel).
-   * Cada uma guarda o próprio cálculo; os dados de quem assina o demonstrativo são comuns. */
-  var PAGINA = PC && PC.pagina === 'civel' ? 'civel' : 'pensao';
-  var CHAVE = PAGINA === 'civel' ? 'calcjur:v3:civel' : 'calcjur:v3';
+  /* A tela de Fazenda tem URL própria, mas compartilha o motor e o formato dos casos cíveis antigos. */
+  var PAGINA = PC && PC.pagina !== 'pensao' ? 'civel' : 'pensao';
+  var ROTA_FAZENDA = !!(PC && PC.pagina === 'fazenda');
+  var CHAVE = PAGINA === 'pensao' ? 'calcjur:v3' : ROTA_FAZENDA ? 'calcjur:v3:fazenda' : 'calcjur:v3:civel';
   var CHAVE_ASSINATURA = 'calcjur:assinatura';
   var perfilCalculo = E.perfilCalculoAtual;
   var $ = function (id) { return document.getElementById(id); };
@@ -35,6 +35,7 @@
     return String(a > new Date().getFullYear() + 10 ? a - 100 : a);
   }
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function brIso(iso) { return U.br(U.parse(iso)); }
   function hoje() {
     var d = new Date();
@@ -91,7 +92,7 @@
   var MSG_CAMPO = { mes: 'Mês inválido: use MM/AAAA', data: 'Data inválida: use DD/MM/AAAA', numero: 'Valor inválido: use números como 1.234,56' };
   /* Campos numéricos que entram no cálculo: texto que não é número (ex.: "Infinity", "1e5", "abc") bloqueia o
    * resultado, como as datas inválidas, em vez de virar valor vazio ou absurdo. */
-  var CAMPOS_NUMERICOS = '.p-valor, .g-valor, .pe-qtd, #taxaFixa, #honorariosPct, #multaContratualPct, #sucPct, #sucValor, #duasTaxa1, #duasTaxa2';
+  var CAMPOS_NUMERICOS = '.p-valor, .g-valor, .pe-qtd, #taxaFixa, #honorariosPct, #multaContratualPct, #sucPct, #sucValor, #duasTaxa1, #duasTaxa2, #ufespValor, #tetoMunicipal, #requisitorioValorPago, #sucPctFaixa1, #sucPctFaixa2, #sucPctFaixa3, #sucPctFaixa4, #sucPctFaixa5';
   function numeroInvalido(el) { return !!el.value.trim() && isNaN(lerNumero(el.value)); }
   function marcarErroCampo(el, erro) {
     var id = el.getAttribute('aria-describedby'), msg = id && /^erroCampo/.test(id) ? $(id) : null;
@@ -139,7 +140,7 @@
   }, true);
 
   /* ---------- Tipo de débito (abas da calculadora cível) ---------- */
-  var tipo = PAGINA === 'pensao' ? 'pensao' : 'particular';
+  var tipo = PAGINA === 'pensao' ? 'pensao' : ROTA_FAZENDA ? 'fazenda' : 'particular';
   var DESCRICOES = {
     pensao: 'Gera as prestações a partir do título (valor fixo ou salário mínimo), abate pagamentos e separa o rito da prisão e o da penhora.',
     particular: 'Débitos entre particulares: correção pela Tabela Prática do TJSP e juros de mora, com abatimento de pagamentos. Outros índices, multa contratual e honorários de sucumbência ficam em "Opções avançadas", em "Juros e encargos".',
@@ -337,8 +338,10 @@
   var listaP = PAGINA === 'pensao' ? $('avulsas') : $('parcelas'), listaG = $('pagamentos');
   if (PAGINA === 'civel') $('cartaoParcelas').appendChild($('colarParcelas'));
 
-  function novaParcela(venc, valor, focar, corDesde, jurDesde, obrigacao) {
+  function novaParcela(venc, valor, focar, corDesde, jurDesde, obrigacao, corAte, jurAte) {
     var li = $(PAGINA === 'pensao' ? 'tplAvulsa' : 'tplParcela').content.firstElementChild.cloneNode(true);
+    cada(li.querySelectorAll('[data-so]'), function (el) { el.hidden = el.getAttribute('data-so') !== tipo; });
+    cada(li.querySelectorAll('[data-nao]'), function (el) { el.hidden = el.getAttribute('data-nao') === tipo; });
     var campos = li.querySelector('.p-termos-campos'), campo = document.createElement('label');
     campo.className = 'q-campo q-campo-medio';
     campo.innerHTML = '<span class="q-rotulo">Obrigação (ID)</span><input type="text" class="p-obrigacao" maxlength="80" placeholder="Opcional" title="Mesmo ID: frações da mesma obrigação, com as mesmas datas e rito. Vazio: dívida autônoma.">';
@@ -351,7 +354,9 @@
     li.querySelector('.p-obrigacao').value = obrigacao || '';
     porIso(li.querySelector('.p-cor'), corDesde || '');
     porIso(li.querySelector('.p-jur'), jurDesde || '');
-    if (corDesde || jurDesde || obrigacao) mostrarTermos(li, true);
+    porIso(li.querySelector('.p-cor-ate'), corAte || '');
+    porIso(li.querySelector('.p-jur-ate'), jurAte || '');
+    if (corDesde || jurDesde || obrigacao || corAte || jurAte) mostrarTermos(li, true);
     marcarTermos(li);
     listaP.appendChild(li);
     if (PAGINA === 'pensao') tabelaVisivel = true;
@@ -364,7 +369,7 @@
     b.setAttribute('aria-expanded', String(!!abrir));
   }
   function marcarTermos(li) {
-    li.querySelector('.p-termos').classList.toggle('com-termos', !!(li.querySelector('.p-cor').value || li.querySelector('.p-jur').value || li.querySelector('.p-obrigacao').value.trim()));
+    li.querySelector('.p-termos').classList.toggle('com-termos', !!(li.querySelector('.p-cor').value || li.querySelector('.p-jur').value || li.querySelector('.p-cor-ate').value || li.querySelector('.p-jur-ate').value || li.querySelector('.p-obrigacao').value.trim()));
   }
   function novoPagamento(data, valor, alvo, focar) {
     var li = $('tplPagamento').content.firstElementChild.cloneNode(true);
@@ -402,6 +407,20 @@
     remover(ev, listaPe, function () { novoPeriodo({ dia: '10', base: 'pct_sm' }); }, function () { return $('addPeriodo'); });
   });
   listaP.addEventListener('click', function (ev) {
+    var atalho = ev.target.closest('[data-atalho-termo]');
+    if (atalho) {
+      var linha = atalho.closest('li, tr'), cor = linha.querySelector('.p-cor'), jur = linha.querySelector('.p-jur');
+      var correcao = iso(cor) || iso(linha.querySelector('.p-venc'));
+      var evento = iso(jur) || iso('dataJuros');
+      if (atalho.dataset.atalhoTermo === 'moral' && !evento) {
+        mostrarAviso('Informe a data do evento no campo “Juros desde” desta parcela ou no termo geral antes de usar o atalho.');
+        mostrarTermos(linha, true); jur.focus(); return;
+      }
+      if (correcao) porIso(cor, correcao);
+      if (atalho.dataset.atalhoTermo === 'moral') porIso(jur, evento);
+      mostrarTermos(linha, true); marcarTermos(linha); agendar();
+      return;
+    }
     var bt = ev.target.closest('.p-termos');
     if (bt) {
       var li = bt.closest('li, tr'), abrir = li.querySelector('.p-termos-campos').hidden;
@@ -929,11 +948,17 @@
     cada(document.querySelectorAll('[data-nao]'), function (el) { el.hidden = el.getAttribute('data-nao') === tipo; });
     $('campoTaxaFixa').hidden = faz || reg !== 'fixa';
     $('campoContagem').hidden = faz || !(reg === 'tjsp' || reg === 'fixa' || reg === 'duas');
+    $('campoContagemJuros').hidden = faz;
     $('campoDuas').hidden = faz || reg !== 'duas';
     $('campoDuasTaxa2').hidden = $('duasDepois').value !== 'fixa';
+    var ipcaTlPrevid = $('naturezaFazenda').value === 'previdenciaria' && iso('dataCalculo') > '2026-10-31';
+    $('posEC136').querySelector('option[value=ipca_tl]').disabled = ipcaTlPrevid;
+    $('posEC136').title = ipcaTlPrevid ? 'A série da taxa legal previdenciária do CJF está disponível até 10/2026.' : '';
+    $('avisoTaxaLegalPrevid').hidden = !ipcaTlPrevid;
     var regimeTaxaLegal = reg === 'tjsp' || reg === 'taxalegal' || reg === 'selic_tl' ||
       (reg === 'duas' && $('duasDepois').value === 'taxalegal');
     $('avisoMesCheioTaxaLegal').hidden = faz || !regimeTaxaLegal || $('contagemJuros').value !== 'mescheio';
+    $('avisoTaxaLegalRetroativa').hidden = faz || reg !== 'taxalegal';
     var troca = $('trocaIndice').checked;
     $('campoTrocaMes').hidden = !troca; $('campoTrocaIndice').hidden = !troca;
     var compOk = reg === 'fixa' || reg === 'duas';
@@ -941,19 +966,25 @@
     $('opcaoCompostos').classList.toggle('opcao-desativada', !compOk);
     $('multaContratualPct').disabled = !$('multaContratual').checked;
     cada($('sucBase').querySelectorAll('option[value=causa], option[value=fixo]'), function (o) { o.hidden = faz; o.disabled = faz; });
+    $('sucBase').querySelector('option[value=faixas]').hidden = !faz;
+    $('sucBase').querySelector('option[value=faixas]').disabled = !faz;
     if (faz && ($('sucBase').value === 'causa' || $('sucBase').value === 'fixo')) $('sucBase').value = 'condenacao';
+    if (!faz && $('sucBase').value === 'faixas') $('sucBase').value = '';
     var sb = $('sucBase').value;
     $('campoSucPct').hidden = !(sb === 'condenacao' || sb === 'causa');
     $('campoSucValor').hidden = $('campoSucData').hidden = $('campoSucTransito').hidden = !(sb === 'causa' || sb === 'fixo');
+    $('campoSucDataSalario').hidden = !faz || sb !== 'faixas';
+    $('camposSucFaixas').hidden = !faz || sb !== 'faixas';
     $('rotuloSucValor').textContent = sb === 'causa' ? 'Valor da causa (R$)' : 'Valor dos honorários (R$)';
+    var quemDeve = $('quemDeve').value, anoTeto = iso('dataCalculo').slice(0, 4);
+    $('campoUfespValor').hidden = !faz || quemDeve !== 'estado_sp' || D.UFESP[anoTeto] != null;
+    $('campoTetoMunicipal').hidden = !faz || !((quemDeve === 'municipio_sp' && D.RPV_MUNICIPIO_SAO_PAULO[anoTeto] == null) || quemDeve === 'municipio_outro');
     var emUso = avancadasEmUso();
     $('seloAvancadas').hidden = !emUso.length;
     $('seloAvancadas').textContent = emUso.length ? 'Em uso: ' + emUso.join(', ') : '';
     $('campoTermo').hidden = !faz && reg === 'nenhum';
     $('campoDataJuros').hidden = termo() !== 'data';
-    $('multa').disabled = faz;
-    $('opcaoMulta').classList.toggle('opcao-desativada', faz);
-    $('opcaoMulta').title = faz ? 'Não se aplica contra a Fazenda Pública (art. 534, § 2º, do CPC)' : '';
+    $('opcaoMulta').hidden = faz;
     $('honorariosPct').disabled = !$('honorarios').checked;
     var ritoExec = pen ? $('ritoExecucao').value : '', soPrisao = ritoExec === 'prisao';
     $('legendaEncargos').parentNode.hidden = soPrisao;
@@ -968,23 +999,59 @@
       ? 'Informe ao menos um período da pensão, com início e valor, e clique em "Preencher prestações".'
       : 'Informe ao menos uma parcela com vencimento e valor.';
     resumirJuros();
+    cada(document.querySelectorAll('input[name="posEC136Visivel"]'), function (radio) {
+      radio.checked = radio.value === $('posEC136').value;
+      radio.disabled = !!$('posEC136').querySelector('option[value="' + radio.value + '"]').disabled;
+    });
+    atualizarLinhaTempoFazenda();
+    cada(document.querySelectorAll('.nav-calc a[data-calc]'), function (a) {
+      var ativa = a.getAttribute('data-calc') === (tipo === 'fazenda' ? 'fazenda' : PAGINA);
+      if (ativa) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+  }
+
+  function atualizarLinhaTempoFazenda() {
+    var datas = Array.prototype.map.call(document.querySelectorAll('#parcelas .p-venc'), function (el) { return iso(el); })
+      .filter(Boolean).sort();
+    var inicio = datas[0] || '';
+    var fim = iso('dataCalculo');
+    var marcos = [
+      ['tempoFazendaAntes', '', '2021-12-08'],
+      ['tempoFazendaSelic', '2021-12-09', '2025-09-09'],
+      ['tempoFazendaDepois', '2025-09-10', '']
+    ];
+    function faixa(de, ate) {
+      if (!inicio || !fim) return 'Aguardando parcelas';
+      var a = de && inicio < de ? de : inicio;
+      var b = ate && fim > ate ? ate : fim;
+      if (a > b) return 'Não alcança este período';
+      return 'de ' + brIso(a) + ' a ' + brIso(b);
+    }
+    $('tempoFazendaAntes').textContent = faixa(marcos[0][1], marcos[0][2]);
+    $('tempoFazendaSelic').textContent = faixa(marcos[1][1], marcos[1][2]);
+    $('tempoFazendaDepois').textContent = faixa(marcos[2][1], marcos[2][2]);
+    var primeiraFase = $('linhaTempoFazenda').firstElementChild.querySelector('strong');
+    primeiraFase.textContent = $('naturezaFazenda').value === 'previdenciaria' ? 'INPC + poupança' : 'IPCA-E + poupança';
   }
 
   /* Resumo de "Juros e encargos" (recolhido): o padrão numa linha, ou o que foi alterado. */
+  var NOTA_CORTE_LEI14905 = ' Os períodos de juros contam o dia inicial e não o final; na contagem que exclui o dia do começo, usada pela planilha do TJSP (orientação do contador, 13/11/2026), o mesmo corte se lê como regime anterior até 29/08/2024 e taxa legal desde 30/08/2024, com os mesmos dias de juros.';
   var REGIME_CURTO = { tjsp: 'juros de 0,5% a.m. até 10/01/2003, 1% até 28/08/2024 e taxa legal desde 29/08/2024', taxalegal: 'taxa legal em todo o período', nenhum: 'sem juros',
-    selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic até 28/08/2024, depois correção e taxa legal' };
+    selic: 'Selic (juros e correção) em todo o período', selic_tl: 'Selic (juros e correção) até 28/08/2024, depois correção e taxa legal' };
   function resumirJuros() {
     var faz = tipo === 'fazenda', pen = tipo === 'pensao', reg = $('regime').value, partes = [];
     var dc = iso('dataCalculo'), parte = function (txt, mudou) { partes.push([txt, !!mudou]); };
-    if (faz) parte('IPCA-E, juros da poupança e Selic' + ($('posEC136').value === 'ipca2' ? '; IPCA + 2% a partir de 10/09/2025' : ''), $('posEC136').value !== 'selic');
+    if (faz) {
+      parte('Fazenda · ' + $('posEC136').selectedOptions[0].textContent, $('posEC136').value !== 'selic');
+    }
     else if (reg === 'fixa') parte('juros de ' + ($('taxaFixa').value || '?') + '% a.m.', true);
     else if (reg === 'duas') parte('juros de ' + ($('duasTaxa1').value || '?') + '% a.m. até ' + (iso('duasAte') ? brIso(iso('duasAte')) : '?') + ', depois ' +
       ($('duasDepois').value === 'fixa' ? ($('duasTaxa2').value || '?') + '% a.m.' : 'taxa legal'), true);
-    else parte(REGIME_CURTO[reg], reg !== 'tjsp');
+    else parte(REGIME_CURTO[reg], reg !== 'selic_tl');
     if (faz || reg !== 'nenhum') parte(termo() === 'data' ? 'desde ' + (iso('dataJuros') ? brIso(iso('dataJuros')) : 'a data informada') : 'desde o vencimento de cada parcela', termo() === 'data');
     if (!faz && (reg === 'tjsp' || reg === 'fixa' || reg === 'duas')) parte($('contagemDias').value === 'corridos' ? 'dias corridos' : 'mês comercial de 30 dias', $('contagemDias').value === 'corridos');
-    parte(faz ? ($('contagemJuros').value === 'mescheio' ? 'mês cheio selecionado (não aplicado à Fazenda)' : 'contagem própria da Fazenda (opção não aplicada)') :
-      ($('contagemJuros').value === 'mescheio' ? 'contagem de juros mês cheio' : 'contagem de juros pro rata'),
+    if (!faz) parte($('contagemJuros').value === 'mescheio' ? 'mês cheio' : 'pro rata',
       $('contagemJuros').value === 'mescheio');
     var multa = !faz && $('multa').checked, hon = $('honorarios').checked;
     parte(multa || hon ? [multa ? 'multa de 10%' : '', hon ? 'honorários de ' + ($('honorariosPct').value || '?') + '%' : ''].filter(Boolean).join(' e ') + ' do art. 523'
@@ -1034,7 +1101,8 @@
       var obrigacao = li.querySelector('.p-obrigacao').value.trim();
       if (!li.querySelector('.p-venc').value && !val && !obrigacao) return;
       parcelas.push({ vencimento: v, valor: lerNumero(val), valorTexto: val, origem: li.dataset.origem || '',
-        correcaoDesde: iso(li.querySelector('.p-cor')), jurosDesde: iso(li.querySelector('.p-jur')), obrigacao: obrigacao });
+        correcaoDesde: iso(li.querySelector('.p-cor')), jurosDesde: iso(li.querySelector('.p-jur')),
+        correcaoAte: tipo === 'fazenda' ? '' : iso(li.querySelector('.p-cor-ate')), jurosAte: tipo === 'fazenda' ? '' : iso(li.querySelector('.p-jur-ate')), obrigacao: obrigacao });
     });
     cada(listaG.children, function (li) {
       var d = iso(li.querySelector('.g-data')), val = li.querySelector('.g-valor').value;
@@ -1044,12 +1112,16 @@
     return {
       tipo: tipo,
       dataCalculo: iso('dataCalculo'),
+      vincendasAte: tipo !== 'fazenda' ? iso('vincendasAte') : '',
       perfilCalculo: perfilCalculo,
       regime: $('regime').value,
       taxaFixa: lerNumero($('taxaFixa').value),
       contagemDias: $('contagemDias').value,
       contagemJuros: $('contagemJuros').value,
       posEC136: $('posEC136').value,
+      naturezaFazenda: $('naturezaFazenda').value,
+      selicSoCapital: $('selicSoCapital').checked,
+      compararFazendaDoc: $('compararFazendaDoc').checked,
       termoJuros: termo(),
       dataJuros: iso('dataJuros'),
       multa: $('multa').checked && !soPrisao,
@@ -1069,15 +1141,26 @@
         jurosCompostos: $('jurosCompostos').checked && ($('regime').value === 'fixa' || $('regime').value === 'duas'),
         multaContratualPct: $('multaContratual').checked ? lerNumero($('multaContratualPct').value) : 0
       } : {},
+      quemDeve: tipo === 'fazenda' ? $('quemDeve').value : '',
+      ufespValor: lerNumero($('ufespValor').value), tetoMunicipal: lerNumero($('tetoMunicipal').value),
+      requisitorio: tipo === 'fazenda' ? {
+        tipo: $('requisitorioTipo').value, dataBase: iso('requisitorioDataBase'), dataExpedicao: iso('requisitorioDataExpedicao'),
+        dataFinal: iso('requisitorioDataFinal'), dataInicioGraca: iso('requisitorioDataInicioGraca'),
+        dataLimite: iso('requisitorioDataLimite'), valorPago: lerNumero($('requisitorioValorPago').value)
+      } : null,
       sucumbencia: tipo !== 'pensao' && $('sucBase').value ? { base: $('sucBase').value, pct: lerNumero($('sucPct').value),
-        valor: lerNumero($('sucValor').value), data: iso('sucData'), transito: iso('sucTransito') } : null,
+        valor: lerNumero($('sucValor').value), data: iso('sucData'), transito: iso('sucTransito'),
+        dataSalario: iso('sucDataSalario'), percentuais: [1, 2, 3, 4, 5].map(function (i) {
+          var valorFaixa = $('sucPctFaixa' + i).value.trim();
+          return valorFaixa ? lerNumero(valorFaixa) : null;
+        }) } : null,
       parcelas: parcelas,
       pagamentos: pagamentos,
       imputacao: $('imputacao').value === 'automatica' ? 'automatica' : 'mes'
     };
   }
   /* Campos das opções avançadas e dos juros em duas taxas, como texto da tela (para guardar e restaurar); meses e datas em ISO. */
-  var CAMPOS_AVANCADOS = ['duasTaxa1', 'duasAte', 'duasDepois', 'duasTaxa2', 'indiceCorrecao', 'indice2', 'indice2Desde', 'multaContratualPct', 'sucBase', 'sucPct', 'sucValor', 'sucData', 'sucTransito'];
+  var CAMPOS_AVANCADOS = ['duasTaxa1', 'duasAte', 'duasDepois', 'duasTaxa2', 'indiceCorrecao', 'indice2', 'indice2Desde', 'multaContratualPct', 'sucBase', 'sucPct', 'sucValor', 'sucData', 'sucTransito', 'sucDataSalario', 'sucPctFaixa1', 'sucPctFaixa2', 'sucPctFaixa3', 'sucPctFaixa4', 'sucPctFaixa5', 'requisitorioTipo', 'requisitorioDataBase', 'requisitorioDataExpedicao', 'requisitorioDataFinal', 'requisitorioDataInicioGraca', 'requisitorioDataLimite', 'requisitorioValorPago'];
   var MARCAS_AVANCADAS = ['trocaIndice', 'jurosCompostos', 'multaContratual'];
   function avancadosBrutos() {
     var o = {};
@@ -1096,12 +1179,15 @@
     try {
       localStorage.setItem(CHAVE, JSON.stringify({
         tipo: e.tipo, dataCalculo: e.dataCalculo, regime: e.regime, taxaFixa: $('taxaFixa').value, contagemDias: e.contagemDias,
-        contagemJuros: e.contagemJuros, posEC136: e.posEC136,
+        contagemJuros: e.contagemJuros, posEC136: e.posEC136, naturezaFazenda: e.naturezaFazenda,
+        quemDeve: e.quemDeve, ufespValor: $('ufespValor').value, tetoMunicipal: $('tetoMunicipal').value,
+        selicSoCapital: e.selicSoCapital, compararFazendaDoc: e.compararFazendaDoc,
         termoJuros: e.termoJuros, dataJuros: e.dataJuros, multa: $('multa').checked, honorarios: e.honorarios,
         honorariosPct: $('honorariosPct').value, prazo523: iso('prazo523'), dataAjuizamento: iso('dataAjuizamento'), ritoExecucao: $('ritoExecucao').value, pdfDetalhado: $('pdfDetalhado').checked,
         unidade: $('procUnidade').value, cidade: $('procCidade').value, autor: $('procAutor').value,
         periodos: coletarPeriodosBrutos(),
-        parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde, p.obrigacao]; }),
+        parcelas: e.parcelas.map(function (p) { return [p.vencimento, p.valorTexto, p.origem, p.correcaoDesde, p.jurosDesde, p.obrigacao, p.correcaoAte, p.jurosAte]; }),
+        vincendasAte: e.vincendasAte,
         avancados: avancadosBrutos(),
         pagamentos: e.pagamentos.map(function (p) { return [p.data, p.valorTexto, p.parcela, p.origem]; }), imputacao: e.imputacao,
         origemAjuizamento: $('origemAjuizamento').dataset.origem || '',
@@ -1138,6 +1224,10 @@
       }
     } else {
       s = lerGuardado(CHAVE);
+      if (!s && ROTA_FAZENDA) {
+        var legadoCivel = lerGuardado('calcjur:v3:civel');
+        if (legadoCivel && legadoCivel.tipo === 'fazenda') s = legadoCivel;
+      }
       if (!s && legado) s = legado.tipo && legado.tipo !== 'pensao' ? legado : soAssinatura(legado);
     }
     var a = lerGuardado(CHAVE_ASSINATURA);
@@ -1148,18 +1238,25 @@
     var s = guardadoDaPagina();
     var casoGuardado = s && ['tipo', 'dataCalculo', 'periodos', 'parcelas', 'pagamentos', 'regime', 'avancados', 'dataAjuizamento', 'anterior']
       .some(function (k) { return Object.prototype.hasOwnProperty.call(s, k); });
-    perfilCalculo = s && [E.perfilCalculoHistorico, E.perfilCalculoAnterior, E.perfilCalculoAnteriorSemEventos, E.perfilCalculoAtual].indexOf(s.perfilCalculo) >= 0
+    perfilCalculo = s && [E.perfilCalculoHistorico, E.perfilCalculoAnterior, E.perfilCalculoAnteriorSemEventos,
+      E.perfilCalculoAnteriorPrecisao, E.perfilCalculoAtual].indexOf(s.perfilCalculo) >= 0
       ? s.perfilCalculo : casoGuardado ? E.perfilCalculoAnterior : E.perfilCalculoAtual;
     porIso('dataCalculo', (s && s.dataCalculo) || dataPadrao());
     if (s) {
-      definirTipo(s.tipo || tipo);
-      $('regime').value = s.regime || 'tjsp';
+      definirTipo(ROTA_FAZENDA ? 'fazenda' : s.tipo || tipo);
+      $('regime').value = s.regime || (casoGuardado ? 'tjsp' : 'selic_tl');
       $('taxaFixa').value = s.taxaFixa || '1';
       $('contagemDias').value = s.contagemDias === 'corridos' ? 'corridos' : 'dias360';
       $('contagemJuros').value = s.contagemJuros === 'mescheio' ? 'mescheio' : 'prorata';
       // Cálculo guardado antes da opção foi feito pela imputação automática: reabre igual. Sem caso guardado, vale o padrão.
       if (casoGuardado) $('imputacao').value = s.imputacao === 'mes' ? 'mes' : 'automatica';
       $('posEC136').value = s.posEC136 || 'selic';
+      $('naturezaFazenda').value = s.naturezaFazenda || 'administrativa';
+      $('quemDeve').value = s.quemDeve || '';
+      $('ufespValor').value = s.ufespValor || '';
+      $('tetoMunicipal').value = s.tetoMunicipal || '';
+      $('selicSoCapital').checked = !!s.selicSoCapital;
+      $('compararFazendaDoc').checked = !!s.compararFazendaDoc;
       var r = document.querySelector('input[name=termo][value="' + (s.termoJuros || 'vencimento') + '"]');
       if (r) r.checked = true;
       porIso('dataJuros', s.dataJuros || '');
@@ -1168,13 +1265,14 @@
       $('honorariosPct').value = s.honorariosPct || '10';
       porIso('prazo523', s.prazo523 || '');
       porIso('dataAjuizamento', s.dataAjuizamento || '');
+      porIso('vincendasAte', s.vincendasAte || '');
       // Caso gravado antes da pergunta do rito continua como estava; tela nova fica com o padrão do formulário.
       if (s.ritoExecucao != null) $('ritoExecucao').value = s.ritoExecucao;
       else if ((s.periodos || []).length || (s.parcelas || []).length) $('ritoExecucao').value = '';
       if (s.pdfDetalhado === false) $('pdfDetalhado').checked = false;
       $('procUnidade').value = s.unidade || ''; $('procCidade').value = s.cidade || ''; $('procAutor').value = s.autor || '';
       (s.periodos || []).forEach(function (p) { novoPeriodo(p); });
-      (s.parcelas || []).forEach(function (p) { marcarOrigem(novaParcela(p[0], p[1], false, p[3], p[4], p[5]), p[2]); });
+      (s.parcelas || []).forEach(function (p) { marcarOrigem(novaParcela(p[0], p[1], false, p[3], p[4], p[5], p[6], p[7]), p[2]); });
       restaurarAvancados(s.avancados);
       (s.pagamentos || []).forEach(function (p) { marcarOrigem(novoPagamento(p[0], p[1], p[2]), p[3]); });
       marcarOrigem($('origemAjuizamento'), s.origemAjuizamento);
@@ -1198,22 +1296,17 @@
   function agendar() { clearTimeout(timer); timer = setTimeout(recalcular, 180); }
   /* Rendimentos da tabela e o editor da linha se gravam ao confirmar (Enter, Aplicar ou saída do campo). */
   function daTabela(ev) { return ev.target.closest && (ev.target.closest('.editor-linha') || ev.target.classList.contains('ln-rend')); }
-  $('form').addEventListener('input', function (ev) { if (daTabela(ev)) return; sincronizar(); agendar(); });
-  $('form').addEventListener('change', function (ev) { if (daTabela(ev)) return; sincronizar(); agendar(); });
-  $('form').addEventListener('submit', function (ev) { ev.preventDefault(); });
-  $('calcular').addEventListener('click', function () {
-    clearTimeout(timer);
-    sincronizar(); recalcular();
-    var inv = camposInvalidos()[0];
-    if (inv) {
-      for (var d = inv.closest('details'); d; d = d.parentNode.closest('details')) d.open = true;
-      marcarErroCampo(inv, true);
-      inv.focus();
-      return;
-    }
-    var alvo = !$('resultado').hidden ? $('resultado') : (!$('erro').hidden ? $('erro') : $('vazio'));
-    alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('form').addEventListener('input', function (ev) {
+    if (daTabela(ev)) return;
+    if (ev.target.name === 'posEC136Visivel') $('posEC136').value = ev.target.value;
+    sincronizar(); agendar();
   });
+  $('form').addEventListener('change', function (ev) {
+    if (daTabela(ev)) return;
+    if (ev.target.name === 'posEC136Visivel') $('posEC136').value = ev.target.value;
+    sincronizar(); agendar();
+  });
+  $('form').addEventListener('submit', function (ev) { ev.preventDefault(); });
 
   /* ---------- Opções de imputação e prévias ---------- */
   var assinaturaOpcoes = '';
@@ -1275,7 +1368,7 @@
     res.hidden = true;
     if (tipo !== 'pensao' || !calc) return;
     try {
-      var ps = E.gerarPensao(e.periodos, calc, e.ajustes);
+      var ps = E.gerarPensao(e.periodos, e.vincendasAte && e.vincendasAte > calc ? e.vincendasAte : calc, e.ajustes);
       if (!ps.length) return;
       var dec = ps.filter(function (p) { return p.chave.indexOf('d:') === 0; }).length;
       var soma = ps.reduce(function (s, p) { return s + p.valor; }, 0);
@@ -1302,8 +1395,10 @@
     });
   }
   function marcarNumericos() {
-    cada($('form').querySelectorAll(CAMPOS_NUMERICOS), function (el) {
-      var inv = numeroInvalido(el) && !el.disabled && !el.closest('[hidden]');
+    cada($('form').querySelectorAll('input[data-mascara], ' + CAMPOS_NUMERICOS), function (el) {
+      var inv = !!el.value.trim() && (el.dataset.mascara
+        ? LER_CAMPO[el.dataset.mascara](el.value) === null
+        : numeroInvalido(el)) && !el.disabled && !el.closest('[hidden]');
       if (inv || el.getAttribute('aria-invalid')) marcarErroCampo(el, inv);
     });
   }
@@ -1351,14 +1446,63 @@
     }
   }
 
-  function rotuloEncargos(e) { return e.posEC136 === 'ipca2' ? 'Selic e IPCA + 2% (EC 113 e 136)' : 'Selic (EC 113/2021)'; }
+  function rotuloEncargos(e) {
+    if (e.posEC136 === 'ipca2') return 'Selic e IPCA + 2% (EC 113 e 136)';
+    if (e.posEC136 === 'ipcae_poup') return 'Selic, IPCA-E e juros da poupança';
+    if (e.posEC136 === 'ipca_tl') return e.naturezaFazenda === 'previdenciaria'
+      ? 'Selic, INPC e taxa legal previdenciária' : 'Selic, IPCA-15 e taxa legal';
+    return 'Selic (EC 113/2021)';
+  }
+  function textoCriterioFazenda(e) {
+    var criterio = e.posEC136 === 'ipcae_poup'
+      ? 'IPCA-E + juros da poupança (Tema 905/STJ)'
+      : e.posEC136 === 'ipca_tl'
+        ? (e.naturezaFazenda === 'previdenciaria' ? 'INPC + taxa legal previdenciária da tabela CJF' : 'IPCA-15 + taxa legal')
+        : e.posEC136 === 'ipca2'
+          ? 'IPCA + 2% a.a. simples, limitado à Selic (tese das Fazendas)'
+          : 'Selic da EC 113/2021';
+    return criterio + '; cenário ainda pendente de validação/julgamento no Tema 1.484/STF.';
+  }
+  var CRITERIOS_EC136 = [
+    ['selic', 'Selic da EC 113/2021'],
+    ['ipcae_poup', 'IPCA-E + juros da poupança (Tema 905/STJ)'],
+    ['ipca_tl', 'IPCA-15 + taxa legal (Lei 14.905/2024)'],
+    ['ipca2', 'IPCA + 2% a.a. (tese das Fazendas), limitado à Selic']
+  ];
+  function compararFazenda(e, atual) {
+    if (e.tipo !== 'fazenda' || e.dataCalculo <= '2025-09-10') return [];
+    return CRITERIOS_EC136.map(function (criterio) {
+      var rotulo = criterio[0] === 'ipca_tl' && e.naturezaFazenda === 'previdenciaria'
+        ? 'INPC + taxa legal previdenciária da tabela CJF' : criterio[1];
+      try {
+        var r = criterio[0] === e.posEC136 ? atual : E.calcular(Object.assign({}, e, { posEC136: criterio[0] }));
+        return { criterio: criterio[0], rotulo: rotulo, total: r.totais.total,
+          parcial: r.avisos.some(function (a) { return /faltam dados da série/.test(a); }) };
+      } catch (err) {
+        return { criterio: criterio[0], rotulo: rotulo, erro: err.amigavel ? err.message : 'Não foi possível calcular este cenário.' };
+      }
+    });
+  }
+  function htmlComparacaoFazenda(e, comparacao) {
+    if (!comparacao.length) return '';
+    return '<div class="rotulo-secao">Total em cada critério</div><table class="q-tabela">' +
+      '<thead><tr><th>Critério</th><th class="num">Total</th></tr></thead><tbody>' +
+      comparacao.map(function (x) {
+        var escolhido = x.criterio === e.posEC136;
+        return '<tr' + (escolhido ? ' class="escolhido"' : '') + '><td>' + esc(x.rotulo) +
+          (escolhido ? ' <span class="badge badge-alerta">Escolhido</span>' : '') +
+          (x.parcial ? '<br><span class="sub">Parcial: falta dado de uma série.</span>' : '') +
+          (x.erro ? '<br><span class="sub">' + esc(x.erro) + '</span>' : '') + '</td><td class="num">' +
+          (x.total == null ? '—' : moeda(x.total)) + '</td></tr>';
+      }).join('') + '</tbody></table><p class="sub">Cenários comparativos sujeitos a validação; critérios com série incompleta são parciais.</p>';
+  }
   function itensResumo(res) {
     var e = res.entrada, t = res.totais, faz = e.tipo === 'fazenda', it = [];
     it.push(['Valor original', t.valor]);
     if (t.pagamentos) it.push(['Pagamentos', t.pagamentos]);
     if (t.correcao !== null) it.push(['Correção monetária', t.correcao]);
     it.push([t.pagamentos ? 'Capital atualizado em aberto' : 'Capital atualizado', t.capital]);
-    if (!faz || t.juros) it.push([faz ? 'Juros da poupança' : 'Juros de mora', t.juros]);
+    if (!faz || t.juros) it.push(['Juros de mora', t.juros]);
     if (faz) it.push([rotuloEncargos(e), t.encargos]);
     if (t.multaContratual || t.sucumbencia) {
       it.push(['Subtotal', t.subtotal]);
@@ -1457,11 +1601,42 @@
       return '<li>' + (c.alerta ? '<span class="badge badge-alerta">Verificar</span> ' : '') + esc(c.texto) + '</li>';
     }).join('');
 
-    var html = itensResumo(res).map(function (i) {
-      return '<div class="metrica"><div class="metrica-valor">' + moeda(i[1]) + '</div><div class="metrica-rotulo">' + esc(i[0]) + '</div></div>';
+    var html = '<div class="metrica metrica-total"><div class="metrica-valor">' + moeda(t.total) +
+      '</div><div class="metrica-rotulo">Total em ' + brIso(e.dataCalculo) + (aConferir ? ' · a conferir' : '') + '</div></div>';
+    html += itensResumo(res).map(function (i) {
+      return '<div class="composicao-linha"><span>' + esc(i[0]) + '</span><span>' + moeda(i[1]) + '</span></div>';
     }).join('');
-    html += '<div class="metrica metrica-total"><div class="metrica-valor">' + moeda(t.total) + '</div><div class="metrica-rotulo">Total devido em ' + brIso(e.dataCalculo) + (aConferir ? ' · a conferir' : '') + '</div></div>';
     $('metricas').innerHTML = html;
+    res.comparacaoFazenda = compararFazenda(e, res);
+    $('comparacaoFazenda').innerHTML = htmlComparacaoFazenda(e, res.comparacaoFazenda);
+    $('comparacaoFazenda').hidden = !res.comparacaoFazenda.length;
+    var extraFazenda = '';
+    if (faz && t.pequenoValor) {
+      var pv = t.pequenoValor;
+      extraFazenda += '<h3>RPV ou precatório</h3>';
+      extraFazenda += pv.pendencia
+        ? '<p>' + esc(pv.pendencia) + '</p>'
+        : '<p>' + (pv.cabe
+          ? 'Total por credor na data da conta: ' + esc(moeda(pv.total)) + ' — cabe em RPV (teto de ' + esc(moeda(pv.teto)) + ').'
+          : 'Total por credor na data da conta: ' + esc(moeda(pv.total)) + ' — passa do teto de ' + esc(moeda(pv.teto)) + ' em ' + esc(moeda(pv.excedente)) + ': precatório (ou RPV com renúncia do excedente).') +
+          '</p><p class="sub">Fonte: ' + esc(pv.fonte) + '. ' + esc(pv.aviso) + '</p>';
+    }
+    if (faz && t.requisitorio) {
+      var rq = t.requisitorio;
+      extraFazenda += '<h3>Estimativa do requisitório</h3>';
+      if (rq.pendencia) extraFazenda += '<p>' + esc(rq.pendencia) + '</p>';
+      else {
+        extraFazenda += '<p>' + esc(rq.tipo === 'rpv' ? 'RPV' : 'Precatório') + ': valor estimado na expedição ' +
+          esc(moeda(rq.valorNaExpedicao)) + '; na data de conferência (' + esc(brIso(rq.dataFinal)) + '), ' +
+          esc(moeda(rq.total)) + '; variação desde a conta ' + esc(moeda(rq.diferenca)) + '.' +
+          (rq.valorPago == null ? '' : ' Valor informado como pago: ' + esc(moeda(rq.valorPago)) + '; saldo estimado: ' + esc(moeda(rq.saldoPago)) + '.') +
+          '</p><p class="sub">Período estimado sem mora: ' + esc(brIso(rq.dataInicioGraca)) + ' a ' + esc(brIso(rq.dataFimGraca)) + '.</p>' +
+          '<details><summary>Memória mês a mês do requisitório</summary><ul>' +
+          rq.memoria.map(function (linha) { return '<li>' + esc(linha) + '</li>'; }).join('') + '</ul></details>';
+      }
+    }
+    $('detalhesFazenda').innerHTML = extraFazenda;
+    $('detalhesFazenda').hidden = !extraFazenda;
 
     var notaRes = notaResultadoRito(res);
     $('ritos').hidden = !res.rito && !notaRes;
@@ -1487,7 +1662,7 @@
     var tab = $('memoria');
     var cols = [['Nº'], ['Vencimento']];
     if (pen) cols.push(['Base']);
-    cols.push(['Valor original', 1], [faz ? 'Índice IPCA-E' : 'Índice', 1], ['Capital', 1], [faz ? 'Juros poupança' : 'Juros', 1]);
+    cols.push(['Valor original', 1], [faz ? 'Índice aplicado' : 'Índice', 1], ['Capital', 1], [faz ? 'Juros de mora' : 'Juros', 1]);
     if (faz) cols.push(['Selic e encargos', 1]);
     cols.push(['Total', 1], ['Situação']);
     if (res.rito) cols.push(['Rito']);
@@ -1516,6 +1691,26 @@
         l.eventos.map(function (ev) { return '<li>' + esc(ev) + '</li>'; }).join('') + '</ul></td></tr>';
     });
     tab.tBodies[0].innerHTML = corpo;
+    $('memoriaTexto').innerHTML = res.linhas.map(function (l) {
+      var titulo = 'Parcela ' + l.n + ' · ' + brIso(l.vencimento) + ' · ' + moeda(l.valor);
+      var detalhe = l.eventos.map(function (ev) { return '<li>' + esc(ev) + '</li>'; }).join('');
+      var situacao = l.quitada ? 'Quitada' : l.pago > 0 ? 'Paga em parte' : 'Em aberto';
+      var botoes = '';
+      if (pen && l.origem === 'pensao') {
+        botoes += '<button type="button" class="q-btn-icone btn-ajuste" data-chave="' + escAttr(l.chave) +
+          '" aria-label="Ajustar a prestação ' + l.n + '" title="Ajustar esta prestação"><svg class="ic"><use href="#i-edit"/></svg></button>';
+      }
+      if (res.rito && l.origem === 'pensao') {
+        botoes += '<button type="button" class="btn-mover-rito" data-chave="' + escAttr(l.chave) + '" aria-label="Mover para ' +
+          (l.rito === 'prisao' ? 'penhora' : 'prisão') + ': prestação ' + l.n + '">Mover para ' +
+          (l.rito === 'prisao' ? 'penhora' : 'prisão') + '</button>' +
+          (l.ritoManual ? '<span class="sub rito-ajustado">movida manualmente</span>' : '');
+      }
+      return '<article class="memoria-parcela' + (l.quitada ? ' quitada' : '') + (ajustes.some(function (a) { return a.chave === l.chave; }) ? ' ajustada' : '') +
+        '"><h4>' + esc(titulo) + '</h4><p>' + esc(situacao) + ' · Atualizada: ' + esc(moeda(l.total)) +
+        (l.pago > 0 ? ' · Pago: ' + esc(moeda(l.pago)) : '') + '</p><ul class="eventos-parcela">' + detalhe +
+        '</ul><div class="memoria-parcela-acoes">' + botoes + '</div></article>';
+    }).join('');
     var vazias = pen ? '<td></td>' : '';
     tab.tFoot.innerHTML = '<tr><td colspan="2">Total</td>' + vazias + '<td class="num">' + moeda(t.valor) + '</td><td></td>' +
       '<td class="num">' + moeda(t.capital) + '</td><td class="num">' + moeda(t.juros) + '</td>' +
@@ -1546,6 +1741,7 @@
   }
   function aplicarDetalhes() {
     $('memoria').classList.toggle('sem-detalhes', !detalhesVisiveis);
+    $('memoriaTexto').classList.toggle('sem-detalhes', !detalhesVisiveis);
     $('alternarDetalhes').textContent = detalhesVisiveis ? 'Ocultar detalhes' : 'Mostrar detalhes de cada parcela';
     $('alternarDetalhes').setAttribute('aria-pressed', String(!!detalhesVisiveis));
   }
@@ -1565,18 +1761,39 @@
     var b = ev.target.closest('.btn-ajuste');
     if (b) editarPorChave(b.dataset.chave);
   });
+  $('memoriaTexto').addEventListener('click', function (ev) {
+    var mover = ev.target.closest('.btn-mover-rito');
+    if (mover) { moverRito(mover.dataset.chave); return; }
+    var b = ev.target.closest('.btn-ajuste');
+    if (b) editarPorChave(b.dataset.chave);
+  });
 
   function criterios(e, res) {
     var c = [];
     var mesCheio = e.contagemJuros === 'mescheio';
     if (e.perfilCalculo !== E.perfilCalculoAtual) c.push(descricaoPerfilPreservado(e.perfilCalculo));
     if (e.tipo === 'fazenda') {
-      c.push('Débito não tributário contra a Fazenda Pública. Correção pelo IPCA-E (Tema 810/STF e Tema 905/STJ), com os fatores da Tabela EC 113/2021 do TJSP.');
-      c.push('Juros da poupança (art. 1º-F da Lei 9.494/97, redação da Lei 11.960/2009) até 08/12/2021, simples, sobre o capital corrigido: 0,5% a.m. ou 70% da meta Selic mensalizada quando ela for igual ou inferior a 8,5% a.a.');
-      c.push('A partir de 09/12/2021, ou do termo inicial dos juros se posterior, Selic única (EC 113/2021, art. 3º), em soma simples das taxas mensais, pro rata die, sobre o capital mais os juros apurados. Antes do termo inicial dos juros corre só a correção pelo IPCA-E.');
+      var natureza = e.naturezaFazenda || 'administrativa';
+      c.push('Natureza do débito: ' + ({ administrativa: 'administrativa em geral ou responsabilidade civil', servidor: 'servidor ou empregado público', previdenciaria: 'previdenciária ou acidentária' }[natureza] || natureza) + '. Critérios do Tema 905/STJ ainda pendentes de validação.');
+      c.push((natureza === 'previdenciaria' ? 'Correção pelo INPC' : 'Correção pelo IPCA-E') +
+        ' até 08/12/2021 (Temas 810/STF e 905/STJ); juros da poupança desde o termo dos juros até essa data. A série de juros da poupança posterior a 2021 não está embutida.');
+      if (e.parcelas.some(function (p) { return p.vencimento < '2009-07-01'; })) {
+        c.push(natureza === 'administrativa'
+          ? 'Antes de 11/01/2003, o Tema 905 prevê juros de 0,5% a.m. e índices do Manual de Cálculos; essa série histórica não está embutida e o trecho é bloqueado. De 11/01/2003 a 30/06/2009, aplica-se Selic isolada, apenas quando a série disponível cobre todo o período.'
+          : natureza === 'servidor'
+            ? 'Antes de 07/2001, o Tema 905 prevê juros simples de 1% a.m.; de 08/2001 a 06/2009, 0,5% a.m., com IPCA-E. A tabela embutida cobre o IPCA-E apenas desde 06/2009; meses sem fator são bloqueados, sem aproximação.'
+            : 'Antes de 07/2009, o Tema 905 prevê INPC e juros simples de 1% a.m.; o INPC embutido começa em 01/2008, e períodos anteriores são bloqueados por falta de série.');
+        c.push('Termos próprios diferentes antes de 01/07/2009 ainda não são calculados. As convenções históricas e a sequência de correção/juros permanecem pendentes de validação contábil.');
+      }
+      c.push('De 09/12/2021 a 09/09/2025, Selic única (EC 113/2021, art. 3º; Tema 1.419/STF), em soma simples pro rata sobre o capital corrigido e os juros apurados, salvo a opção avançada do Tema 1.349/STF. Antes do termo inicial dos juros corre apenas a correção monetária.');
       c.push(e.posEC136 === 'ipca2'
-        ? 'A partir de 10/09/2025, IPCA + 2% a.a., limitado à Selic de cada mês, por aplicação do critério da EC 136/2025 também à fase anterior à requisição.'
-        : 'Depois de 10/09/2025 (EC 136/2025) mantém-se a Selic até a data do cálculo, por entender-se que a nova regra vale só a partir da expedição do requisitório.');
+        ? 'A partir de 10/09/2025, IPCA + 2% a.a., simples e limitado à Selic de cada mês; tese das Fazendas, ainda pendente de validação no Tema 1.484/STF.'
+        : e.posEC136 === 'ipcae_poup'
+          ? 'A partir de 10/09/2025, IPCA-E sobre o saldo consolidado e juros da poupança sobre o capital corrigido; cenário pendente no Tema 1.484/STF e limitado pela série de poupança disponível.'
+          : e.posEC136 === 'ipca_tl'
+            ? 'A partir de 10/09/2025, Tabela Prática (IPCA-15) e taxa legal; na natureza previdenciária, INPC e taxa legal previdenciária da tabela CJF. Convenção operacional pendente de validação no Tema 1.484/STF.'
+            : 'A partir de 10/09/2025, mantém-se a Selic da EC 113/2021; critério controvertido e pendente de julgamento no Tema 1.484/STF.');
+      if (e.selicSoCapital) c.push('Na opção avançada, a Selic incide só sobre o capital corrigido, sem os juros acumulados (Tema 1.349/STF, mérito pendente).');
       c.push('Contagem selecionada: ' + (mesCheio ? 'mês cheio (não aplicado)' : 'pro rata (opção não aplicada)') +
         '; a regra própria da Fazenda Pública foi mantida.');
     } else {
@@ -1598,14 +1815,14 @@
         if (res && res.ritoExecucao === 'penhora') c.push('Execução pelo rito da penhora (art. 528, § 8º, do CPC): todas as parcelas, sem pedido de prisão civil.');
       }
       c.push(textoCorrecao(e));
-      if (e.regime === 'tjsp') c.push('Juros simples de 0,5% ao mês até 10/01/2003 (CC/1916, art. 1.062), 1% ao mês de 11/01/2003 a 28/08/2024 (CC/2002, art. 406 c/c CTN, art. 161, § 1º) e, a partir de 29/08/2024 (Lei 14.905/2024), taxa legal, sem lacuna nem sobreposição de dias; confira o título e a hipótese jurídica aplicável.');
-      if (e.regime === 'taxalegal') c.push('Taxa legal (art. 406 do CC) em todo o período, conforme a leitura do Tema 1368/STJ para o período anterior à Lei 14.905/2024: Selic deduzida do IPCA-15 (Res. CMN 5.171/2024) e, antes de 08/2024, Selic deduzida da variação da Tabela Prática, como nas planilhas do TJSP.');
+      if (e.regime === 'tjsp') c.push('Juros simples de 0,5% ao mês até 10/01/2003 (CC/1916, art. 1.062), 1% ao mês de 11/01/2003 a 28/08/2024 (CC/2002, art. 406 c/c CTN, art. 161, § 1º) e, a partir de 29/08/2024 (Lei 14.905/2024), taxa legal, sem lacuna nem sobreposição de dias; confira o título e a hipótese jurídica aplicável.' + NOTA_CORTE_LEI14905);
+      if (e.regime === 'taxalegal') c.push('Taxa legal (art. 406 do CC) em todo o período, por determinação do título: Selic deduzida do IPCA (Res. CMN 5.171/2024) e, antes de 08/2024, Selic deduzida da variação da Tabela Prática, como nas planilhas do TJSP. Atenção: a Lei 14.905/2024 não retroage; sem determinação expressa do título, antes de 29/08/2024 vale o regime anterior.');
       if (e.regime === 'fixa') c.push('Juros de ' + num(e.taxaFixa, 2) + '% ao mês.');
       if (e.regime === 'nenhum') c.push('Sem juros de mora.');
       if (e.regime === 'duas') c.push('Juros de ' + num(e.jurosDuas.taxa1, 2) + '% ao mês até ' + brIso(e.jurosDuas.ate) + ' e, depois, ' +
         (e.jurosDuas.depois === 'fixa' ? num(e.jurosDuas.taxa2, 2) + '% ao mês.' : 'taxa legal (Selic deduzida do IPCA-15, art. 406 do CC).'));
-      if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital. Antes do termo inicial dos juros corre só a correção monetária.');
-      if (e.regime === 'selic_tl') c.push('Selic como juros e correção até 28/08/2024; a partir de 29/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Selic em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital.');
+      if (e.regime === 'selic') c.push('Selic como juros de mora e correção monetária em todo o período (art. 406 do CC, na redação anterior à Lei 14.905/2024, segundo a leitura do STJ), em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital. Antes do termo inicial dos juros corre só a correção monetária; se os juros começarem antes da correção, até o início desta correm só juros, de 1% ao mês (0,5% até 10/01/2003; taxa legal desde 29/08/2024).');
+      if (e.regime === 'selic_tl') c.push('Juros legais (art. 406 do CC; Tema 1.368/STJ): até 10/01/2003, correção monetária e juros de 0,5% ao mês (CC/1916); de 11/01/2003 a 28/08/2024, só a Selic, que engloba juros e correção monetária, em soma simples das taxas mensais' + (mesCheio ? ', com mês cheio' : ', pro rata die') + ', sobre o capital; a partir de 29/08/2024 (Lei 14.905/2024), correção monetária e taxa legal. Termos iniciais diferentes: se a correção começar antes dos juros, até o início destes corre só a correção; se os juros começarem antes da correção, até o início desta correm só juros de 1% ao mês. O que o título determinar prevalece.' + NOTA_CORTE_LEI14905);
       var comp = e.civel && e.civel.jurosCompostos && (e.regime === 'fixa' || e.regime === 'duas');
       var usaTaxaLegal = e.regime === 'tjsp' || e.regime === 'taxalegal' || e.regime === 'selic_tl' ||
         (e.regime === 'duas' && e.jurosDuas.depois !== 'fixa');
@@ -1624,11 +1841,30 @@
         ? 'Juros contados de ' + brIso(e.dataJuros) + ', ou do vencimento, se posterior.'
         : 'Juros contados do vencimento de cada parcela.');
     }
+    if (e.parcelas.some(function (p) { return p.correcaoAte || p.jurosAte; })) {
+      c.push('Parcelas com termo final próprio (indicado na memória de cálculo): a correção e os juros cessam na data indicada, por exemplo a de depósito judicial; depois dela, o saldo fica parado, ou recebe só a rubrica sem fim indicado. Pagamento posterior abate esse saldo.');
+    }
+    if (res && res.totais.vincendas) {
+      c.push('Parcelas vincendas (art. 323 do CPC), com vencimento depois da data do cálculo e até ' + brIso(e.vincendasAte) + ': entram pelo valor nominal (' + moeda(res.totais.vincendas) + '), sem correção nem juros, e ficam fora da base da multa e dos honorários do art. 523. Refazer o cálculo depois do vencimento.');
+    }
     if (e.parcelas.some(function (p) { return p.correcaoDesde || p.jurosDesde; })) {
       c.push('Parcelas com termos próprios (indicados na memória de cálculo): a correção corre da data indicada e os juros, da data indicada, ainda que anterior; os juros anteriores ao início da correção incidem sobre o valor nominal (ex.: Súmulas 54 e 362 do STJ).');
     }
-    if (res && res.totais.multaContratual) c.push('Multa contratual de ' + num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido, conforme o título.');
+    if (res && res.totais.multaContratual) c.push('Multa contratual de ' + num(res.totais.multaContratualPct, 2) + '% sobre o valor histórico do capital em aberto, só com correção monetária, sem juros (multa de direito material), conforme o título.');
     if (res && res.totais.sucumbenciaTexto) c.push(res.totais.sucumbenciaTexto);
+    if (e.tipo === 'fazenda' && res && res.totais.pequenoValor) {
+      var pv = res.totais.pequenoValor;
+      c.push(pv.pendencia || ('Total por credor na data da conta: ' + moeda(pv.total) +
+        (pv.cabe ? ' — cabe em RPV, teto ' + moeda(pv.teto) : ' — excede em ' + moeda(pv.excedente) + ' o teto de ' + moeda(pv.teto) + '; precatório ou RPV com renúncia do excedente') + '. Fonte: ' + pv.fonte + '. ' + pv.aviso));
+    }
+    if (e.tipo === 'fazenda' && res && res.totais.requisitorio) {
+      var rq = res.totais.requisitorio;
+      c.push(rq.pendencia || ('Estimativa informativa do ' + (rq.tipo === 'rpv' ? 'RPV' : 'precatório') +
+        ': da conta-base ' + brIso(rq.dataBase) + ' à expedição em ' + brIso(rq.dataExpedicao) + ', valor de ' +
+        moeda(rq.valorNaExpedicao) + '; atualizado até ' + brIso(rq.dataFinal) + ', total de ' + moeda(rq.total) +
+        '. Período estimado sem mora: ' + brIso(rq.dataInicioGraca) + ' a ' + brIso(rq.dataFimGraca) + '. ' +
+        rq.memoria.join(' ') + ' O cálculo oficial é do tribunal; o TJSP não disponibiliza planilha oficial de atualização de precatórios.'));
+    }
     var temObrigacao = e.parcelas.some(function (p) { return !!p.obrigacao; });
     if (temObrigacao) c.push('Linhas com o mesmo ID de obrigação são frações da mesma dívida, com as mesmas datas de vencimento, correção, juros e rito. Sem ID, cada linha é uma dívida autônoma: não há agrupamento por data, valor ou descrição.');
     if (e.pagamentos.length) {
@@ -1637,7 +1873,7 @@
         (mesPag ? 'sem indicação, na ' + (temObrigacao ? 'obrigação' : 'parcela') + ' com vencimento no mesmo mês do pagamento; o excedente, ou o pagamento feito em mês sem parcela em aberto, é imputado' : 'depois') + ' nas vencidas, da mais antiga para a mais recente, e, havendo empate, na de maior saldo; por último nas parcelas a vencer. Em cada ' + (temObrigacao ? 'obrigação, consideradas todas as suas frações' : 'parcela') + ', primeiro nos juros e encargos, depois no capital (art. 354).');
     }
     if ((e.multa && e.tipo !== 'fazenda') || e.honorarios) {
-      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && (res.rito || res.recorte === 'penhora') ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) +
+      c.push('Multa e honorários do art. 523, § 1º, do CPC sobre ' + (res && (res.rito || res.recorte === 'penhora') ? 'o débito do rito da penhora.' : (res && (res.totais.multaContratual || res.totais.sucumbencia) ? 'o débito (capital, juros, multa contratual e honorários de sucumbência).' : 'o subtotal (capital mais juros e encargos).')) + ' A multa não incide sobre os honorários do art. 523, nem estes sobre a multa.' +
         (e.prazo523 ? ' Data final informada: ' + brIso(e.prazo523) + '. Pagamentos posteriores ao prazo com encargos selecionados são bloqueados até que o saldo constituído possa ser recomposto sem duplicidade.' : ''));
     }
     var st = I.estado();
@@ -1707,6 +1943,19 @@
     h += '<h2>Resumo</h2><table class="dados resumo-doc">';
     itensResumo(res).forEach(function (i) { h += '<tr><td>' + esc(i[0]) + '</td><td class="num">' + moeda(i[1]) + '</td></tr>'; });
     h += '<tr class="linha-total"><td>Total devido em ' + brIso(e.dataCalculo) + '</td><td class="num">' + moeda(t.total) + '</td></tr></table>';
+    if (faz && e.compararFazendaDoc) {
+      var cenarios = res.comparacaoFazenda || compararFazenda(e, res);
+      if (cenarios.length) {
+        h += '<h2>Total em cada critério (cenários pendentes de validação)</h2><table class="dados resumo-doc"><thead><tr><th>Critério</th><th class="num">Total</th></tr></thead><tbody>';
+        cenarios.forEach(function (x) {
+          h += '<tr><td>' + esc(x.rotulo) + (x.criterio === e.posEC136 ? ' — escolhido' : '') +
+            (x.parcial ? '<br><span class="miudo">Parcial: falta dado de uma série.</span>' : '') +
+            (x.erro ? '<br><span class="miudo">' + esc(x.erro) + '</span>' : '') +
+            '</td><td class="num">' + (x.total == null ? '—' : moeda(x.total)) + '</td></tr>';
+        });
+        h += '</tbody></table>';
+      }
+    }
     if (res.rito) {
       var pr = res.linhas.filter(function (l) { return l.rito === 'prisao'; });
       var pe = res.linhas.filter(function (l) { return l.rito === 'penhora'; });
@@ -1717,7 +1966,7 @@
     }
 
     h += '<h2>Memória de cálculo</h2><table class="dados memoria-doc"><thead><tr><th>Nº</th><th>Vencimento</th>' + (pen ? '<th>Base</th>' : '') +
-      '<th class="num">Valor original</th><th class="num">' + (faz ? 'Índice IPCA-E' : 'Índice') + '</th><th class="num">Capital</th><th class="num">' + (faz ? 'Juros poupança' : 'Juros') + '</th>' +
+      '<th class="num">Valor original</th><th class="num">' + (faz ? 'Índice aplicado' : 'Índice') + '</th><th class="num">Capital</th><th class="num">' + (faz ? 'Juros de mora' : 'Juros') + '</th>' +
       (faz ? '<th class="num">Selic e encargos</th>' : '') + '<th class="num">Total</th>' + (res.rito ? '<th>Rito</th>' : '') + '</tr></thead><tbody>';
     var ncols = 7 + (pen ? 1 : 0) + (faz ? 1 : 0) + (res.rito ? 1 : 0);
     res.linhas.forEach(function (l) {
@@ -1815,7 +2064,7 @@
     res.linhas.forEach(function (l) {
       linhas.push('Parcela ' + l.n + ' – vencimento ' + brIso(l.vencimento) + ' – valor original ' + moeda(l.valor) + (l.descricao ? ' (' + l.descricao + ')' : '') + (l.obrigacao ? ' – ' + identidadeObrigacao(l) : '') + (l.rito ? ' – rito da ' + (l.rito === 'prisao' ? 'prisão' : 'penhora') : ''));
       l.eventos.forEach(function (ev) { linhas.push('  ' + ev); });
-      linhas.push('  Capital ' + moeda(l.capital) + '; juros ' + moeda(l.juros) + (faz ? '; Selic e encargos ' + moeda(l.encargos) : '') + '; total ' + moeda(l.total) + '.');
+      linhas.push('  Capital ' + moeda(l.capital) + '; juros ' + moeda(l.juros) + (faz ? '; encargos ' + moeda(l.encargos) : '') + '; total ' + moeda(l.total) + '.');
       linhas.push('');
     });
     var r = itensResumo(res).map(function (i) { return i[0] + ': ' + moeda(i[1]); });
@@ -2031,9 +2280,10 @@
   $('lerCopilot').addEventListener('click', function () {
     var txt = $('textoCopilot').value;
     lidoCopilot = null; destinoCopilot = '';
-    if (PC && PC.destinoDoTexto(txt) === 'contrato') { destinoCopilot = 'contrato'; PC.previaDeOutra('contrato'); return; }
+    var destinoTexto = PC && PC.destinoDoTexto(txt);
+    if (destinoTexto === 'contrato' || destinoTexto === 'cartao') { destinoCopilot = destinoTexto; PC.previaDeOutra(destinoTexto); return; }
     var r = window.CopilotImport.ler(txt);
-    if (PC && r.dados && r.dados.tipo && PC.destinoDoTipo(r.dados.tipo) !== PAGINA) {
+    if (PC && r.dados && r.dados.tipo && PC.destinoDoTipo(r.dados.tipo) !== PC.pagina) {
       destinoCopilot = PC.destinoDoTipo(r.dados.tipo); PC.previaDeOutra(destinoCopilot); return;
     }
     lidoCopilot = r;
@@ -2062,6 +2312,12 @@
       porIso('dataJuros', d.juros.termo === 'data' ? d.juros.data : '');
     }
     if (d.posEC136) $('posEC136').value = d.posEC136;
+    $('naturezaFazenda').value = d.naturezaFazenda || 'administrativa';
+    $('quemDeve').value = d.quemDeve || '';
+    $('ufespValor').value = d.ufespValor == null ? '' : num(d.ufespValor, 2);
+    $('tetoMunicipal').value = d.tetoMunicipal == null ? '' : num(d.tetoMunicipal, 2);
+    $('selicSoCapital').checked = !!d.selicSoCapital;
+    $('compararFazendaDoc').checked = !!d.compararFazendaDoc;
     $('imputacao').value = d.imputacao === 'automatica' ? 'automatica' : 'mes';
     var cv = d.civel || {};
     $('indiceCorrecao').value = cv.indice || 'tjsp';
@@ -2075,7 +2331,17 @@
     if (su) {
       if (su.pct > 0) $('sucPct').value = num(su.pct, su.pct % 1 ? 2 : 0);
       $('sucValor').value = su.valor > 0 ? num(su.valor, 2) : ''; porIso('sucData', su.data || ''); porIso('sucTransito', su.transito || '');
+      porIso('sucDataSalario', su.dataSalario || '');
+      (su.percentuais || []).forEach(function (p, i) { if (p != null) $('sucPctFaixa' + (i + 1)).value = num(p, p % 1 ? 2 : 0); });
     }
+    var rq = d.requisitorio || {};
+    $('requisitorioTipo').value = rq.tipo || '';
+    porIso('requisitorioDataBase', rq.dataBase || '');
+    porIso('requisitorioDataExpedicao', rq.dataExpedicao || '');
+    porIso('requisitorioDataFinal', rq.dataFinal || '');
+    porIso('requisitorioDataInicioGraca', rq.dataInicioGraca || '');
+    porIso('requisitorioDataLimite', rq.dataLimite || '');
+    $('requisitorioValorPago').value = rq.valorPago == null ? '' : num(rq.valorPago, 2);
     if (d.encargos) {
       $('multa').checked = d.encargos.multa;
       $('honorarios').checked = !!d.encargos.honorariosPct;
@@ -2094,7 +2360,8 @@
     $('ritoExecucao').value = d.ritoExecucao || '';
     ritosManuais = d.ritosManuais || {};
     listaP.innerHTML = '';
-    d.parcelas.forEach(function (p) { marcarOrigem(novaParcela(p.vencimento, num(p.valor, 2), false, p.correcaoDesde, p.jurosDesde, p.obrigacao), p.origem + (p.descricao ? ' – ' + p.descricao : '')); });
+    d.parcelas.forEach(function (p) { marcarOrigem(novaParcela(p.vencimento, num(p.valor, 2), false, p.correcaoDesde, p.jurosDesde, p.obrigacao, p.correcaoAte, p.jurosAte), p.origem + (p.descricao ? ' – ' + p.descricao : '')); });
+    porIso('vincendasAte', d.vincendasAte || '');
     if (PAGINA === 'civel' && !listaP.children.length) novaParcela();
     listaG.innerHTML = '';
     d.pagamentos.forEach(function (p) { marcarOrigem(novoPagamento(p.data, num(p.valor, 2), p.parcela || ''), p.origem); });
@@ -2168,7 +2435,14 @@
     clearTimeout(avisoArquivo.t);
     avisoArquivo.t = setTimeout(function () { el.textContent = ''; }, erro ? 12000 : 6000);
   }
-  function dataPadrao() { var h = hoje(), u = ultimoDiaCoberto(); return h > u ? u : h; }
+  /* Data sugerida para o cálculo: hoje. Na pensão e no cível, índice ainda não divulgado só limita o trecho, com aviso
+   * (N50); na Fazenda, que ainda bloqueia sem o índice (N35), o último dia coberto pelas tabelas. */
+  function dataPadrao() {
+    var h = hoje();
+    if (tipo !== 'fazenda') return h;
+    var u = ultimoDiaCoberto();
+    return h > u ? u : h;
+  }
   function semVazio(o) {
     Object.keys(o).forEach(function (k) { if (o[k] === undefined || o[k] === '') delete o[k]; });
     return o;
@@ -2206,20 +2480,28 @@
       civel: e.tipo === 'particular' ? semVazio({ indice: e.civel.indice, indice2: e.civel.indice2 || undefined, indice2Desde: e.civel.indice2 ? e.civel.indice2Desde : undefined,
         jurosCompostos: e.civel.jurosCompostos || undefined, multaContratualPct: e.civel.multaContratualPct > 0 ? e.civel.multaContratualPct : undefined }) : undefined,
       sucumbencia: e.sucumbencia ? semVazio({ base: e.sucumbencia.base, pct: e.sucumbencia.base !== 'fixo' ? e.sucumbencia.pct : undefined,
-        valor: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.valor : undefined, data: e.sucumbencia.base !== 'condenacao' ? e.sucumbencia.data : undefined,
-        transito: e.sucumbencia.base !== 'condenacao' && e.sucumbencia.transito ? e.sucumbencia.transito : undefined }) : undefined,
-      fazenda: faz ? { posEC136: e.posEC136 } : undefined,
+        valor: e.sucumbencia.base !== 'condenacao' && e.sucumbencia.base !== 'faixas' ? e.sucumbencia.valor : undefined,
+        data: e.sucumbencia.base !== 'condenacao' && e.sucumbencia.base !== 'faixas' ? e.sucumbencia.data : undefined,
+        transito: e.sucumbencia.base !== 'condenacao' && e.sucumbencia.base !== 'faixas' && e.sucumbencia.transito ? e.sucumbencia.transito : undefined,
+        dataSalario: e.sucumbencia.base === 'faixas' ? e.sucumbencia.dataSalario : undefined,
+        percentuais: e.sucumbencia.base === 'faixas' ? e.sucumbencia.percentuais : undefined }) : undefined,
+      fazenda: faz ? { posEC136: e.posEC136, natureza: e.naturezaFazenda,
+        quemDeve: e.quemDeve || undefined, ufespValor: isFinite(e.ufespValor) && e.ufespValor > 0 ? e.ufespValor : undefined,
+        tetoMunicipal: isFinite(e.tetoMunicipal) && e.tetoMunicipal > 0 ? e.tetoMunicipal : undefined,
+        selicSoCapital: e.selicSoCapital || undefined, comparar: e.compararFazendaDoc || undefined } : undefined,
+      requisitorio: faz && e.requisitorio && e.requisitorio.tipo ? semVazio(e.requisitorio) : undefined,
       periodos: e.tipo === 'pensao' ? periodos : [],
       ajustes: e.tipo === 'pensao' && ajustes.length ? ajustes.map(function (a) {
         var dec = a.chave.indexOf('d:') === 0;
         return semVazio({ mes: dec ? a.chave.slice(2) + '-12' : a.chave.slice(2), decimoTerceiro: dec || undefined,
           rendimento: a.tipo === 'rendimento' ? a.valor : undefined, valor: a.tipo === 'valor' ? a.valor : undefined, origem: a.origem || undefined });
       }) : undefined,
+      vincendasAte: e.tipo !== 'fazenda' && e.vincendasAte ? e.vincendasAte : undefined,
       dataAjuizamento: e.tipo === 'pensao' && e.dataAjuizamento ? semVazio({ data: e.dataAjuizamento, origem: $('origemAjuizamento').dataset.origem || undefined }) : undefined,
       ritoExecucao: e.tipo === 'pensao' && e.ritoExecucao ? e.ritoExecucao : undefined,
       ritosManuais: e.tipo === 'pensao' && Object.keys(e.ritosManuais).length ? e.ritosManuais : undefined,
       outrasParcelas: e.parcelas.filter(function (p) { return p.vencimento && p.valor > 0; })
-        .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined, obrigacao: p.obrigacao || undefined }); }),
+        .map(function (p) { return semVazio({ vencimento: p.vencimento, valor: p.valor, origem: p.origem || undefined, correcaoDesde: p.correcaoDesde || undefined, jurosDesde: p.jurosDesde || undefined, correcaoAte: p.correcaoAte || undefined, jurosAte: p.jurosAte || undefined, obrigacao: p.obrigacao || undefined }); }),
       pagamentos: e.pagamentos.filter(function (p) { return p.data && p.valor > 0; })
         .map(function (p) { return semVazio({ data: p.data, valor: p.valor, parcela: p.parcela || undefined, origem: p.origem || undefined }); }),
       imputacao: e.imputacao,
@@ -2264,7 +2546,7 @@
     leitor.readAsText(f);
   });
   /* Campos do caso que o arquivo pode não trazer: voltam ao padrão da tela nova, sem herdar o caso anterior. */
-  var CAMPOS_DO_CASO = ['regime', 'taxaFixa', 'contagemDias', 'contagemJuros', 'posEC136', 'imputacao', 'dataJuros', 'multa', 'honorarios', 'honorariosPct', 'prazo523',
+  var CAMPOS_DO_CASO = ['regime', 'taxaFixa', 'contagemDias', 'contagemJuros', 'posEC136', 'naturezaFazenda', 'quemDeve', 'ufespValor', 'tetoMunicipal', 'selicSoCapital', 'compararFazendaDoc', 'imputacao', 'dataJuros', 'multa', 'honorarios', 'honorariosPct', 'prazo523',
     'procNumero', 'procExequente', 'procExecutado'].concat(CAMPOS_AVANCADOS, MARCAS_AVANCADAS);
   function zerarCaso() {
     CAMPOS_DO_CASO.forEach(function (id) {
@@ -2294,10 +2576,11 @@
   function abrirTexto(txt, nome) {
     var problema = problemaArquivo(txt);
     if (problema) { avisoArquivo('Não foi possível abrir "' + nome + '": ' + problema + ' O cálculo na tela não foi alterado.', true); return; }
-    var outra = PC && PC.destinoDoTexto(txt) === 'contrato' ? 'contrato' : '';
+    var destinoTexto = PC && PC.destinoDoTexto(txt);
+    var outra = destinoTexto === 'contrato' || destinoTexto === 'cartao' ? destinoTexto : '';
     if (!outra && PC) { try { var j = JSON.parse(txt); if (j && j.schemaVersion && j.input) outra = 'contrato'; } catch (_) {} }
     var r = outra ? null : window.CopilotImport.ler(txt);
-    if (!outra && PC && r.dados && r.dados.tipo && PC.destinoDoTipo(r.dados.tipo) !== PAGINA) outra = PC.destinoDoTipo(r.dados.tipo);
+    if (!outra && PC && r.dados && r.dados.tipo && PC.destinoDoTipo(r.dados.tipo) !== PC.pagina) outra = PC.destinoDoTipo(r.dados.tipo);
     if (outra) {
       if (confirm('"' + nome + '" é um cálculo da calculadora de ' + PC.paginas[outra].nome + '. Abrir lá, já com os dados?')) PC.transferir(outra, { modo: 'arquivo', texto: txt, nome: nome });
       return;
@@ -2401,10 +2684,10 @@
   function descricaoPerfilPreservado(perfil) {
     var corte = perfil === E.perfilCalculoAnterior || perfil === E.perfilCalculoAnteriorSemEventos ? '30/08/2024' : '29/08/2024';
     var eventosAntigos = perfil === E.perfilCalculoHistorico || perfil === E.perfilCalculoAnterior;
-    return 'Perfil de cálculo ' + perfil + ' preservado, com corte em ' + corte +
+    return 'Perfil de cálculo ' + perfil + ' preservado, com arredondamento a cada operação intermediária e corte em ' + corte +
       (eventosAntigos ? ' e eventos antigos: pagamentos podem provocar atualizações incidentais em outras obrigações.' :
         ' e atualização apenas da obrigação afetada pelo evento.') + ' O perfil ' + E.perfilCalculoAtual +
-      ' usa o corte atual em 29/08/2024 e atualiza apenas a obrigação afetada pelo evento. A migração é explícita e pode alterar centavos; confira a memória antes de adotá-la.';
+      ' mantém precisão integral nos passos intermediários e arredonda os valores lançados e exibidos. A migração é explícita e pode alterar centavos: é recomendada ao refazer o cálculo em data nova; para conferir um total já apresentado, mantenha o perfil preservado. Confira a memória antes de adotá-la.';
   }
   $('refazerAnterior').addEventListener('click', function () {
     if (!anterior) return;
@@ -2515,12 +2798,27 @@
       '; contagem de juros ' + (e.contagemJuros === 'mescheio' ? 'mês cheio' : 'pro rata')]);
     else gerais.push(['Contagem de juros', e.contagemJuros === 'mescheio' ?
       'Mês cheio selecionado, mas não aplicado à Fazenda Pública' : 'Pro rata (padrão); regra atual da Fazenda mantida']);
-    if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o capital corrigido']);
+    if (res.totais.multaContratual) gerais.push(['Multa contratual', num(res.totais.multaContratualPct, 2) + '% sobre o valor histórico corrigido, sem juros']);
     if (e.sucumbencia && e.sucumbencia.base) gerais.push(['Honorários de sucumbência', ({ condenacao: num(e.sucumbencia.pct, 2) + '% sobre a condenação',
       causa: num(e.sucumbencia.pct, 2) + '% sobre o valor da causa de ' + moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
-      fixo: moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : '') })[e.sucumbencia.base] +
-      (e.sucumbencia.base !== 'condenacao' && e.sucumbencia.transito ? '; juros desde o trânsito em julgado (' + brIso(e.sucumbencia.transito) + ')' : '')]);
-    else gerais.push(['Critério após 10/09/2025', e.posEC136 === 'ipca2' ? 'IPCA + 2% a.a., limitado à Selic' : 'Selic']);
+      fixo: moeda(e.sucumbencia.valor || 0) + (e.sucumbencia.data ? ' (' + brIso(e.sucumbencia.data) + ')' : ''),
+      faixas: 'Faixas progressivas do art. 85, § 3º; salário mínimo conforme ' + (e.sucumbencia.dataSalario ? brIso(e.sucumbencia.dataSalario) : 'data não informada') })[e.sucumbencia.base] +
+      (e.sucumbencia.base !== 'condenacao' && e.sucumbencia.base !== 'faixas' && e.sucumbencia.transito ? '; juros desde o trânsito em julgado (' + brIso(e.sucumbencia.transito) + ')' : '')]);
+    if (faz) {
+      gerais.push(['Natureza do débito', ({ administrativa: 'Administrativa em geral / responsabilidade civil', servidor: 'Servidor ou empregado público',
+        previdenciaria: 'Previdenciária ou acidentária' })[e.naturezaFazenda] || e.naturezaFazenda]);
+      if (e.quemDeve) gerais.push(['Quem deve', ({ estado_sp: 'Estado de SP / autarquia / fundação / universidade estadual',
+        municipio_sp: 'Município de São Paulo', municipio_outro: 'Outro município (lei local)',
+        municipio_sem_lei: 'Outro município sem lei local', uniao: 'União / INSS / autarquia federal' })[e.quemDeve] || e.quemDeve]);
+      gerais.push(['Critério após 10/09/2025', textoCriterioFazenda(e)]);
+      if (e.selicSoCapital) gerais.push(['Base da Selic', 'Somente o capital corrigido (opção avançada; Tema 1.349/STF pendente)']);
+      if (e.compararFazendaDoc) gerais.push(['Comparação dos critérios', 'Incluída no demonstrativo']);
+      if (e.requisitorio && e.requisitorio.tipo) {
+        gerais.push(['Fase do requisitório', (e.requisitorio.tipo === 'rpv' ? 'RPV' : 'Precatório') +
+          '; expedição em ' + (e.requisitorio.dataExpedicao ? brIso(e.requisitorio.dataExpedicao) : 'não informada') +
+          '; conferência em ' + (e.requisitorio.dataFinal ? brIso(e.requisitorio.dataFinal) : 'não informada')]);
+      }
+    }
     if (faz || e.regime !== 'nenhum') gerais.push(['Termo inicial dos juros', e.termoJuros === 'data' ? brIso(e.dataJuros) : 'vencimento de cada parcela']);
     if (e.pagamentos.length) gerais.push(['Imputação dos pagamentos', NOMES_IMPUTACAO[res.imputacao]]);
     if (pen) gerais.push(['Ajuizamento da execução', e.dataAjuizamento ? brIso(e.dataAjuizamento) + (res.ajuizamentoFuturo ? ' (previsto)' : '') : (res.ajuizamentoPresumido ? 'não informado; usada a data do cálculo como ajuizamento previsto' : 'não informado')]);
@@ -2560,11 +2858,13 @@
     var parc = e.parcelas.filter(function (p) { return p.vencimento && p.valor > 0; });
     if (parc.length) {
       var termos = parc.some(function (p) { return p.correcaoDesde || p.jurosDesde; });
+      var fins = parc.some(function (p) { return p.correcaoAte || p.jurosAte; });
       h += '<h3>' + (pen ? 'Outras parcelas' : 'Parcelas') + ' (valores originais)</h3><table class="dados"><thead><tr><th>Nº</th><th>Vencimento</th><th class="num">Valor original</th>' +
-        (termos ? '<th>Correção desde</th><th>Juros desde</th>' : '') + '</tr></thead><tbody>' +
+        (termos ? '<th>Correção desde</th><th>Juros desde</th>' : '') + (fins ? '<th>Correção até</th><th>Juros até</th>' : '') + '</tr></thead><tbody>' +
         parc.map(function (p, i) {
           return '<tr><td>' + (i + 1) + '</td><td>' + brIso(p.vencimento) + identidadeObrigacaoHtml(p) + '</td><td class="num">' + moeda(p.valor) + '</td>' +
-            (termos ? '<td>' + (p.correcaoDesde ? brIso(p.correcaoDesde) : 'vencimento') + '</td><td>' + (p.jurosDesde ? brIso(p.jurosDesde) : 'termo geral') + '</td>' : '') + '</tr>';
+            (termos ? '<td>' + (p.correcaoDesde ? brIso(p.correcaoDesde) : 'vencimento') + '</td><td>' + (p.jurosDesde ? brIso(p.jurosDesde) : 'termo geral') + '</td>' : '') +
+            (fins ? '<td>' + (p.correcaoAte ? brIso(p.correcaoAte) : 'data do cálculo') + '</td><td>' + (p.jurosAte ? brIso(p.jurosAte) : 'data do cálculo') + '</td>' : '') + '</tr>';
         }).join('') + '</tbody></table>';
     }
     var pags = e.pagamentos.filter(function (p) { return p.data && p.valor > 0; });

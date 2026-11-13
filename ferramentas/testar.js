@@ -28,6 +28,7 @@ function entrada(d) {
   // Estes gabaritos foram gravados no perfil 2, com arredondamento inclusive em pagamentos alheios à linha.
   return { tipo: d.tipo, perfilCalculo: E.perfilCalculoAnterior, dataCalculo: DATA, regime: j.regime || 'tjsp', taxaFixa: j.taxaMensal, contagemDias: j.contagemDias, termoJuros: j.termo || 'vencimento', dataJuros: j.data || '',
     posEC136: d.posEC136 || 'selic',
+    naturezaFazenda: d.naturezaFazenda || 'administrativa', selicSoCapital: !!d.selicSoCapital,
     periodos: d.periodos.map(function (p) { return { inicio: p.inicio, fim: p.fim, dia: p.dia, base: p.base, quantidade: p.quantidade, decimo: p.decimo,
       rendimentos: p.rendimentos, reajuste: p.reajuste, dataBase: p.dataBase }; }),
     ajustes: d.ajustes || [], dataAjuizamento: d.ajuizamento ? d.ajuizamento.data : '', parcelas: d.parcelas, pagamentos: d.pagamentos,

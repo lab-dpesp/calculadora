@@ -287,8 +287,11 @@ function testarCaso(e, indiceCaso) {
       const t = r0.totais, ls = r0.linhas;
       const ok1 = Math.abs(r2(t.prisao + t.penhora) - t.subtotal) <= 0.01 &&
         Math.abs(t.totalPenhora - r2(t.penhora + (e.multa ? r2(t.penhora * 0.1) : 0) + (e.honorarios ? r2(t.penhora * e.honorariosPct / 100) : 0))) <= 0.01;
-      const pens = ls.filter(l => l.origem === 'pensao'), ant = pens.filter(l => l.vencimento < e.dataAjuizamento).slice(-3);
-      const ok2 = pens.every(l => (l.rito === 'prisao') === (l.vencimento >= e.dataAjuizamento || ant.indexOf(l) >= 0));
+      // Três últimas mensais antes do ajuizamento; o 13º entra a mais se venceu nos 90 dias anteriores (Assessoria Cível).
+      const pens = ls.filter(l => l.origem === 'pensao'), mensal = l => !String(l.chave).startsWith('d:');
+      const ant = pens.filter(l => mensal(l) && l.vencimento < e.dataAjuizamento).slice(-3);
+      const janela = new Date(Date.parse(e.dataAjuizamento + 'T00:00:00Z') - 90 * 86400000).toISOString().slice(0, 10);
+      const ok2 = pens.every(l => (l.rito === 'prisao') === (l.vencimento >= e.dataAjuizamento || ant.indexOf(l) >= 0 || (!mensal(l) && l.vencimento >= janela)));
       confere('rito', ok1 && ok2, 'Prisão ' + t.prisao + ' + penhora ' + t.penhora + ' vs. subtotal ' + t.subtotal + '; total da penhora ' + t.totalPenhora + (ok2 ? '' : '; prestações no rito errado'), e);
     }
   }

@@ -224,7 +224,14 @@ caso('serializador real de índices só altera dados', () => {
   dados.indicesEmbutidosEm = '2026-10-31';
   const { serializar } = require('./atualizar-indices.js');
   const novo = serializar(dados, original.slice(0, original.indexOf('var DADOS = {')));
+  assert.deepEqual(dados.UFESP, require(arquivo).UFESP);
+  assert.deepEqual(dados.RPV_MUNICIPIO_SAO_PAULO, require(arquivo).RPV_MUNICIPIO_SAO_PAULO);
+  assert.match(novo, /UFESP: \{/);
+  assert.match(novo, /'2026': 38\.42/);
+  assert.match(novo, /RPV_MUNICIPIO_SAO_PAULO: \{/);
+  assert.match(novo, /'2026': 31667\.41/);
   assert.equal(apenasDados('data.js', original, novo), true);
+  assert.equal(apenasDados('data.js', "'2019': 26.53\n", "'2019': 27.1\n"), true);
 });
 
 console.log(quantidade + ' testes do controle de regras passaram.');

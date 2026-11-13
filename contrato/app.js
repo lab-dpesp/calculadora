@@ -64,6 +64,7 @@
       if (button.disabled) button.title = STALE_MESSAGE;
       else button.removeAttribute('title');
     });
+    get('salvarCalculo').disabled = stale || !current;
   }
   function invalidateResult() {
     current = null;
@@ -92,7 +93,49 @@
     parent.appendChild(node);
     return node;
   }
-  function fieldValue(id) { return get(id).value.trim(); }
+  function dateIso(value) {
+    value = String(value || '').trim();
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) || /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+    if (!match) return value;
+    var ano = match[1].length === 4 ? match[1] : match[3];
+    var mes = match[1].length === 4 ? match[2] : match[2];
+    var dia = match[1].length === 4 ? match[3] : match[1];
+    var data = new Date(Date.UTC(Number(ano), Number(mes) - 1, Number(dia)));
+    if (data.getUTCFullYear() !== Number(ano) || data.getUTCMonth() + 1 !== Number(mes) ||
+        data.getUTCDate() !== Number(dia)) return value;
+    return ano + '-' + mes + '-' + dia;
+  }
+  function dateBr(value) {
+    var iso = dateIso(value);
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return match ? match[3] + '/' + match[2] + '/' + match[1] : String(value || '');
+  }
+  document.addEventListener('input', function (event) {
+    var field = event.target;
+    if (!field.dataset || field.dataset.mascara !== 'data' || (event.inputType || '').indexOf('delete') === 0) return;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(field.value)) {
+      field.value = dateBr(field.value);
+      return;
+    }
+    if (!/^[\d/]*$/.test(field.value)) return;
+    var digits = field.value.replace(/\D/g, '').slice(0, 8), formatted = '';
+    for (var i = 0; i < digits.length; i++) {
+      if (i === 2 || i === 4) formatted += '/';
+      formatted += digits[i];
+    }
+    field.value = formatted;
+    try { field.setSelectionRange(formatted.length, formatted.length); } catch (_) {}
+  }, true);
+  document.addEventListener('change', function (event) {
+    var field = event.target;
+    if (!field.dataset || field.dataset.mascara !== 'data' || !field.value) return;
+    var iso = dateIso(field.value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) field.value = dateBr(iso);
+  }, true);
+  function fieldValue(id) {
+    var value = get(id).value.trim();
+    return get(id).dataset.mascara === 'data' && value ? dateIso(value) : value;
+  }
   var MAX_PLAUSIBLE_MONTHLY = 30;
   var MAX_PLAUSIBLE_CET = 500;
   function percent(value, plausibleMax, label, fieldId) {
@@ -403,6 +446,8 @@
     calculatedSignature = formSignature();
     var resultNode = get('resultado');
     resultNode.hidden = false;
+    get('reiniciar').hidden = false;
+    get('vazioContrato').hidden = true;
     setResultStale(false);
     get('resultadoRevisao').hidden = !importState || importState.revised;
     if (importState && !importState.revised) {
@@ -461,8 +506,8 @@
     get('semaforoTexto').textContent = (result.ambiguous && !result.comparison.selectedBy
       ? 'Modalidade não identificada com precisão. Selecione manualmente uma série para habilitar a comparação. '
       : '') + (result.comparison.available
-      ? 'Taxa do contrato: ' + formatPercent.format(result.comparison.ratio) + 'x a média BACEN (limites: ' +
-        formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.yellow) + 'x e ' + formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.red) + 'x).' +
+      ? 'Taxa efetiva mensal: ' + formatPercent.format(result.comparison.ratio) + 'x a média BACEN (faixas internas: ' +
+        formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.yellow) + 'x e ' + formatPercent.format(window.ContratoRegras.TRAFFIC_LIMITS.red) + 'x; não são limites do BACEN nem do STJ).' +
         (light.state === 'green' && result.comparison.differencePercentagePoints > 0 ? ' Acima da média, mas dentro da faixa verde.' : '') +
         ' Triagem; não declara regularidade nem abusividade.'
       : result.comparison.reason);
@@ -507,7 +552,7 @@
     }
     var cards = get('cartoes');
     cards.replaceChildren();
-    metric(cards, 'Taxa do contrato (sobre o valor liberado)', result.comparedRate === null ? 'Não calculada'
+    metric(cards, 'Taxa efetiva mensal (sobre o valor liberado)', result.comparedRate === null ? 'Não calculada'
       : formatPercent.format(result.comparedRate * 100) + '% a.m.');
     metric(cards, 'Média BACEN', result.comparison.available ? formatPercent.format(result.comparison.bacenPercent) + '% a.m.' : 'Indisponível');
     var cetLabel = result.input.amortization === 'SAC' && result.schedule
@@ -524,16 +569,18 @@
       var recurringNote = addText(cards, 'p', recurringWarning);
       recurringNote.className = 'nota aviso-encargo-parcela';
     }
-    var metrics = get('metricas');
-    metrics.replaceChildren();
-    metric(metrics, 'Valor financiado', formatMoney.format(result.input.principalCents / 100));
     var totalPayments = result.input.amortization === 'SAC' && result.schedule
       ? result.schedule.reduce(function (sum, row) { return sum + row.installmentCents; }, 0)
       : result.input.paymentCents * result.input.installments;
+    get('totalContratoValor').textContent = formatMoney.format(totalPayments / 100);
+    var metrics = get('metricas');
+    metrics.replaceChildren();
+    metric(metrics, 'Valor financiado', formatMoney.format(result.input.principalCents / 100));
     metric(metrics, result.input.amortization === 'SAC' ? 'Total do cronograma SAC' : 'Total das parcelas informadas',
       formatMoney.format(totalPayments / 100));
     if (result.input.statedCet !== null) metric(metrics, 'CET informado', formatPercent.format(result.input.statedCet * 100) + '% a.a.');
-    if (result.implied !== null) metric(metrics, 'Taxa de fluxo implícita (Price)', formatPercent.format(result.implied * 100) + '% a.m.');
+    // Só a taxa efetiva mensal é exibida (orientação do Nudecon, 10/11/2026): a taxa implícita sobre o valor financiado
+    // continua usada internamente no cronograma Price quando os juros não são informados, mas não aparece na tela.
     var installmentWarning = get('alertaParcela');
     if (result.schedule) {
       var scheduledPayment = result.schedule[0].installmentCents;
@@ -548,15 +595,13 @@
     var comparison = get('comparacao');
     if (result.comparison.available) {
       comparison.textContent = formatPercent.format(result.comparison.contractedPercent) +
-        '% a.m. (taxa do contrato, calculada sobre o valor liberado' + (result.netCents ? ' de ' + formatMoney.format(result.netCents / 100) : '') +
+        '% a.m. (taxa efetiva mensal do contrato, calculada sobre o valor liberado' + (result.netCents ? ' de ' + formatMoney.format(result.netCents / 100) : '') +
         ' com as parcelas informadas, incluindo IOF e tarifas financiados) versus ' +
         formatPercent.format(result.comparison.bacenPercent) + '% a.m. (SGS ' + result.comparison.observation.seriesCode +
         ', ' + result.comparison.observation.referenceMonth + '): diferença de ' +
         formatPercent.format(result.comparison.differencePercentagePoints) + ' ponto(s) percentual(is); razão ' +
         (result.comparison.ratio === null ? 'não calculável' : formatPercent.format(result.comparison.ratio) + 'x') +
         '.' + annualComparisonText(result.comparison) +
-        (result.input.monthlyRate !== null ? ' Juros remuneratórios informados no contrato: ' +
-          formatPercent.format(result.input.monthlyRate * 100) + '% a.m.' : '') +
         ' Consultado em ' + formatDate(result.comparison.observation.consultedAt) + '. Fonte: ';
       var link = addText(comparison, 'a', 'API do BACEN (SGS)');
       link.href = result.comparison.observation.sourceUrl;
@@ -620,6 +665,10 @@
     }
     var tbody = get('tabelaAmortizacao');
     tbody.replaceChildren();
+    var memory = get('memoriaTextoContrato');
+    memory.replaceChildren();
+    var dueDates = result.schedule && result.input.firstDueDate
+      ? F.periodicDates(result.input.firstDueDate, result.schedule.length) : [];
     if (result.schedule) result.schedule.forEach(function (row) {
       var tr = document.createElement('tr');
       [String(row.period), formatMoney.format(row.installmentCents / 100), formatMoney.format(row.interestCents / 100),
@@ -627,6 +676,12 @@
         addText(tr, 'td', value);
       });
       tbody.appendChild(tr);
+      var line = addText(memory, 'p', 'Parcela ' + row.period + ' · vencimento ' +
+        (dueDates[row.period - 1] ? formatDate(dueDates[row.period - 1]) : 'não informado') + ' · valor ' +
+        formatMoney.format(row.installmentCents / 100) + ' · juros ' + formatMoney.format(row.interestCents / 100) +
+        ' · amortização ' + formatMoney.format(row.principalCents / 100) + ' · saldo ' +
+        formatMoney.format(row.balanceCents / 100));
+      line.className = 'memoria-linha';
     });
     resultNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -789,7 +844,8 @@
     } : null;
     // Todos os campos vêm do arquivo/bloco: o ausente volta ao padrão, sem herdar o valor do caso anterior.
     FORM_FIELDS.forEach(function (id) {
-      get(id).value = input[id] !== undefined && input[id] !== null ? String(input[id]) : defaultFieldValue(get(id));
+      var value = input[id] !== undefined && input[id] !== null ? String(input[id]) : defaultFieldValue(get(id));
+      get(id).value = get(id).dataset.mascara === 'data' && value ? dateBr(value) : value;
     });
     get('payrollSubtypeField').hidden = get('modality').value !== 'payroll';
     get('monthlyRate').value = input.monthlyRate == null ? '' : String(Number((input.monthlyRate * 100).toFixed(6))).replace('.', ',');
@@ -902,6 +958,11 @@
         if (!checkbox.checked) return;
         importState.pending = importState.pending.filter(function (candidate) { return candidate !== pending; });
         renderReviewPending();
+        if (!importState.pending.length) {
+          importState.revised = true;
+          get('calcularAnalise').hidden = true;
+          agendarCalculoAutomatico();
+        }
       });
       label.appendChild(checkbox);
       label.appendChild(document.createTextNode(' Confirme que esta pendência foi revisada e resolvida.'));
@@ -945,7 +1006,7 @@
     var contractDate = fieldValue('contractDate');
     if (!suggestedOperationalDate || fieldValue('disbursementDate') === suggestedOperationalDate) {
       suggestedOperationalDate = contractDate || null;
-      get('disbursementDate').value = suggestedOperationalDate || '';
+      get('disbursementDate').value = suggestedOperationalDate ? dateBr(suggestedOperationalDate) : '';
     }
     updateDisbursementHelp();
   }
@@ -993,7 +1054,8 @@
       importState.initialValues[fieldId] = fieldValue(fieldId);
       if (copilotResult.dados.values[key] != null && fieldValue(fieldId)) documentValues[fieldId] = fieldValue(fieldId);
     });
-    get('calcularAnalise').textContent = 'Concluir revisão e calcular';
+    get('calcularAnalise').textContent = 'Concluí a revisão';
+    get('calcularAnalise').hidden = !importState.pending.length;
     importedLateCharges = copilotResult.dados.lateCharges;
     renderReviewPending();
     var informationList = get('informacoesImportadas');
@@ -1009,7 +1071,7 @@
     }).forEach(function (pending) { addText(informationList, 'li', pending.mensagem); });
     var disbursementHelp = get('disbursementDateHelp');
     disbursementHelp.hidden = !importedDisbursementUnknown;
-    if (suggestedOperationalDate) get('disbursementDate').value = suggestedOperationalDate;
+    if (suggestedOperationalDate) get('disbursementDate').value = dateBr(suggestedOperationalDate);
     updateDisbursementHelp();
     get('avisosImportacao').hidden = !informationList.childNodes.length;
     if (importedDisbursementUnknown) get('maisOpcoes').open = true;
@@ -1020,6 +1082,7 @@
     get('painelCopilot').open = false;
     PC.limpar(false);
     copilotResult = null;
+    if (!importState.pending.length) agendarCalculoAutomatico();
     (importState.pending.length ? get('revisao') : get('formContrato'))
       .scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -1040,7 +1103,7 @@
       if (importState) {
         importState.revised = true;
         get('revisao').hidden = true;
-        get('calcularAnalise').textContent = 'Recalcular análise';
+        get('calcularAnalise').hidden = true;
       }
       display(result);
     } catch (error) {
@@ -1053,14 +1116,32 @@
     onFormEdit();
     clearPendingForField(event.target.id);
     updateOperationalDate(event.target.id);
+    agendarCalculoAutomatico();
   }
   form.addEventListener('input', onFormChange);
   form.addEventListener('change', onFormChange);
-  get('adicionarEncargo').addEventListener('click', function () { addFee(); invalidateResult(); });
+  var autoCalculationTimer = null;
+  function agendarCalculoAutomatico() {
+    clearTimeout(autoCalculationTimer);
+    autoCalculationTimer = setTimeout(function () {
+      if ((importState && importState.pending.length) || !form.checkValidity()) return;
+      try {
+        display(calculate(readInput()));
+        get('erro').hidden = true;
+      } catch (error) {
+        if (error.message && /confirma que a digitação está correta/.test(error.message)) return;
+        get('vazioContrato').hidden = !get('resultado').hidden;
+        if (get('resultado').hidden) setError(error.message, error.fieldId);
+      }
+    }, 180);
+  }
+  get('adicionarEncargo').addEventListener('click', function () {
+    addFee(); invalidateResult(); agendarCalculoAutomatico();
+  });
   feeList.addEventListener('click', function (event) {
     if (!event.target.closest('.remover-encargo')) return;
     event.target.closest('.encargo').remove();
-    invalidateResult();
+    invalidateResult(); agendarCalculoAutomatico();
   });
   get('modality').addEventListener('change', function (event) {
     manualSeriesSelection = null;
@@ -1093,6 +1174,12 @@
     if (!window.confirm('Apagar os dados desta análise e começar de novo?')) return;
     clearAnalysis();
   });
+  get('novoCalculo').addEventListener('click', function () {
+    if (!window.confirm('Apagar os dados desta análise e começar de novo?')) return;
+    clearAnalysis();
+  });
+  get('abrirCalculo').addEventListener('click', function () { get('importarJson').click(); });
+  get('salvarCalculo').addEventListener('click', function () { get('baixarJson').click(); });
   /* Volta ao estado de tela nova: formulário, importação, pendências, seleções e resultado. */
   function clearAnalysis() {
     form.reset();
@@ -1104,11 +1191,14 @@
     get('informacoesImportadas').replaceChildren();
     get('disbursementDateHelp').hidden = true;
     get('resultado').hidden = true;
+    get('vazioContrato').hidden = false;
+    get('reiniciar').hidden = true;
     get('erro').hidden = true;
     get('revisao').hidden = true;
     get('payrollSubtypeField').hidden = true;
     get('resultadoRevisao').hidden = true;
     get('calcularAnalise').textContent = 'Calcular análise';
+    get('calcularAnalise').hidden = true;
     document.querySelectorAll('.campo-origem').forEach(function (node) { node.textContent = ''; });
     importState = null;
     importedLateCharges = [];

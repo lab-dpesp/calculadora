@@ -49,21 +49,63 @@ leitura sem JavaScript, layout mobile e acessibilidade com Chromium
 5. A versão 0.3 pede permissão para acessar `api.bcb.gov.br`, de onde vêm os índices.
 6. Clicar no ícone abre a calculadora numa aba.
 
-## Três calculadoras
+## Calculadoras
 
-A navegação no topo liga três páginas, com o mesmo motor (`engine.js`, `data.js`, `indices.js`), o mesmo tema e os mesmos dados de quem assina (unidade, cidade, autor):
+A navegação no topo liga os quatro módulos (com uma aba própria para a Fazenda Pública), com o mesmo cabeçalho, largura, tema, formulários em duas colunas e resultado atualizado automaticamente:
 
 - **Pensão alimentícia**: `calc.html`;
-- **Débito cível e Fazenda Pública**: `calc.html?calc=civel`, com as opções avançadas;
-- **Contrato bancário**: `contrato.html`.
+- **Débito cível**: `calc.html?calc=civel`;
+- **Fazenda Pública**: `calc.html?calc=fazenda`;
+- **Contrato bancário**: `contrato.html`;
+- **Cartão consignado (RMC/RCC)**: `cartao.html`.
 
-Cada uma guarda o seu cálculo no navegador. Se "Importar do Copilot", "Abrir cálculo salvo" ou um `.calcjur` trouxer um cálculo de outro tipo (por exemplo, um cível colado na pensão), a tela avisa e oferece abrir na calculadora certa, já com os dados.
+Cada tela guarda o seu cálculo no navegador. Casos antigos da Fazenda salvos na tela cível continuam sendo reconhecidos. Se "Importar do Copilot", "Abrir cálculo salvo" ou um `.calcjur` trouxer um cálculo de outro tipo, a tela avisa e oferece abrir na calculadora certa, já com os dados.
 
-Meses são digitados como MM/AAAA (`01/2020` ou `012020`) e datas como DD/MM/AAAA (`15/03/2023` ou `15032023`); valores inválidos mostram um aviso curto ao lado do campo e impedem o cálculo até serem corrigidos (a tela lista os campos e "Calcular" leva ao primeiro).
+Meses são digitados como MM/AAAA (`01/2020` ou `012020`) e datas como DD/MM/AAAA (`15/03/2023` ou `15032023`). Valores inválidos mostram um aviso ao lado do campo e impedem o resultado até serem corrigidos.
+
+## Cartão consignado (RMC/RCC)
+
+Abra **Cartão consignado** no menu. Informe o convênio, cada saque (data e
+valor) e os descontos por competência. É possível adicionar e remover linhas,
+gerar descontos iguais entre dois meses ou colar duas colunas, por exemplo:
+
+```text
+02/2021	110,00
+03/2021	R$ 110,00
+```
+
+As compras reais ficam em uma seção recolhida; por padrão entram no saldo,
+mas podem ser excluídas. A taxa cobrada pelo banco é opcional e informativa.
+A conversão usa a média BACEN por saque, o teto INSS ou uma taxa informada.
+**A tabela de tetos é parcial:** datas sem fonte oficial bloqueiam esse
+critério; fora do INSS ele não se aplica. Ausência de alerta não confirma
+regularidade da taxa.
+
+O resultado aparece sozinho: total sacado/descontado, quitação ou saldo e
+estimativa de descontos faltantes, indébito nominal/atualizado, três critérios
+de dobro, comparação com nulidade e memória mensal. O padrão do demonstrativo
+é dobro desde 30/03/2021; como os descontos só informam mês, 03/2021 não é
+dobrado. A citação e o recorte "considerar descontos desde" são opcionais;
+o recorte não decide prescrição.
+
+O painel do Copilot lê o bloco do agente de cartão e mostra fontes e
+pendências para conferir antes de preencher. **Salvar/Abrir** usa `.calcjur`
+`tipo: "cartao"`; ao reabrir, um aviso informa se os índices mudaram.
+Preencha processo/atendimento e partes apenas quando necessários: os dados
+ficam no dispositivo e no arquivo/documento que você decidir compartilhar.
+O PDF usa a janela de impressão do navegador; a cópia para Word leva o
+demonstrativo com tabelas.
+
+**São cenários de apoio, não decisão jurídica:** a matéria está afetada ao
+Tema 1.414/STJ; conversão, nulidade, dobro e demais critérios aguardam
+validação do contador. Esses avisos também constam nos demonstrativos.
+
+Teste de tela: `node --test ferramentas/testar-cartao-navegador.js`
+(Chromium e dependências já usados nos demais testes).
 
 ## Pensão alimentícia
 
-Tudo fica numa seção, "Prestações e pagamentos": escolha a base, informe início, fim e percentual (ou quantidade, ou valor), clique em "Preencher prestações" (ou tecle Enter) e confira a tabela mês a mês; o ajuizamento da execução e os pagamentos ficam logo abaixo. Juros e encargos vêm por último, recolhidos, com o resumo do padrão; "Alterar" abre os campos.
+Tudo fica numa seção, "Prestações e pagamentos": escolha a base, informe início, fim e percentual (ou quantidade, ou valor), clique em "Preencher prestações" (ou tecle Enter) e confira a tabela mês a mês; o ajuizamento da execução e os pagamentos ficam logo abaixo. O passo "Como atualizar" mostra os campos de data e juros; o passo "Se precisar" reúne as demais opções.
 
 - Cada período tem início, fim (vazio = até a data do cálculo), dia do vencimento (padrão 10) e base:
   - percentual do salário mínimo (ex.: 30);
@@ -77,6 +119,7 @@ Tudo fica numa seção, "Prestações e pagamentos": escolha a base, informe in�
 - Reajuste anual do valor fixo: a cada 12 meses da data-base (o mês em que o valor foi fixado; vazio = início do período), o valor é multiplicado pela variação do índice nos 12 meses anteriores ao mês do reajuste, com arredondamento em centavos. Ex.: R$ 1.000,00 fixados em 01/2024 com INPC passam a R$ 1.047,68 em 01/2025 e a R$ 1.088,52 em 01/2026. Variação negativa não reduz o valor. Pelo salário mínimo, o valor acompanha a proporção entre o mínimo do mês do reajuste e o da data-base.
 - Ajustes em prestações: o lápis de cada linha da tabela (ou da memória de cálculo) troca o rendimento só daquele mês (13º, férias com 1/3, uma mudança pontual), o valor de uma prestação, ou um novo percentual/valor deste mês em diante (divide o período). O "×" remove a prestação. Os ajustes aparecem destacados na tabela, na memória, na conferência e no anexo do PDF.
 - "+ Parcela avulsa" (ou "Colar lista") inclui na mesma tabela despesas extraordinárias, diferenças e valores fora do título.
+- Prestações vincendas (art. 323 do CPC): preencha "Incluir vincendas até", ao lado da data do cálculo. As prestações que vencem depois do cálculo, até essa data, entram pelo valor original, sem correção nem juros, e ficam fora da base da multa e dos honorários do art. 523. No rito da prisão, contam entre as três últimas antes do ajuizamento e, depois dele, como vencidas no curso do processo. Sem o campo, vencimento depois da data do cálculo é recusado. Refaça o cálculo depois que elas vencerem.
 - A pergunta "Por qual rito vai executar?" (logo acima dos pagamentos) define o que sai do cálculo:
   - prisão e penhora, em execuções separadas (padrão): o débito é separado e cada rito tem o seu botão de PDF e de cópia para o Word;
   - só prisão: entram só as três prestações anteriores ao ajuizamento e as vencidas no curso do processo (art. 528, § 7º, do CPC; Súmula 309/STJ);
@@ -98,13 +141,13 @@ Tudo fica numa seção, "Prestações e pagamentos": escolha a base, informe in�
 
 ## Importar do Copilot (piloto)
 
-1. Crie um agente no Copilot e cole, nas instruções, o texto do arquivo `agente-copilot-calculadora.txt` (versão 2.2, cerca de 6.000 caracteres, abaixo do limite de 8.000).
+1. Crie um agente no Copilot e cole, nas instruções, o texto do arquivo `agente-copilot-calculadora.txt` (cerca de 7.900 caracteres, abaixo do limite de 8.000; copie de novo depois de cada atualização do arquivo).
 2. Na conversa com o agente, anexe a sentença, o acordo ou a decisão de revisão e conte o que for preciso (desemprego, pagamentos, ajuizamento). O agente pergunta o que faltar.
 3. Copie a resposta inteira do agente e cole em "Importar do Copilot", no topo da calculadora. Clique em "Ler dados".
 4. A calculadora mostra o que vai preencher, com a origem de cada dado, e bloqueia o preenchimento se algo estiver inválido.
 5. Depois de "Preencher a calculadora", cada campo mostra a fonte indicada pelo Copilot. O resultado aparece como "a conferir" até alguém clicar em "Concluí a revisão".
 
-Há um segundo agente, para atualizar cálculos anteriores (`agente-copilot-atualizacao.txt`, cerca de 7.700 caracteres). Ele recebe o demonstrativo em PDF, a planilha da parte ou da contadoria, ou o arquivo `.calcjur`, pergunta o que mudou desde então e devolve o mesmo bloco de dados, com o total anterior para comparação. Ele só aproveita do cálculo anterior os dados de entrada (valores originais, datas, bases e pagamentos), nunca valores corrigidos ou totais.
+Há um segundo agente, para atualizar cálculos anteriores (`agente-copilot-atualizacao.txt`, cerca de 7.800 caracteres; desde 11/11/2026 pede também o rito, o termo final por parcela e as vincendas, e manda o perfil 5 quando o cálculo anterior vem de PDF ou planilha — de um `.calcjur`, copia o perfil salvo). Ele recebe o demonstrativo em PDF, a planilha da parte ou da contadoria, ou o arquivo `.calcjur`, pergunta o que mudou desde então e devolve o mesmo bloco de dados, com o total anterior para comparação. Ele só aproveita do cálculo anterior os dados de entrada (valores originais, datas, bases e pagamentos), nunca valores corrigidos ou totais.
 
 Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado para fora do computador na importação: o texto colado é lido pela própria extensão. O formato do bloco de dados ("calcjur-copilot", versão 1) está descrito em `copilot.js` e é o mesmo que a futura API do DOL novo receberia.
 
@@ -114,7 +157,11 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 
 ## Débito cível e Fazenda Pública
 
-- Cível e pensão: correção pela Tabela Prática do TJSP; no regime padrão, juros simples de 0,5% a.m. até 10/01/2003 (CC/1916), 1% até 28/08/2024 e taxa legal desde 29/08/2024, sem lacuna nem sobreposição (ou taxa legal em todo o período, taxa fixa, sem juros).
+O débito cível e a Fazenda Pública têm abas próprias. O endereço `calc.html?calc=civel` abre o cível; `calc.html?calc=fazenda` abre a Fazenda e mantém a compatibilidade com casos Fazenda antigos.
+
+- Cível e pensão: correção pela Tabela Prática do TJSP. Regime padrão (desde 11/11/2026, Tema 1.368/STJ e Assessoria Cível), para título que não fixa a taxa: 0,5% a.m. com correção até 10/01/2003 (CC/1916), só a Selic (juros e correção) de 11/01/2003 a 28/08/2024 e correção mais taxa legal desde 29/08/2024. Se o título fixa 1% a.m., escolha a opção de 1% até 28/08/2024 (0,5% até 10/01/2003) e taxa legal depois. Há ainda taxa legal em todo o período, taxa fixa e sem juros. Nos regimes Selic, se os juros começam antes da correção, até o início desta correm só juros de 1% a.m.
+- Pensão, rito da prisão: as três últimas prestações mensais antes do ajuizamento e, a mais, o 13º vencido nos 90 dias anteriores.
+- Multa contratual (cível): sobre o valor histórico do capital em aberto, só corrigido, sem juros.
 - Juros fixos (1% a.m. ou outra taxa): por padrão, dias contados em mês comercial de 30 dias (DIAS360), como nas planilhas do TJSP; ao lado do regime, dá para escolher meses de data a data e dias corridos, se o título mandar.
 - Taxa legal: a do Banco Central (SGS 29543, Selic menos IPCA-15, Res. CMN 5.171/2024), pro rata pelos dias corridos de cada mês. Antes de 08/2024 (só no regime "taxa legal em todo o período"), Selic do mês anterior menos a variação da Tabela Prática, como a coluna "Selic menos correção" das planilhas do TJSP.
 - Fazenda (não tributário, vencimentos a partir de 07/2009): IPCA-E e juros da poupança até 08/12/2021; Selic depois (EC 113/2021); a partir de 10/09/2025, Selic ou IPCA + 2% a.a. limitado à Selic (EC 136/2025), à escolha.
@@ -129,6 +176,8 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 - Art. 523, § 2º: com o fim do prazo de 15 dias informado, só os pagamentos feitos até ele reduzem a base da multa e dos honorários; os posteriores abatem o débito, mas a base é o débito como se não tivessem sido feitos.
 - Fazenda após a EC 136/2025: a tela avisa que o índice anterior ao requisitório está em discussão no STF (Tema 1.484).
 - Termos próprios por parcela: o botão de calendário ao lado da parcela abre "Correção desde" e "Juros desde". Ex.: dano moral com correção do arbitramento (Súmula 362/STJ) e juros do evento (Súmula 54/STJ). Os juros anteriores ao início da correção incidem sobre o valor nominal.
+- Termo final por parcela (cível e pensão): no mesmo lugar, "Correção até" e "Juros até" fazem a correção ou os juros pararem numa data, quando o título ou uma decisão determinar. Com as duas datas, o saldo da parcela fica parado no valor daquela data; um pagamento posterior abate esse saldo. Só "Juros até": a correção continua. Só "Correção até": os juros continuam sobre o capital corrigido até ali. Depósito ou pagamento continua sendo lançado em "Pagamentos e levantamentos".
+- Vincendas também no cível: com "Incluir vincendas até" preenchido, parcelas avulsas podem vencer depois da data do cálculo e entram pelo valor original. A Fazenda não tem termo final por parcela nem vincendas.
 - `node ferramentas/testar-aleatorio.js [quantidade]` gera casos aleatórios de cível e Fazenda e os recalcula por uma implementação independente (algoritmos diferentes do motor), além de conferir que pagar o total zera o débito e que a imputação soma o valor pago.
 - `node ferramentas/testar-opcoes.js` refaz à mão, direto das tabelas, um caso de cada opção e compara com o motor; a publicação diária roda esse teste junto com os totais de referência.
 - `node ferramentas/testar-propriedades.js [quantidade]` confere regras de bom senso em casos aleatórios de cível, Fazenda e pensão, sem precisar do valor certo: data do cálculo mais tarde não reduz o débito (salvo índice negativo), a ordem de lançamento não muda o total, uma parcela dividida em metades dá o mesmo total, as prestações e os 13º gerados batem com o calendário, prisão + penhora = débito etc. Cada caso também compara o preenchimento manual com a importação Copilot em JSON, variando datas, moedas, bases e formatos de resposta. As propriedades “a decidir” dependem de regra a confirmar (perguntas ao contador) e só são relatadas.
@@ -152,6 +201,7 @@ Os agentes só extraem dados; a conta é sempre da calculadora. Nada é enviado 
 - Com internet, a extensão consulta o Banco Central ao abrir (no máximo a cada 12 horas): INPC, IPCA-15, IPCA-E, IPCA, Selic, taxa legal e salário mínimo.
 - Os fatores novos da Tabela Prática e do IPCA-E são calculados a partir das séries, com o mesmo arredondamento do TJSP, e os meses já existentes são conferidos com a tabela embutida. Divergências aparecem no topo da tela.
 - Sem internet, a calculadora usa a última atualização guardada ou a tabela embutida.
+- A data do cálculo vem preenchida com a de hoje na pensão e no cível. Se o índice do mês ainda não foi divulgado (o IPCA-15 e o INPC saem por volta do dia 10; a taxa legal, no 1º dia útil), a correção para no último índice disponível e a taxa legal no último mês da tabela, com aviso na tela e nas Observações do demonstrativo. Nada é estimado: refaça o cálculo quando o índice sair para ter o valor definitivo. Na Fazenda Pública, a data vem no último dia coberto pelas tabelas, porque o índice ausente ainda bloqueia o cálculo.
 - Em "Índices e fontes" é possível exportar o arquivo de índices e importá-lo numa máquina sem acesso ao Banco Central.
 - A Tabela Prática do TJSP embutida começa em 07/1994 (Plano Real); parcelas anteriores estão em outras moedas e não são aceitas. Os fatores de 07/1994 a 12/2007 e o salário mínimo do mesmo período vêm da planilha oficial do TJSP. Os demais índices (INPC, IPCA, IGP-M, Selic e taxa legal anterior a 08/2024) começam em 2008, então escolher outro índice ou a taxa legal em todo o período para parcelas mais antigas ainda dá aviso de índice ausente.
 - O INPC e o IPCA mensais (desde 2008) vão embutidos para o reajuste anual do valor fixo; o INPC foi conferido com a Tabela Prática (199 meses, sem divergência).
@@ -168,7 +218,7 @@ A mesma pasta funciona como site: basta publicar `calc.html` (renomeado para `in
 
 ## Análise de contrato bancário (protótipo)
 
-`contrato.html` é a calculadora de contrato bancário, aberta pela navegação no topo ("Contrato bancário"). O "Importar do Copilot" dela tem o mesmo desenho e a mesma sequência do da calculadora principal (colar, "Ler dados", prévia, "Preencher a calculadora"), com as pendências e a revisão próprias do contrato. Compara os juros do contrato (crédito pessoal não consignado, consignado e veículos) com a taxa média mensal do Banco Central da competência exata do contrato e mostra um semáforo. A modalidade "Outra / fora do escopo" não é comparada com médias de pessoa física, mas mantém os cálculos financeiros:
+`contrato.html` é a calculadora de contrato bancário, aberta pela navegação no topo ("Contrato bancário"). O "Importar do Copilot" dela tem o mesmo desenho e a mesma sequência do da calculadora principal (colar, "Ler dados", prévia, "Preencher a calculadora"), com as pendências e a revisão próprias do contrato. O resultado é recalculado automaticamente conforme os dados mudam; importações com pendência bloqueante continuam exigindo revisão. Compara os juros do contrato (crédito pessoal não consignado, consignado e veículos) com a taxa média mensal do Banco Central da competência exata do contrato e mostra um semáforo. A modalidade "Outra / fora do escopo" não é comparada com médias de pessoa física, mas mantém os cálculos financeiros:
 
 - verde: até 1,3 vez a média; amarelo: acima de 1,3 e até 1,5 vez; vermelho: acima de 1,5 vez; cinza: sem comparação possível;
 - não extrapola nem troca a competência: antes da primeira observação informa o mês de início daquela série; depois da última, informa a última competência disponível. Os limites vêm das observações carregadas em `contrato/series-bacen.js`, não de datas fixadas na tela;

@@ -111,12 +111,8 @@ function parcelaCivel(p, c, e) {
   let P = p.valor, J = 0;
   const selic = reg === 'selic' || reg === 'selic_tl';
   if (reg !== 'nenhum' && j < b) {          // juros antes do início da correção, sobre o nominal
-    if (!selic) J = r2(J + r2(P * jurosPct(j, b, reg, o) / 100));
-    else {
-      const corte = reg === 'selic_tl' ? (VIG < j ? j : (VIG > b ? b : VIG)) : b;
-      if (j < corte) J = r2(J + r2(P * somaDiaria(D.SELIC, j, corte) / 100));
-      if (corte < b) J = r2(J + r2(P * somaDiaria(D.TAXA_LEGAL, corte, b) / 100));
-    }
+    // Na Selic, antes da correção correm só juros puros: 1% a.m. até 28/08/2024, depois taxa legal (Assessoria Cível).
+    J = r2(J + r2(P * jurosPct(j, b, selic ? 'tjsp' : reg, o) / 100));
   }
   const jEf = j > b ? j : b;
   if (!selic) {
@@ -206,7 +202,14 @@ function esperadoCivel(c) {
   const e = c.ent, linhas = e.parcelas.map(p => parcelaCivel(p, e.dataCalculo, { cor: c.cor, regime: e.regime, o: c.o, dataJuros: e.termoJuros === 'data' ? e.dataJuros : '' }));
   const cap = r2(linhas.reduce((s, l) => s + l.P, 0)), jur = r2(linhas.reduce((s, l) => s + l.J, 0));
   const sub = r2(linhas.reduce((s, l) => s + r2(l.P + l.J), 0));
-  const mc = e.civel.multaContratualPct ? r2(cap * e.civel.multaContratualPct / 100) : 0;
+  // Multa contratual sobre o valor histórico, só com correção monetária. Fora da Selic, isso é o capital corrigido;
+  // na Selic, o nominal corrigido pelo índice escolhido desde o início da correção.
+  const selic = e.regime === 'selic' || e.regime === 'selic_tl';
+  const baseMulta = !selic ? cap : r2(e.parcelas.reduce((s, p) => {
+    const b = p.correcaoDesde || p.vencimento;
+    return s + p.valor * (mesDe(b) !== mesDe(e.dataCalculo) ? Math.max(1, fator(c.cor, mesDe(b), mesDe(e.dataCalculo))) : 1);
+  }, 0));
+  const mc = e.civel.multaContratualPct ? r2(baseMulta * e.civel.multaContratualPct / 100) : 0;
   let suc = 0, s = e.sucumbencia;
   if (s && s.base === 'condenacao') suc = r2(r2(sub + mc) * s.pct / 100);
   if (s && s.base !== 'condenacao') { const vc = r2(s.valor * Math.max(1, fator(c.cor, mesDe(s.data), mesDe(e.dataCalculo)))); suc = s.base === 'causa' ? r2(vc * s.pct / 100) : vc; }

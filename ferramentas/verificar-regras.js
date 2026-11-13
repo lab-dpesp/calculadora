@@ -42,7 +42,7 @@ function apenasDados(arquivo, antes, depois) {
   if (!antes || !depois) return false;
   if (arquivo === 'data.js') {
     const limpar = (texto) => texto.split(/\r?\n/).filter((linha) =>
-      !/^\s*(?:'\d{4}-\d{2}(?:-\d{2})?':\s*-?\d+(?:\.\d+)?\s*,?\s*)+$/.test(linha) &&
+      !/^\s*(?:'\d{4}(?:-\d{2}(?:-\d{2})?)?':\s*-?\d+(?:\.\d+)?\s*,?\s*)+$/.test(linha) &&
       !/^\s*(?:ultimoMes|ultimoMesSelic|indicesEmbutidosEm):\s*'\d{4}-\d{2}(?:-\d{2})?',?\s*$/.test(linha)
     ).join('\n');
     return normalizar(limpar(antes)) === normalizar(limpar(depois));

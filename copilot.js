@@ -19,8 +19,9 @@
  *       selic     Selic como juros e correção em todo o período; selic_tl  Selic até 28/08/2024, depois índice + taxa legal.
  *   "civel": { "indice": "tjsp" | "ipca" | "inpc" | "ipcae" | "igpm" | "nenhum", "indice2": "...", "indice2Desde": "AAAA-MM",
  *              "jurosCompostos": false, "multaContratualPct": 2 },  (débito cível, opcional: opções avançadas)
- *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo", "pct": 10, "valor": 0, "data": "AAAA-MM-DD",
- *                    "transito": "AAAA-MM-DD" },   (opcional; trânsito em julgado: juros do art. 85, § 16, do CPC)
+ *   "sucumbencia": { "base": "condenacao" | "causa" | "fixo" | "faixas", "pct": 10, "valor": 0, "data": "AAAA-MM-DD",
+ *                    "transito": "AAAA-MM-DD", "dataSalario": "AAAA-MM-DD", "percentuais": [10, 8, 5, 3, 1] },
+ *                                                                     (opcional; faixas do art. 85, § 3º, da Fazenda)
  *   "periodos": [ { "inicio": "AAAA-MM", "fim": "AAAA-MM" | null, "diaVencimento": 10,
  *                   "base": "pct_sm" | "qtd_sm" | "pct_rend" | "fixo", "valor": 30, "incide13": false,
  *                   "rendimentos": [ { "desde": "AAAA-MM", "valor": 3500.00, "origem": "..." } ],
@@ -30,10 +31,12 @@
  *                                                                     (pensão, opcional: rendimento do mês ou valor
  *                                                                      de uma prestação no lugar do apurado pela base)
  *   "dataAjuizamento": { "data": "AAAA-MM-DD", "origem": "..." },    (pensão, opcional)
+ *   "vincendasAte": "AAAA-MM-DD",   (pensão e cível, opcional: parcelas vincendas até esta data, pelo valor nominal)
  *   "ritoExecucao": "ambos" | "prisao" | "penhora",                  (pensão, opcional; ausente: ainda não definido)
  *   "ritosManuais": { "p:AAAA-MM" | "d:AAAA": "prisao" | "penhora" }, (pensão, opcional: prestações movidas de rito)
  *   "outrasParcelas": [ { "vencimento": "AAAA-MM-DD", "valor": 0, "descricao": "...", "origem": "...",
  *                         "correcaoDesde": "AAAA-MM-DD", "jurosDesde": "AAAA-MM-DD",
+ *                         "correcaoAte": "AAAA-MM-DD", "jurosAte": "AAAA-MM-DD",   (opcionais: fim próprio, ex.: depósito)
  *                         "obrigacao": "ID opcional, até 80 caracteres" } ],
  *       O mesmo ID identifica frações de uma obrigação; sem ID, as linhas são dívidas autônomas.
  *   "pagamentos": [ { "data": "AAAA-MM-DD", "valor": 0, "origem": "..." } ],
@@ -41,7 +44,14 @@
  *                                         que vence no mês do pagamento, padrão; "automatica", as vencidas mais
  *                                         antigas. Ausente: "mes"; em arquivo salvo pela calculadora antes da
  *                                         opção, "automatica", o critério com que ele foi calculado)
- *   "fazenda": { "posEC136": "selic" | "ipca2" },                     (opcional)
+ *   "fazenda": { "natureza": "administrativa" | "servidor" | "previdenciaria" | "tributaria" | "desapropriacao",
+ *                "posEC136": "selic" | "ipcae_poup" | "ipca_tl" | "ipca2",
+ *                "quemDeve": "estado_sp" | "municipio_sp" | "municipio_outro" | "municipio_sem_lei" | "uniao",
+ *                "ufespValor": 0, "tetoMunicipal": 0, "selicSoCapital": false, "comparar": false },
+ *                                                                     (opcional; ausência mantém o padrão legado)
+ *   "requisitorio": { "tipo": "precatorio" | "rpv", "dataBase": "AAAA-MM-DD", "dataExpedicao": "AAAA-MM-DD",
+ *                     "dataFinal": "AAAA-MM-DD", "dataInicioGraca": "AAAA-MM-DD", "dataLimite": "AAAA-MM-DD",
+ *                     "valorPago": 0 },                              (opcional; estimativa, não cálculo oficial)
  *   "encargos": { "multa523": false, "honorariosPct": null, "prazo523": "AAAA-MM-DD" },   (prazo523 = data final
  *                                                                      confirmada, exigida para encargos do art. 523
  *                                                                      fora da Fazenda; a calculadora não conta prazo)
@@ -52,7 +62,8 @@
  *
  * O arquivo "Salvar cálculo" (.calcjur) usa este mesmo formato, com mais alguns campos opcionais: "perfilCalculo"
  * (1 = corte em 29/08/2024, com eventos antigos; 2 = corte em 30/08/2024, com eventos antigos;
- * 3 = corte em 30/08/2024, sem atualizações incidentais; 4 = corte atual em 29/08/2024), "partes"
+ * 3 = corte em 30/08/2024, sem atualizações incidentais; 4 = corte atual em 29/08/2024, com arredondamento por evento;
+ * 5 = corte atual, sem arredondar operações intermediárias), "partes"
  * { exequente, executado }, "revisado" (true quando a importação do Copilot já foi revisada), "historico"
  * [ { dataCalculo, total } ] dos cálculos anteriores, "indices" (os índices usados, para conferir se mudaram
  * quando o arquivo for reaberto) e "parcela" em cada pagamento (imputação indicada:
@@ -76,9 +87,13 @@
   };
   var REGIMES = { tjsp: 1, taxalegal: 1, fixa: 1, nenhum: 1, duas: 1, selic: 1, selic_tl: 1 };
   var CONTAGENS_JUROS = { prorata: 1, mescheio: 1 };
+  var CRITERIOS_FAZENDA = { selic: 1, ipcae_poup: 1, ipca_tl: 1, ipca2: 1 };
+  var NATUREZAS_FAZENDA = { administrativa: 1, servidor: 1, previdenciaria: 1, tributaria: 1, desapropriacao: 1 };
   var INDICES = { tjsp: 1, ipca: 1, inpc: 1, ipcae: 1, igpm: 1, nenhum: 1 };
 
-  var SUCUMBENCIAS = { condenacao: 1, causa: 1, fixo: 1 };
+  var SUCUMBENCIAS = { condenacao: 1, causa: 1, fixo: 1, faixas: 1 };
+  var DEVEDORES_FAZENDA = { estado_sp: 1, municipio_sp: 1, municipio_outro: 1, municipio_sem_lei: 1, uniao: 1 };
+  var TIPOS_REQUISITORIO = { precatorio: 1, rpv: 1 };
   /* Só chaves próprias: "constructor" ou "hasOwnProperty" existem em todo objeto e não podem passar por opção válida. */
   function tem(obj, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k); }
   /* Limites de tamanho: um bloco absurdo (milhares de itens ou megabytes de texto) travaria a tela. */
@@ -168,7 +183,8 @@
     if (o.formato !== 'calcjur-copilot') avisos.push('O bloco não se identifica como "calcjur-copilot". Confira se veio do agente da calculadora.');
     if (o.versao != null && Number(o.versao) !== 1) avisos.push('Versão ' + o.versao + ' do formato; esta calculadora lê a versão 1.');
 
-    var d = { tipo: null, processo: texto(o.processo), juros: null, posEC136: null, periodos: [], ajuizamento: null,
+    var d = { tipo: null, processo: texto(o.processo), juros: null, posEC136: null, naturezaFazenda: null, quemDeve: null,
+      ufespValor: null, tetoMunicipal: null, requisitorio: null, periodos: [], ajuizamento: null,
       parcelas: [], pagamentos: [], encargos: null, pendencias: [], observacoes: texto(o.observacoes) };
     /* Número de exemplo (só zeros) copiado pelo agente quando não sabe o processo: vira campo vazio. */
     if (d.processo && !/[1-9]/.test(d.processo.replace(/\.8\.26\./, '.'))) {
@@ -211,7 +227,28 @@
       }
       d.juros = jr;
     }
-    if (o.fazenda && (o.fazenda.posEC136 === 'selic' || o.fazenda.posEC136 === 'ipca2')) d.posEC136 = o.fazenda.posEC136;
+    if (o.fazenda && typeof o.fazenda === 'object') {
+      if (o.fazenda.posEC136 != null) {
+        if (tem(CRITERIOS_FAZENDA, o.fazenda.posEC136)) d.posEC136 = o.fazenda.posEC136;
+        else erros.push('Critério da Fazenda após 10/09/2025 desconhecido: "' + texto(o.fazenda.posEC136) + '".');
+      }
+      if (o.fazenda.natureza != null) {
+        if (tem(NATUREZAS_FAZENDA, o.fazenda.natureza)) d.naturezaFazenda = o.fazenda.natureza;
+        else erros.push('Natureza do débito da Fazenda desconhecida: "' + texto(o.fazenda.natureza) + '".');
+      }
+      d.selicSoCapital = o.fazenda.selicSoCapital === true;
+      d.compararFazendaDoc = o.fazenda.comparar === true;
+      if (o.fazenda.quemDeve != null) {
+        if (tem(DEVEDORES_FAZENDA, o.fazenda.quemDeve)) d.quemDeve = o.fazenda.quemDeve;
+        else erros.push('Ente devedor da Fazenda desconhecido: "' + texto(o.fazenda.quemDeve) + '".');
+      }
+      ['ufespValor', 'tetoMunicipal'].forEach(function (k) {
+        if (o.fazenda[k] == null || o.fazenda[k] === '') return;
+        var n = numero(o.fazenda[k]);
+        if (!(n > 0) || n > 1000000000000) erros.push('Valor de ' + k + ' inválido.');
+        else d[k] = n;
+      });
+    }
     if (o.civel && typeof o.civel === 'object') {
       var cv = o.civel, c = {};
       if (cv.indice != null && cv.indice !== '') { if (tem(INDICES, cv.indice)) c.indice = cv.indice; else erros.push('Índice de correção desconhecido: "' + texto(cv.indice) + '".'); }
@@ -230,7 +267,32 @@
     if (o.sucumbencia && typeof o.sucumbencia === 'object' && o.sucumbencia.base) {
       var su = o.sucumbencia, sb = tem(SUCUMBENCIAS, su.base) ? su.base : null;
       if (!sb) erros.push('Base dos honorários de sucumbência desconhecida: "' + texto(su.base) + '".');
-      else d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '', transito: data(su.transito) || '' };
+      else {
+        var percentuais = Array.isArray(su.percentuais) ? su.percentuais.slice(0, 5).map(numero) : [];
+        if (Array.isArray(su.percentuais) && su.percentuais.length > 5) erros.push('Informe no máximo cinco percentuais das faixas de honorários.');
+        if (percentuais.some(function (p) { return !isFinite(p) || p <= 0 || p > 100; })) erros.push('Percentual das faixas de honorários inválido.');
+        d.sucumbencia = { base: sb, pct: numero(su.pct), valor: numero(su.valor), data: data(su.data) || '', transito: data(su.transito) || '',
+          dataSalario: data(su.dataSalario) || '', percentuais: percentuais };
+        if (su.dataSalario && !d.sucumbencia.dataSalario) erros.push('Data do salário mínimo dos honorários inválida.');
+      }
+    }
+    if (o.requisitorio && typeof o.requisitorio === 'object') {
+      var rq = o.requisitorio, tipoRq = texto(rq.tipo), datasRq = ['dataBase', 'dataExpedicao', 'dataFinal', 'dataInicioGraca', 'dataLimite'];
+      if (!tem(TIPOS_REQUISITORIO, tipoRq)) erros.push('Tipo de requisitório desconhecido: "' + tipoRq + '".');
+      else {
+        d.requisitorio = { tipo: tipoRq, valorPago: null };
+        datasRq.forEach(function (k) {
+          var valorData = texto(rq[k]);
+          var parsedData = data(valorData);
+          if (valorData && !parsedData) erros.push('Data de ' + k + ' do requisitório inválida.');
+          d.requisitorio[k] = parsedData || '';
+        });
+        if (rq.valorPago != null && rq.valorPago !== '') {
+          var vp = numero(rq.valorPago);
+          if (!isFinite(vp) || vp <= 0 || vp > 1000000000000) erros.push('Valor pago do requisitório inválido.');
+          else d.requisitorio.valorPago = vp;
+        }
+      }
     }
 
     (Array.isArray(o.periodos) ? o.periodos : []).forEach(function (p, i) {
@@ -307,18 +369,25 @@
       else erros.push('Data do ajuizamento inválida ("' + texto(typeof aj === 'object' ? aj.data : aj) + '").');
     }
 
+    if (o.vincendasAte != null && o.vincendasAte !== '') {
+      var va = data(o.vincendasAte);
+      if (va) d.vincendasAte = va;
+      else erros.push('Data de "vincendas até" inválida ("' + texto(o.vincendasAte) + '").');
+    }
     (Array.isArray(o.outrasParcelas) ? o.outrasParcelas : (Array.isArray(o.parcelas) ? o.parcelas : [])).forEach(function (p, i) {
       var v = data(p && p.vencimento), val = numero(p && p.valor);
       if (!v || !(val > 0)) { erros.push('Parcela ' + (i + 1) + ': vencimento ou valor inválido.'); return; }
       var cd = p.correcaoDesde ? data(p.correcaoDesde) : '', jd = p.jurosDesde ? data(p.jurosDesde) : '';
       if (cd === null || jd === null) { erros.push('Parcela ' + (i + 1) + ': data de início da correção ou dos juros inválida.'); return; }
+      var ca = p.correcaoAte ? data(p.correcaoAte) : '', ja = p.jurosAte ? data(p.jurosAte) : '';
+      if (ca === null || ja === null) { erros.push('Parcela ' + (i + 1) + ': data de fim da correção ou dos juros inválida.'); return; }
       var obrigacao = '';
       if (Object.prototype.hasOwnProperty.call(p, 'obrigacao')) {
         if (typeof p.obrigacao !== 'string') { erros.push('Parcela ' + (i + 1) + ': obrigação (ID) deve ser texto.'); return; }
         obrigacao = p.obrigacao.trim();
         if (obrigacao.length > 80) { erros.push('Parcela ' + (i + 1) + ': obrigação (ID) deve ter até 80 caracteres.'); return; }
       }
-      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem), correcaoDesde: cd || '', jurosDesde: jd || '', obrigacao: obrigacao });
+      d.parcelas.push({ vencimento: v, valor: val, descricao: texto(p.descricao), origem: texto(p.origem), correcaoDesde: cd || '', jurosDesde: jd || '', correcaoAte: ca || '', jurosAte: ja || '', obrigacao: obrigacao });
     });
     var vistos = {};
     (Array.isArray(o.pagamentos) ? o.pagamentos : []).forEach(function (p, i) {
@@ -377,10 +446,10 @@
     }
     if (o.perfilCalculo != null) {
       var perfil = Number(o.perfilCalculo);
-      if (perfil === 1 || perfil === 2 || perfil === 3 || perfil === 4) d.perfilCalculo = perfil;
+      if (perfil === 1 || perfil === 2 || perfil === 3 || perfil === 4 || perfil === 5) d.perfilCalculo = perfil;
       else erros.push('Perfil de cálculo desconhecido: "' + texto(o.perfilCalculo) + '".');
     } else {
-      d.perfilCalculo = d.calculoAnterior ? 1 : 4;
+      d.perfilCalculo = d.calculoAnterior ? 1 : 5;
     }
     d.historico = (Array.isArray(o.historico) ? o.historico : []).map(function (h) {
       return h && { dataCalculo: data(h.dataCalculo), total: numero(h.total) };

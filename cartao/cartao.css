@@ -1,0 +1,61 @@
+.titulo-cartao { margin: 0 0 12px; font-size: 22px; }
+.area-entrada, .area-resultado { min-width: 0; }
+.lancamentos { display: grid; gap: 8px; margin: 14px 0; }
+.lancamento { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; align-items: end; }
+.lancamento label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; min-width: 0; }
+.lancamento .fonte-linha { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
+.lancamento .remover { color: var(--danger); border-color: var(--border); }
+.gerador { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.gerador .grade { margin-top: 12px; }
+.gerador button { margin-top: 10px; }
+.gerador > label { display: block; margin-top: 12px; }
+.opcao { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+.opcao input { min-height: 20px; width: 20px; }
+.cenario { margin: 18px 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.cenario h3 { margin-bottom: 10px; }
+.cenario .metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cenario .restituicoes { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px; }
+.restituicoes .metrica { padding: 8px; }
+.restituicoes .metrica strong { font-size: 17px; }
+.restituicoes .selecionado { border: 2px solid var(--green); background: var(--verde-fundo); }
+.projecao { margin: 12px 0 0; }
+.alertas-cartao { margin: 18px 0; overflow-wrap: anywhere; }
+.alerta-r07 { padding: 10px 12px; border-left: 4px solid var(--amarelo-borda); background: var(--amarelo-fundo); margin: 8px 0; }
+.alerta-grave { border-color: var(--vermelho); background: var(--vermelho-fundo); }
+#fontesImportadas, #criteriosTela { overflow-wrap: anywhere; }
+#demonstrativo { display: none; }
+.memoria-cartao caption { text-align: left; padding: 8px; font-weight: 600; }
+.memoria-cartao thead { background: var(--cinza-fundo); }
+.memoria-cartao th { white-space: normal; }
+.memoria-cartao td { font-variant-numeric: tabular-nums; }
+@media (min-width: 1050px) {
+  .pagina { width: min(100% - 40px, 1240px); }
+  .area-calculo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+}
+@media (max-width: 480px) {
+  .lancamento { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lancamento .remover { grid-column: 1 / -1; justify-self: end; min-height: 36px; }
+  .cenario .metricas { grid-template-columns: 1fr; }
+  .cenario .restituicoes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .restituicoes .metrica { padding: 7px 4px; }
+  .restituicoes .metrica strong { font-size: 14px; }
+  .restituicoes .metrica span { font-size: 11px; }
+}
+@page { size: A4; margin: 16mm; }
+@media print {
+  :root, :root[data-tema="escuro"] { color-scheme: light; --text: #000; --muted: #333; --border: #aaa; --surface: #fff; --background: #fff; --verde-fundo: #fff; --amarelo-fundo: #fff; --vermelho-fundo: #fff; }
+  body > :not(#demonstrativo) { display: none !important; }
+  #demonstrativo { display: block; color: #000; font-size: 10pt; line-height: 1.35; }
+  #demonstrativo h1 { font-size: 17pt; }
+  #demonstrativo h2 { font-size: 13pt; margin-top: 20px; }
+  #demonstrativo h3 { font-size: 11pt; }
+  #demonstrativo p, #demonstrativo li { overflow-wrap: anywhere; }
+  #demonstrativo table { font-size: 8pt; table-layout: auto; margin: 10px 0; }
+  #demonstrativo th, #demonstrativo td { padding: 4px; white-space: normal; color: #000; }
+  #demonstrativo thead { display: table-header-group; }
+  #demonstrativo tr { break-inside: avoid; }
+  #demonstrativo .cenario, #demonstrativo .painel { break-inside: auto; }
+  #demonstrativo .tabela-wrap { overflow: visible; border: 0; }
+  #demonstrativo .metricas { display: grid; }
+  #demonstrativo .metrica strong { font-size: 11pt; }
+}

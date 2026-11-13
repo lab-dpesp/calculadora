@@ -40,22 +40,30 @@
     <div class="topo-dir">
       <span class="aviso-acao aviso-topo" id="avisoArquivo" role="status"></span>
       <button type="button" class="status-indices" id="statusIndices" aria-controls="painelIndices">
-        <span class="badge badge-neutro" id="statusSelo">Índices</span>
+        <span class="badge badge-neutro" id="statusSelo">Índices até</span>
         <span class="sub" id="statusTexto">Carregando índices…</span>
       </button>
-      <button type="button" class="q-btn-flat" id="novoCalculo" title="Começar um cálculo do zero: apaga os dados da tela (salve antes, se quiser guardar)"><svg class="ic"><use href="#i-add"/></svg>Novo cálculo</button>
-      <button type="button" class="q-btn-flat" id="abrirCalculo" title="Abrir um cálculo salvo (.calcjur): as prestações novas entram sozinhas e você só lança o que mudou"><svg class="ic"><use href="#i-folder"/></svg>Abrir</button>
-      <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo para guardar na pasta do caso"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
+      <a class="link-indices" href="#painelIndices">Índices e fontes</a>
+      <details class="acoes-arquivo">
+        <summary>Ações</summary>
+        <div>
+          <button type="button" class="q-btn-flat" id="novoCalculo" title="Começar um cálculo novo; salve antes se quiser guardar"><svg class="ic"><use href="#i-add"/></svg>Novo</button>
+          <button type="button" class="q-btn-flat" id="abrirCalculo" title="Abrir um cálculo salvo (.calcjur)"><svg class="ic"><use href="#i-folder"/></svg>Abrir</button>
+          <button type="button" class="q-btn-flat" id="salvarCalculo" title="Salvar o cálculo num arquivo"><svg class="ic"><use href="#i-save"/></svg>Salvar</button>
+        </div>
+      </details>
       <button type="button" class="q-btn-flat" id="btnFontes" aria-pressed="true" hidden title="Mostrar ou esconder a fonte de cada dado importado"><svg class="ic"><use href="#i-spark"/></svg>Fontes</button>
       <a class="q-btn-flat" id="novaAba" href="./" target="_blank" rel="noopener" hidden title="Abrir a calculadora numa aba própria, caso salvar, abrir ou gerar o PDF não funcione dentro desta página"><svg class="ic"><use href="#i-nova"/></svg>Nova aba</a>
       <input type="file" id="arquivoCalculo" accept=".calcjur,.json,application/json" hidden>
-      <button type="button" class="q-btn-flat btn-tema" id="btnTema" title="Tema da tela: automático, claro ou escuro"><svg class="ic"><use href="#i-tema"/></svg><span id="rotuloTema">Automático</span></button>
+      <button type="button" class="q-btn-flat btn-tema" id="btnTema" aria-label="Tema claro ou escuro" title="Tema claro ou escuro"><svg class="ic"><use href="#i-tema"/></svg><span id="rotuloTema" class="sr" aria-hidden="true">Automático</span></button>
     </div>
   </header>
   <nav class="nav-calc" aria-label="Calculadoras">
     <a href="calc.html" data-calc="pensao">Pensão alimentícia</a>
-    <a href="calc.html?calc=civel" data-calc="civel">Débito cível e Fazenda Pública</a>
+    <a href="calc.html?calc=civel" data-calc="civel">Débito cível</a>
+    <a href="calc.html?calc=fazenda" data-calc="fazenda">Fazenda Pública</a>
     <a href="contrato.html" data-calc="contrato">Contrato bancário</a>
+    <a href="cartao.html" data-calc="cartao">Cartão consignado</a>
   </nav>
 
   <main class="pagina">
@@ -63,7 +71,7 @@
     <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação: Importar do Copilot" title="Explicação">i</button><span class="ajuda">Cole a resposta do agente da calculadora no Copilot. Os campos se preenchem e você revisa.</span>
     <details class="importar-copilot" id="painelCopilot">
       <summary>
-        <span class="ic-titulo"><svg class="ic-icone" aria-hidden="true"><use href="#i-spark"/></svg>Importar do Copilot</span>
+        <span class="ic-titulo"><svg class="ic-icone" aria-hidden="true"><use href="#i-spark"/></svg>Preencher com os dados extraídos pelo Copilot</span>
       </summary>
       <div class="ic-corpo">
         <label class="ic-campo">
@@ -109,14 +117,75 @@
     <form id="form" autocomplete="off" novalidate>
       <section class="painel" id="painelLancamentos">
         <div class="cartao-cab">
-          <h2 class="painel-titulo sem-margem"><span data-so="pensao">Prestações e pagamentos</span><span data-nao="pensao" hidden>Parcelas e pagamentos</span></h2>
+          <h2 class="painel-titulo sem-margem"><span class="passo-numero">1</span><span>O débito</span></h2>
           <button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação" data-so="pensao">i</button><span class="sub ajuda">Escolha a base, informe início e percentual e clique em "Preencher prestações": a tabela mostra uma prestação por mês, editável na própria linha. Em salários mínimos, vale o salário mínimo da data de cada vencimento.</span>
         </div>
-        <div class="abas" role="tablist" aria-label="Tipo de débito" data-nao="pensao" hidden>
-          <button type="button" role="tab" class="aba" data-tipo="particular" aria-selected="true">Débito cível</button>
-          <button type="button" role="tab" class="aba" data-tipo="fazenda" aria-selected="false">Fazenda Pública</button>
+        <span id="descricaoAba" hidden></span>
+
+        <div class="linha-campos" data-so="fazenda" hidden>
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Natureza do débito</span>
+            <select id="naturezaFazenda">
+              <option value="administrativa">Administrativa em geral / responsabilidade civil</option>
+              <option value="servidor">Servidor ou empregado público</option>
+              <option value="previdenciaria">Previdenciária ou acidentária (INSS)</option>
+              <option value="tributaria">Tributária (repetição de indébito)</option>
+              <option value="desapropriacao">Desapropriação</option>
+            </select>
+          </label>
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Quem deve</span>
+            <select id="quemDeve">
+              <option value="">Não informado</option>
+              <option value="estado_sp">Estado de SP, autarquia, fundação ou universidade estadual</option>
+              <option value="municipio_sp">Município de São Paulo</option>
+              <option value="municipio_outro">Outro município — teto da lei local</option>
+              <option value="municipio_sem_lei">Outro município — sem lei local (30 salários mínimos)</option>
+              <option value="uniao">União, INSS ou autarquia federal</option>
+            </select>
+          </label>
+          <label class="q-campo q-campo-medio" id="campoUfespValor" hidden>
+            <span class="q-rotulo">UFESP do ano da conta (R$)</span>
+            <input type="text" inputmode="decimal" id="ufespValor" placeholder="Informe o valor oficial">
+          </label>
+          <label class="q-campo q-campo-medio" id="campoTetoMunicipal" hidden>
+            <span class="q-rotulo">Teto municipal (R$)</span>
+            <input type="text" inputmode="decimal" id="tetoMunicipal" placeholder="Informe o teto vigente">
+          </label>
+          <div class="q-campo q-campo-medio criterio-fazenda">
+            <span class="q-rotulo">A partir de 10/09/2025 (EC 136/2025; Tema 1.484/STF pendente)</span>
+            <select id="posEC136" hidden aria-hidden="true" tabindex="-1">
+              <option value="selic">Selic da EC 113/2021</option>
+              <option value="ipcae_poup">IPCA-E + juros da poupança (Tema 905/STJ)</option>
+              <option value="ipca_tl">IPCA-15 + taxa legal (Lei 14.905/2024)</option>
+              <option value="ipca2">IPCA + 2% a.a., limitado à Selic</option>
+            </select>
+            <fieldset class="opcoes-ec136" aria-label="Critério após 10/09/2025">
+              <legend class="sr">A partir de 10/09/2025 — em discussão no STF (Tema 1.484)</legend>
+              <label><input type="radio" name="posEC136Visivel" value="selic" checked><span><strong>Selic</strong><small>Critério da EC 113/2021.</small></span></label>
+              <label><input type="radio" name="posEC136Visivel" value="ipcae_poup"><span><strong>IPCA-E + poupança</strong><small>Referência do Tema 905/STJ.</small></span></label>
+              <label><input type="radio" name="posEC136Visivel" value="ipca_tl"><span><strong>IPCA-15 + taxa legal</strong><small>Lei 14.905/2024; na previdenciária, série CJF.</small></span></label>
+              <label><input type="radio" name="posEC136Visivel" value="ipca2"><span><strong>IPCA + 2% a.a.</strong><small>Tese das Fazendas, limitada à Selic.</small></span></label>
+            </fieldset>
+            <span class="sub" id="avisoTaxaLegalPrevid" hidden>A taxa legal previdenciária do CJF não está disponível para a data escolhida; essa combinação foi desabilitada, sem aproximação.</span>
+          </div>
+          <label class="opcao opcao-pequena">
+            <input type="checkbox" id="compararFazendaDoc">
+            Incluir comparação dos critérios no demonstrativo
+          </label>
+          <label class="opcao opcao-pequena">
+            <input type="checkbox" id="selicSoCapital">
+            Selic só sobre o capital corrigido (tese discutida no Tema 1.349/STF)
+          </label>
         </div>
-        <p class="descricao-aba" data-nao="pensao" hidden><button type="button" class="btn-info" aria-expanded="false" aria-label="Explicação" title="Explicação">i</button><span class="sub ajuda" id="descricaoAba"></span></p>
+        <p class="nota" data-so="fazenda" hidden>
+          Índice diferente fixado no título não impede a aplicação da lei nova e das teses do STF (Temas 1.170 e 1.361); confira o título. Os critérios após 10/09/2025 são controvertidos e estão pendentes de validação. O teto de pequeno valor é apenas uma estimativa informativa por credor; confira a data aplicável e a lei do ente. Não se fraciona a execução (art. 100, § 8º, da Constituição).
+        </p>
+        <div class="linha-tempo-fazenda" id="linhaTempoFazenda" data-so="fazenda" hidden aria-label="Linha do tempo dos critérios da Fazenda Pública">
+          <div><strong>IPCA-E + poupança</strong><span id="tempoFazendaAntes">Até 08/12/2021</span></div>
+          <div><strong>Selic</strong><span id="tempoFazendaSelic">09/12/2021 a 09/09/2025</span></div>
+          <div><strong>Depois da EC 136</strong><span id="tempoFazendaDepois">Desde 10/09/2025</span></div>
+        </div>
 
         <div class="bloco-pensao" id="painelPensao" data-so="pensao">
           <ol class="lista periodos" id="periodos"></ol>
@@ -255,32 +324,38 @@
         </div>
       </section>
 
-      <details class="painel recolhivel painel-juros" id="painelJuros">
+      <details class="painel recolhivel painel-juros" id="painelJuros" open>
         <summary>
-          <span class="painel-titulo sem-margem">Juros e encargos</span>
+          <span class="painel-titulo sem-margem"><span class="passo-numero">2</span>Como atualizar</span>
           <span class="badge badge-alerta" id="seloJuros" hidden>Alterado</span>
           <span class="sub resumo-juros" id="resumoJuros"></span>
           <span class="alterar-juros" aria-hidden="true"></span>
         </summary>
         <div class="juros-corpo">
         <div class="linha-campos">
-          <label class="q-campo q-campo-medio">
+          <label class="q-campo q-campo-medio" id="campoDataCalculo">
             <span class="q-rotulo">Data do cálculo</span>
             <input type="text" id="dataCalculo" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" required>
+          </label>
+          <label class="q-campo q-campo-medio" id="campoVincendas" data-nao="fazenda">
+            <span class="q-rotulo">Incluir vincendas até (opcional)</span>
+            <input type="text" id="vincendasAte" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" title="Parcelas que vencem depois da data do cálculo, até esta data, entram pelo valor nominal, sem correção nem juros e fora da base do art. 523 (art. 323 do CPC).">
           </label>
           <label class="q-campo q-campo-largo" data-nao="fazenda">
             <span class="q-rotulo">Juros de mora</span>
             <select id="regime">
-              <option value="tjsp">0,5% a.m. até 10/01/2003; 1% até 28/08/2024; depois taxa legal</option>
-              <option value="taxalegal">Taxa legal em todo o período (Tema 1368/STJ)</option>
+              <option value="selic_tl" selected>Juros legais: Selic até 28/08/2024, depois correção + taxa legal (título sem taxa definida)</option>
+              <option value="tjsp">1% a.m. até 28/08/2024 (0,5% até 10/01/2003); depois taxa legal (título que fixa 1%)</option>
+              <option value="taxalegal">Taxa legal em todo o período (só se o título determinar)</option>
               <option value="fixa">Taxa fixa mensal</option>
               <option value="nenhum">Sem juros</option>
               <optgroup label="Outros critérios">
                 <option value="duas">Uma taxa até certa data, depois outra</option>
                 <option value="selic">Selic (juros e correção) em todo o período</option>
-                <option value="selic_tl">Selic até 28/08/2024, depois correção + taxa legal</option>
               </optgroup>
             </select>
+            <span class="sub" id="ajudaRegime" role="note">Padrão (Tema 1.368/STJ, Assessoria Cível, 11/11/2026): se o título fala só em juros legais ou no art. 406, Selic até 28/08/2024; se fixa 1% ao mês, escolha a segunda opção. O que o título disser prevalece. As datas contam o dia inicial: na contagem da planilha do TJSP, que exclui o dia do começo, é o regime anterior até 29/08/2024 e a taxa legal desde 30/08/2024 (mesmos dias de juros).</span>
+            <span class="sub" id="avisoTaxaLegalRetroativa" role="note" hidden>A Lei 14.905/2024 não retroage: antes de 29/08/2024 vale o regime anterior, conforme o título (orientação do contador, 10/11/2026). Use esta opção só se o título determinar a taxa legal para todo o período.</span>
           </label>
           <label class="q-campo q-campo-curto" id="campoTaxaFixa" hidden>
             <span class="q-rotulo">Taxa mensal (%)</span>
@@ -293,7 +368,7 @@
               <option value="corridos">Meses de data a data e dias corridos</option>
             </select>
           </label>
-          <label class="q-campo q-campo-medio">
+          <label class="q-campo q-campo-medio" id="campoContagemJuros">
             <span class="q-rotulo">Contagem de juros</span>
             <select id="contagemJuros">
               <option value="prorata">Pro rata (padrão)</option>
@@ -323,19 +398,7 @@
             <span class="q-rotulo">Taxa (% a.m.)</span>
             <input type="text" inputmode="decimal" id="duasTaxa2" value="0,5">
           </label>
-          <label class="q-campo q-campo-largo" data-so="fazenda" hidden>
-            <span class="q-rotulo">A partir de 10/09/2025 (EC 136/2025)</span>
-            <select id="posEC136">
-              <option value="selic">Manter a Selic da EC 113/2021</option>
-              <option value="ipca2">IPCA + 2% a.a., limitado à Selic</option>
-            </select>
-          </label>
         </div>
-
-        <p class="nota" data-so="fazenda" hidden>
-          Débito não tributário com vencimentos a partir de 07/2009. IPCA-E e juros da poupança até 08/12/2021 (Temas 810/STF e 905/STJ); Selic a partir de 09/12/2021 (EC 113/2021), ou do termo inicial dos juros, se posterior.
-          A regra para o período anterior à expedição do requisitório depois da EC 136/2025 ainda não está pacificada: escolha o critério acima.
-        </p>
 
         <div class="linha-opcoes">
           <fieldset class="grupo-opcoes" id="campoTermo">
@@ -412,6 +475,7 @@
                 <select id="sucBase">
                   <option value="">Não incluir</option>
                   <option value="condenacao">% sobre a condenação</option>
+                  <option value="faixas">Faixas progressivas (Fazenda, art. 85, § 3º)</option>
                   <option value="causa">% sobre o valor da causa</option>
                   <option value="fixo">Valor fixado em reais</option>
                 </select>
@@ -432,11 +496,41 @@
                 <span class="q-rotulo">Trânsito em julgado (juros)</span>
                 <input type="text" id="sucTransito" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
               </label>
+              <label class="q-campo q-campo-medio" id="campoSucDataSalario" hidden>
+                <span class="q-rotulo">Data da sentença líquida ou decisão de liquidação (§ 4º, IV)</span>
+                <input type="text" id="sucDataSalario" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
+              </label>
+              <div class="linha-campos" id="camposSucFaixas" hidden>
+                <label class="q-campo q-campo-curto"><span class="q-rotulo">Até 200 SM (10% a 20%)</span><input type="text" inputmode="decimal" id="sucPctFaixa1" value="10"></label>
+                <label class="q-campo q-campo-curto"><span class="q-rotulo">200 a 2.000 SM (8% a 10%)</span><input type="text" inputmode="decimal" id="sucPctFaixa2" value="8"></label>
+                <label class="q-campo q-campo-curto"><span class="q-rotulo">2.000 a 20.000 SM (5% a 8%)</span><input type="text" inputmode="decimal" id="sucPctFaixa3" value="5"></label>
+                <label class="q-campo q-campo-curto"><span class="q-rotulo">20.000 a 100.000 SM (3% a 5%)</span><input type="text" inputmode="decimal" id="sucPctFaixa4" value="3"></label>
+                <label class="q-campo q-campo-curto"><span class="q-rotulo">Acima de 100.000 SM (1% a 3%)</span><input type="text" inputmode="decimal" id="sucPctFaixa5" value="1"></label>
+                <p class="nota">O salário mínimo é definido pela data acima. Natureza previdenciária: confira também a Súmula 111/STJ. Aplicação dos honorários no cumprimento depende do caso e do título.</p>
+              </div>
             </fieldset>
             <p class="nota">Os padrões da tela servem para a maioria dos casos. Para correção ou juros com datas próprias de uma parcela (ex.: dano moral, Súmulas 54 e 362 do STJ), use o botão de calendário ao lado da parcela.</p>
           </div>
         </details>
         </div>
+      </details>
+
+      <h2 class="titulo-se-precisar"><span class="passo-numero">3</span>Se precisar</h2>
+      <details class="painel recolhivel" id="painelRequisitorio" data-so="fazenda" hidden>
+        <summary><span class="painel-titulo sem-margem">Já foi expedido o precatório ou a RPV?</span><span class="sub">Opcional · estimativa informativa, não substitui o cálculo do tribunal</span></summary>
+        <div class="linha-campos com-topo">
+          <label class="q-campo q-campo-medio">
+            <span class="q-rotulo">Tipo de requisição</span>
+            <select id="requisitorioTipo"><option value="">Não calcular</option><option value="precatorio">Precatório</option><option value="rpv">RPV</option></select>
+          </label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Data-base da conta homologada</span><input type="text" id="requisitorioDataBase" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Data da expedição/entrega</span><input type="text" id="requisitorioDataExpedicao" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Data do depósito/pagamento ou da conferência</span><input type="text" id="requisitorioDataFinal" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Início do período sem mora (opcional)</span><input type="text" id="requisitorioDataInicioGraca" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Fim estimado do prazo sem mora (opcional; editável)</span><input type="text" id="requisitorioDataLimite" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
+          <label class="q-campo q-campo-medio"><span class="q-rotulo">Valor pago (R$), para conferir saldo</span><input type="text" inputmode="decimal" id="requisitorioValorPago" placeholder="Opcional"></label>
+        </div>
+        <p class="nota">A data automática do período de graça é uma estimativa: confira a regra de transição da EC 136/2025 e a data de apresentação. O prazo de RPV é estimado em dois meses da entrega da requisição. Se já houve depósito, informe a data do aporte; esta estimativa não calcula a atualização bancária entre o depósito e o levantamento (art. 10 do Provimento CNJ 207/2025). Requisitório tributário não é calculado.</p>
       </details>
 
       <details class="painel recolhivel" id="painelProcesso">
@@ -453,11 +547,7 @@
         </div>
       </details>
 
-      <div class="acoes-form">
-        <button type="button" class="q-btn q-btn-grande" id="calcular"><svg class="ic"><use href="#i-check"/></svg>Calcular</button>
-        <span class="sub">O resultado também se atualiza a cada alteração.</span>
-      </div>
-    </form>
+      </form>
     </div>
     <div class="area-resultado">
       <section class="painel atualizacao" id="atualizacao" hidden aria-live="polite">
@@ -485,16 +575,23 @@
         <div class="avisos" id="avisos"></div>
 
 
-        <div class="rotulo-secao">Resumo</div>
+        <div class="rotulo-secao">Composição</div>
         <div class="metricas" id="metricas"></div>
+        <div id="comparacaoFazenda" hidden></div>
+        <section class="nota detalhes-fazenda" id="detalhesFazenda" hidden aria-live="polite"></section>
         <div class="ritos" id="ritos" hidden></div>
 
-        <div class="acoes">
+        <div class="acoes acoes-resultado">
           <button type="button" class="q-btn" id="pdf"><svg class="ic"><use href="#i-pdf"/></svg><span id="rotuloPdf">Gerar demonstrativo em PDF</span></button>
-          <button type="button" class="q-btn-outline" id="copiar"><svg class="ic"><use href="#i-copy"/></svg>Copiar memória de cálculo</button>
-          <button type="button" class="q-btn-outline" id="csv"><svg class="ic"><use href="#i-download"/></svg>Baixar CSV</button>
-          <button type="button" class="q-btn-outline" id="salvarCalculo2"><svg class="ic"><use href="#i-save"/></svg>Salvar cálculo</button>
-          <label class="opcao opcao-pequena"><input type="checkbox" id="pdfDetalhado" checked> Memória detalhada no PDF</label>
+          <details class="mais-opcoes-resultado">
+            <summary>Mais opções</summary>
+            <div class="acoes">
+              <button type="button" class="q-btn-outline" id="copiar"><svg class="ic"><use href="#i-copy"/></svg>Copiar memória</button>
+              <button type="button" class="q-btn-outline" id="csv"><svg class="ic"><use href="#i-download"/></svg>Baixar CSV</button>
+              <button type="button" class="q-btn-outline" id="salvarCalculo2"><svg class="ic"><use href="#i-save"/></svg>Salvar cálculo</button>
+              <label class="opcao opcao-pequena"><input type="checkbox" id="pdfDetalhado" checked> Memória detalhada no PDF</label>
+            </div>
+          </details>
           <span class="aviso-acao" id="avisoAcao" role="status"></span>
         </div>
 
@@ -507,6 +604,7 @@
           <div class="rotulo-secao sem-margem">Memória de cálculo por parcela</div>
           <button type="button" class="q-btn-flat" id="alternarDetalhes" aria-pressed="true">Ocultar detalhes</button>
         </div>
+        <div class="memoria-texto" id="memoriaTexto"></div>
         <div class="tabela-rolagem">
           <table class="q-tabela" id="memoria">
             <thead></thead>
@@ -526,8 +624,10 @@
           </div>
         </div>
 
-        <div class="rotulo-secao">Critérios</div>
-        <ul class="criterios" id="criterios"></ul>
+        <details class="criterios-resultado">
+          <summary>Critérios aplicados</summary>
+          <ul class="criterios" id="criterios"></ul>
+        </details>
       </div>
     </section>
 
@@ -604,7 +704,13 @@
         <div class="p-termos-campos" hidden>
           <label class="q-campo q-campo-medio"><span class="q-rotulo">Correção desde</span><input type="text" class="p-cor" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
           <label class="q-campo q-campo-medio"><span class="q-rotulo">Juros desde</span><input type="text" class="p-jur" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
-          <span class="sub">Vazio: vencimento (correção) e o termo geral (juros).</span>
+          <label class="q-campo q-campo-medio p-ate" data-nao="fazenda"><span class="q-rotulo">Correção até</span><input type="text" class="p-cor-ate" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" title="Opcional. A correção para nesta data (ex.: depósito judicial)."></label>
+          <label class="q-campo q-campo-medio p-ate" data-nao="fazenda"><span class="q-rotulo">Juros até</span><input type="text" class="p-jur-ate" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" title="Opcional. Os juros param nesta data; a correção segue, salvo se também tiver fim."></label>
+          <div class="cartao-acoes" data-so="fazenda" hidden>
+            <button type="button" class="q-btn-flat" data-atalho-termo="moral">Dano moral (correção desde o arbitramento — Súmula 362/STJ; juros desde o evento — Súmula 54/STJ)</button>
+            <button type="button" class="q-btn-flat" data-atalho-termo="material">Dano material (correção desde o prejuízo — Súmula 43/STJ)</button>
+          </div>
+          <span class="sub">Vazio: vencimento (correção) e o termo geral (juros); sem fim, até a data do cálculo.</span>
         </div>
       </td>
       <td class="col-rend"></td>
@@ -650,7 +756,13 @@
       <div class="p-termos-campos" hidden>
         <label class="q-campo q-campo-medio"><span class="q-rotulo">Correção desde</span><input type="text" class="p-cor" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
         <label class="q-campo q-campo-medio"><span class="q-rotulo">Juros desde</span><input type="text" class="p-jur" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA"></label>
-        <span class="sub">Vazio: vencimento (correção) e o termo geral (juros).</span>
+        <label class="q-campo q-campo-medio p-ate" data-nao="fazenda"><span class="q-rotulo">Correção até</span><input type="text" class="p-cor-ate" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" title="Opcional. A correção para nesta data (ex.: depósito judicial)."></label>
+        <label class="q-campo q-campo-medio p-ate" data-nao="fazenda"><span class="q-rotulo">Juros até</span><input type="text" class="p-jur-ate" data-mascara="data" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" title="Opcional. Os juros param nesta data; a correção segue, salvo se também tiver fim."></label>
+        <div class="cartao-acoes" data-so="fazenda" hidden>
+          <button type="button" class="q-btn-flat" data-atalho-termo="moral">Dano moral (correção desde o arbitramento — Súmula 362/STJ; juros desde o evento — Súmula 54/STJ)</button>
+          <button type="button" class="q-btn-flat" data-atalho-termo="material">Dano material (correção desde o prejuízo — Súmula 43/STJ)</button>
+        </div>
+        <span class="sub">Vazio: vencimento (correção) e o termo geral (juros); sem fim, até a data do cálculo.</span>
       </div>
       <span class="origem-item" hidden></span>
     </li>

@@ -52,6 +52,25 @@ caso('dois ritos: três últimas antes do ajuizamento e as seguintes na prisão'
   assert.equal(pr.recorte, 'prisao');
 });
 
+caso('13º vencido nos 90 dias antes do ajuizamento entra a mais na prisão (Assessoria Cível, 11/11/2026)', () => {
+  const comDecimo = { periodos: [{ inicio: '2025-01', fim: '2026-10', dia: 10, base: 'fixo', quantidade: 800, decimo: true }] };
+  // Ajuizamento em 15/02/2026: três mensais (12/2025, 01 e 02/2026) e o 13º de 20/12/2025 (57 dias antes): quatro.
+  const r = E.calcular(base(Object.assign({ ritoExecucao: 'ambos', dataAjuizamento: '2026-02-15' }, comDecimo)));
+  fechaSoma(r, '13º na janela');
+  const antes = (x) => x.linhas.filter((l) => l.rito === 'prisao' && l.vencimento < '2026-02-15').map((l) => l.vencimento);
+  assert.deepEqual(antes(r), ['2025-12-10', '2025-12-20', '2026-01-10', '2026-02-10']);
+  // Ajuizamento em 15/04/2026: o 13º de 20/12/2025 venceu 116 dias antes e fica na penhora; só as três mensais.
+  const r2 = E.calcular(base(Object.assign({ ritoExecucao: 'ambos', dataAjuizamento: '2026-04-15' }, comDecimo)));
+  assert.deepEqual(r2.linhas.filter((l) => l.rito === 'prisao' && l.vencimento < '2026-04-15').map((l) => l.vencimento),
+    ['2026-02-10', '2026-03-10', '2026-04-10']);
+  assert.equal(r2.linhas.find((l) => l.chave === 'd:2025').rito, 'penhora');
+  // Limite: 13º exatamente 90 dias antes (20/12/2025 + 90 = 20/03/2026) entra; um dia depois, não.
+  const no = E.calcular(base(Object.assign({ ritoExecucao: 'ambos', dataAjuizamento: '2026-03-20' }, comDecimo)));
+  const fora = E.calcular(base(Object.assign({ ritoExecucao: 'ambos', dataAjuizamento: '2026-03-21' }, comDecimo)));
+  assert.equal(no.linhas.find((l) => l.chave === 'd:2025').rito, 'prisao');
+  assert.equal(fora.linhas.find((l) => l.chave === 'd:2025').rito, 'penhora');
+});
+
 caso('dois ritos sem data: usa a data do cálculo como ajuizamento previsto', () => {
   const r = E.calcular(base({ ritoExecucao: 'ambos' }));
   assert.equal(r.ajuizamentoPresumido, true);
