@@ -12,8 +12,10 @@ on:
       - 'copilot.js'
       - 'calc.html'
       - 'contrato.html'
+      - 'cartao.html'
       - 'compartilhado.*'
       - 'contrato/**'
+      - 'cartao/**'
       - 'ferramentas/**'
       - 'REGRAS-DE-NEGOCIO.md'
       - 'package.json'
@@ -28,8 +30,10 @@ on:
       - 'copilot.js'
       - 'calc.html'
       - 'contrato.html'
+      - 'cartao.html'
       - 'compartilhado.*'
       - 'contrato/**'
+      - 'cartao/**'
       - 'ferramentas/**'
       - 'REGRAS-DE-NEGOCIO.md'
       - 'package.json'
@@ -55,6 +59,8 @@ jobs:
       - name: Testes sem rede
         run: npm test
       - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Cartão consignado no navegador
+        run: node --test ferramentas/testar-cartao-navegador.js
       - name: Robustez no navegador
         run: |
           for navegador in chromium firefox webkit; do

@@ -20,6 +20,7 @@ on:
       - .github/workflows/publicar-web.yml
       - calc.html
       - contrato.html
+      - cartao.html
       - compartilhado.css
       - compartilhado.js
       - calc.css
@@ -30,6 +31,7 @@ on:
       - indices.js
       - copilot.js
       - contrato/**
+      - cartao/**
       - ferramentas/testar-site.js
   schedule:
     - cron: '30 9 * * *'   # 09:30 UTC = 06:30 em Brasília
@@ -75,9 +77,9 @@ jobs:
         run: |
           mkdir -p _site
           cp calc.html index.html
-          cp -r index.html calc.html calc.css compartilhado.css compartilhado.js tema.js data.js indices.js engine.js copilot.js ui.js contrato.html contrato icons fonts _site/
+          cp -r index.html calc.html calc.css compartilhado.css compartilhado.js tema.js data.js indices.js engine.js copilot.js ui.js contrato.html cartao.html contrato cartao icons fonts _site/
           npm run gerar-pagina-regras
-      - name: Conferir o site montado (as duas calculadoras, com um total conhecido em cada)
+      - name: Conferir o site montado (débitos, contrato e cartão)
         run: npm run testar-site
       - uses: actions/upload-pages-artifact@v3
         with:

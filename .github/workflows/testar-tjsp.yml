@@ -4,8 +4,10 @@
 #   2. gera casos aleatórios e calcula cada um nas planilhas, pelo LibreOffice (sem macros);
 #   3. calcula os mesmos casos na calculadora e compara, separando correção, juros de 1% e taxa legal.
 # O resultado fica no resumo da execução e no arquivo "relatorio-tjsp" (Artifacts).
-# Falha se a correção monetária divergir, se a calculadora recusar um caso válido ou se, na planilha Extenso, o
-# regime padrão ou a taxa fixa derem total diferente sem ser por uma diferença de critério já conhecida.
+# Na planilha Extenso, testa pro rata e mês cheio no perfil de cálculo atual (5); falha se a correção divergir, a calculadora
+# recusar caso válido ou houver diferença não explicada em qualquer critério. Mês cheio também exige igualdade ao centavo.
+# Diferenças conhecidas (agosto/2024, meses inteiros, Selic 07/2026 da planilha, taxa legal histórica) só são aceitas
+# quando a soma refeita pela fórmula da planilha bate com o gabarito.
 name: Testar contra a planilha do TJSP
 
 on:
@@ -40,9 +42,13 @@ jobs:
       - name: Calcular os casos nas planilhas do TJSP
         run: |
           /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}" '' extenso
+          /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}" ferramentas/tjsp/gabarito-extenso-mescheio.json extenso mescheio
           /usr/bin/python3 ferramentas/tjsp/gabarito-tjsp.py "${{ github.event.inputs.casos || '500' }}" "${{ github.run_number }}" '' simples
       - name: Comparar com a calculadora (planilha Extenso)
         run: node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito-extenso.json
+      - name: Comparar com a calculadora (planilha Extenso, mês cheio)
+        if: always()
+        run: node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito-extenso-mescheio.json
       - name: Comparar com a calculadora (planilha Cálculo Simples)
         if: always()
         run: node ferramentas/tjsp/comparar-tjsp.js ferramentas/tjsp/gabarito.json
